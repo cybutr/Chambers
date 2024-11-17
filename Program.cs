@@ -63,16 +63,16 @@ namespace Internal
 
             // Loading screen
             string asciiArt = @"
-                _,.---._        ,---.                       .=-.-.  .-._               _,---.                     
-   _.-.       ,-.' , -  `.    .--.'  \       _,..---._     /==/_ / /==/ \  .-._    _.='.'-,  \                    
- .-,.'|      /==/_,  ,  - \   \==\-/\ \    /==/,   -  \   |==|, |  |==|, \/ /, /  /==.'-     /                    
-|==|, |     |==|   .=.     |  /==/-|_\ |   |==|   _   _\  |==|  |  |==|-  \|  |  /==/ -   .-'                     
-|==|- |     |==|_ : ;=:  - |  \==\,   - \  |==|  .=.   |  |==|- |  |==| ,  | -|  |==|_   /_,-.                    
-|==|, |     |==| , '='     |  /==/ -   ,|  |==|,|   | -|  |==| ,|  |==| -   _ |  |==|  , \_.' )                   
-|==|- `-._   \==\ -    ,_ /  /==/-  /\ - \ |==|  '='   /  |==|- |  |==|  /\ , |  \==\-  ,    (   .=.   .=.   .=.  
-/==/ - , ,/   '.='. -   .'   \==\ _.\=\.-' |==|-,   _`/   /==/. /  /==/, | |- |   /==/ _  ,  /  :=; : :=; : :=; : 
-`--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=`  
-            ";
+                            _,.---._        ,---.                       .=-.-.  .-._               _,---.                     
+            _.-.       ,-.' , -  `.    .--.'  \       _,..---._     /==/_ / /==/ \  .-._    _.='.'-,  \                       
+            .-,.'|      /==/_,  ,  - \   \==\-/\ \    /==/,   -  \   |==|, |  |==|, \/ /, /  /==.'-     /                     
+            |==|, |     |==|   .=.     |  /==/-|_\ |   |==|   _   _\  |==|  |  |==|-  \|  |  /==/ -   .-'                     
+            |==|- |     |==|_ : ;=:  - |  \==\,   - \  |==|  .=.   |  |==|- |  |==| ,  | -|  |==|_   /_,-.                    
+            |==|, |     |==| , '='     |  /==/ -   ,|  |==|,|   | -|  |==| ,|  |==| -   _ |  |==|  , \_.' )                   
+            |==|- `-._   \==\ -    ,_ /  /==/-  /\ - \ |==|  '='   /  |==|- |  |==|  /\ , |  \==\-  ,    (   .=.   .=.   .=.  
+            /==/ - , ,/   '.='. -   .'   \==\ _.\=\.-' |==|-,   _`/   /==/. /  /==/, | |- |   /==/ _  ,  /  :=; : :=; : :=; : 
+            `--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=`  ";
+
             DisplayCenteredText(asciiArt);
 
             // Main Loop
@@ -2623,6 +2623,7 @@ namespace Internal
                     Console.Write(background + "  " + ResetColor());
                 }
 
+
                 if (!isWave)
                 {
                     // Ensure the map data retains the original water tile
@@ -4741,10 +4742,13 @@ namespace Internal
                                             var pos = (x: smoothX, y: smoothY);
                                             double intensity = 1.0 - (distance / shadowRadius);
 
-                                            if (!currentShadowPositions.ContainsKey(pos))
-                                                currentShadowPositions[pos] = intensity;
-                                            else
-                                                currentShadowPositions[pos] = Math.Max(currentShadowPositions[pos], intensity);
+                                            if (intensity > 0)
+                                            {
+                                                if (!currentShadowPositions.ContainsKey(pos))
+                                                    currentShadowPositions[pos] = intensity;
+                                                else
+                                                    currentShadowPositions[pos] = Math.Max(currentShadowPositions[pos], intensity);
+                                            }
                                         }
                                     }
                                 }
@@ -4754,21 +4758,13 @@ namespace Internal
                 }
 
                 // Clear old shadows
-                foreach (var pos in previousShadowPositions)
+                if (shadowIntensityFactor > 0)
                 {
-                    if (!currentShadowPositions.ContainsKey(pos) || (isCloudsRendering && IsTileUnderCloud(pos.x, pos.y)))
+                    foreach (var pos in previousShadowPositions)
                     {
-                        for (int dx = -1; dx <= 1; dx++)
+                        if (!currentShadowPositions.ContainsKey(pos) || (isCloudsRendering && IsTileUnderCloud(pos.x, pos.y)))
                         {
-                            for (int dy = -1; dy <= 1; dy++)
-                            {
-                                int nx = pos.x + dx;
-                                int ny = pos.y + dy;
-                                if (nx >= 0 && nx < width && ny >= 0 && ny < height)
-                                {
-                                    UpdateTile(nx, ny);
-                                }
-                            }
+                            UpdateTile(pos.x, pos.y);
                         }
                     }
                 }
@@ -4779,7 +4775,7 @@ namespace Internal
                     var pos = pair.Key;
                     var intensity = pair.Value;
 
-                    if (pos.x > 0 && pos.x < width - 1 && pos.y > 0 && pos.y < height - 1)
+                    if (intensity > 0 && pos.x > 0 && pos.x < width - 1 && pos.y > 0 && pos.y < height - 1)
                     {
                         var isUnderCloud = IsTileUnderCloud(pos.x, pos.y);
 
@@ -4792,17 +4788,20 @@ namespace Internal
                             int g = Math.Max(0, baseColor.g - shadowFactor);
                             int b = Math.Max(0, baseColor.b - shadowFactor);
 
-                            Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
-                            if (IsThereAnOverlayTile(pos.x, pos.y))
+                            if (shadowFactor > 0)
                             {
-                                var overlayColor = GetOverlayColor(overlayData[pos.x, pos.y]);
-                                string background = SetBackgroundColor(r, g, b);
-                                string foreground = SetForegroundColor(overlayColor.r, overlayColor.g, overlayColor.b);
-                                Console.Write(background + foreground + $"{overlayData[pos.x, pos.y]}" + ResetColor());
-                            }
-                            else
-                            {
-                                Console.Write(SetBackgroundColor(r, g, b) + "  " + ResetColor());
+                                Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
+                                if (IsThereAnOverlayTile(pos.x, pos.y))
+                                {
+                                    var overlayColor = GetOverlayColor(overlayData[pos.x, pos.y]);
+                                    string background = SetBackgroundColor(r, g, b);
+                                    string foreground = SetForegroundColor(overlayColor.r, overlayColor.g, overlayColor.b);
+                                    Console.Write(background + foreground + $"{overlayData[pos.x, pos.y]}" + ResetColor());
+                                }
+                                else
+                                {
+                                    Console.Write(SetBackgroundColor(r, g, b) + "  " + ResetColor());
+                                }
                             }
                         }
                         else if (((isCloudsRendering && !isUnderCloud) || !isCloudsRendering) && IsThereAWaveTile(pos.x, pos.y))
@@ -4814,14 +4813,17 @@ namespace Internal
                             int g = Math.Max(0, baseColor.g - shadowFactor);
                             int b = Math.Max(0, baseColor.b - shadowFactor);
 
-                            Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
-                            if (IsThereAnOverlayTile(pos.x, pos.y))
+                            if (shadowFactor > 0)
                             {
-                                UpdateOverlayTile(pos.x, pos.y);
-                            }
-                            else
-                            {
-                                Console.Write(SetBackgroundColor(r, g, b) + "  " + ResetColor());
+                                Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
+                                if (IsThereAnOverlayTile(pos.x, pos.y))
+                                {
+                                    UpdateOverlayTile(pos.x, pos.y);
+                                }
+                                else
+                                {
+                                    Console.Write(SetBackgroundColor(r, g, b) + "  " + ResetColor());
+                                }
                             }
                         }
                     }
@@ -4835,11 +4837,12 @@ namespace Internal
             private (int r, int g, int b) GetShadowColor(int x, int y)
             {
                 var baseColor = GetColor(mapData[x, y]);
-
+            
                 // Convert map coordinates to cloud shadow coordinates (taking into account the offset)
                 int shadowX = x + cloudShadowOffsetX;
                 int shadowY = y + cloudShadowOffsetY;
-                currentShadowPositions.TryGetValue((x, y), out double shadowIntensity);
+                double shadowIntensity = 0.0;
+            
                 // Find current shadow positions with their intensities from the cloud data
                 for (int dx = -3; dx <= 3; dx++)
                 {
@@ -4847,7 +4850,7 @@ namespace Internal
                     {
                         int nx = shadowX + dx;
                         int ny = shadowY + dy;
-
+            
                         if (nx >= 0 && nx < cloudDataWidth && ny >= 0 && ny < cloudDataHeight)
                         {
                             if (cloudData[nx, ny] != '\0')
@@ -4862,14 +4865,14 @@ namespace Internal
                         }
                     }
                 }
-
+            
                 // Calculate shadow factor based on actual shadow intensity
                 int shadowFactor = (int)(shadowIntensityFactor * shadowIntensity);
-
+            
                 int r = Math.Max(0, baseColor.r - shadowFactor);
                 int g = Math.Max(0, baseColor.g - shadowFactor);
                 int b = Math.Max(0, baseColor.b - shadowFactor);
-
+            
                 return (r, g, b);
             }
             private static double timeOfDay;
@@ -5459,11 +5462,32 @@ namespace Internal
             #region day night cycle
             private HashSet<(int x, int y)> darkenedPositions = new HashSet<(int x, int y)>();
             private Dictionary<(int x, int y), int> darkenedPositionsIntensities = new Dictionary<(int x, int y), int>();
-            private HashSet<(int x, int y)> previousDarkenedPositions = new HashSet<(int x, int y)>();
+            public enum GradientDirection
+            {
+                TL_BR, // Top Left to Bottom Right
+                BR_TL, // Bottom Right to Top Left
+                BL_TR, // Bottom Left to Top Right
+                TR_BL  // Top Right to Bottom Left
+            }
+            public GradientDirection CurrentGradientDirection { get; set; } = GradientDirection.TL_BR;
+            public void UpdateGradientDirection(double timeOfDay)
+            {
+                if (timeOfDay == 0.0)
+                {
+                    CurrentGradientDirection = GradientDirection.BR_TL;
+                }
+                else if (timeOfDay == 12.0)
+                {
+                    CurrentGradientDirection = GradientDirection.TL_BR;
+                }
+            }
             public void DisplayDayNightTransition()
             {
                 // Determine the current time and calculate transition progress
                 double transitionProgress = GetTransitionProgress();
+
+                // Clamp transitionProgress to stay within [0,1]
+                transitionProgress = Math.Clamp(transitionProgress, 0.0, 1.0);
 
                 // Use an easing function to simulate smooth transition
                 double easedProgress = EaseInOutQuad(transitionProgress);
@@ -5471,71 +5495,101 @@ namespace Internal
                 // Increase maximum shadow intensity to make the effect noticeable
                 double maxShadowIntensity = 50.0;
 
-                // Calculate the maximum distance from bottom right to top left
-                double maxDistance = Math.Sqrt((width - 1) * (width - 1) + (height - 1) * (height - 1));
+                // Define the width of the gradient transition (adjusted for complete coverage)
+                double gradientWidth = 0.3;
 
-                // Update tiles to reflect day-night transition
+                // Update only the tiles that need to be updated
                 for (int x = 0; x < width; x++)
                 {
                     for (int y = 0; y < height; y++)
                     {
-                        // Calculate distance from bottom right corner
-                        double dx = width - 1 - x;
-                        double dy = height - 1 - y;
-                        double distance = Math.Sqrt(dx * dx + dy * dy);
+                        // Calculate normalized distance based on selected gradient direction
+                        double normalizedDistance = CalculateNormalizedDistance(x, y);
 
-                        // Normalize distance
-                        double normalizedDistance = distance / maxDistance;
-
-                        // Calculate shadow progress for this tile
-                        double tileShadowProgress = Math.Max(0, normalizedDistance - (1 - easedProgress));
+                        // Calculate shadow progress with a smooth gradient
+                        double tileShadowProgress = Math.Clamp((easedProgress - normalizedDistance + gradientWidth) / gradientWidth, 0, 1);
 
                         // Calculate current shadow intensity for this tile
                         int tileShadowIntensity = (int)(tileShadowProgress * maxShadowIntensity);
-                        darkenedPositionsIntensities[(x, y)] = tileShadowIntensity;
 
-                        // Get the base color of the tile
-                        var baseColor = GetTileBaseColor(x, y);
-
-                        // Apply the shadow intensity
-                        int r = Math.Max(0, baseColor.r - tileShadowIntensity);
-                        int g = Math.Max(0, baseColor.g - tileShadowIntensity);
-                        int b = Math.Max(0, baseColor.b - tileShadowIntensity);
-
-                        // Update tile with new color
-                        Console.SetCursorPosition(leftPadding + x * 2, y + topPadding);
-
-                        if (IsThereAnOverlayTile(x, y))
+                        // Check if the tile needs to be updated
+                        if (!darkenedPositionsIntensities.TryGetValue((x, y), out int currentIntensity) || currentIntensity != tileShadowIntensity)
                         {
-                            var overlayColor = GetOverlayColor(overlayData[x, y]);
+                            darkenedPositionsIntensities[(x, y)] = tileShadowIntensity;
+                            darkenedPositions.Add((x, y));
 
-                            // Apply shadow intensity to overlay color as well
-                            int or = Math.Max(0, overlayColor.r - tileShadowIntensity);
-                            int og = Math.Max(0, overlayColor.g - tileShadowIntensity);
-                            int ob = Math.Max(0, overlayColor.b - tileShadowIntensity);
+                            // Get the base color of the tile
+                            var baseColor = GetTileBaseColor(x, y);
 
-                            string background = SetBackgroundColor(r, g, b);
-                            string foreground = SetForegroundColor(or, og, ob);
-                            Console.Write(background + foreground + $"{overlayData[x, y]}" + ResetColor());
-                        }
-                        else if (IsThereAWaveTile(x, y))
-                        {
-                            var waveColor = GetWaveColor(x, y);
+                            // Apply the shadow intensity
+                            int r = Math.Max(0, baseColor.r - tileShadowIntensity);
+                            int g = Math.Max(0, baseColor.g - tileShadowIntensity);
+                            int b = Math.Max(0, baseColor.b - tileShadowIntensity);
 
-                            // Apply shadow intensity to wave color
-                            int wr = Math.Max(0, waveColor.r - tileShadowIntensity);
-                            int wg = Math.Max(0, waveColor.g - tileShadowIntensity);
-                            int wb = Math.Max(0, waveColor.b - tileShadowIntensity);
+                            // Update tile with new color
+                            Console.SetCursorPosition(leftPadding + x * 2, y + topPadding);
 
-                            Console.Write(SetBackgroundColor(wr, wg, wb) + "  " + ResetColor());
-                        }
-                        else
-                        {
-                            string background = SetBackgroundColor(r, g, b);
-                            Console.Write(background + "  " + ResetColor());
+                            if (IsThereAnOverlayTile(x, y))
+                            {
+                                var overlayColor = GetOverlayColor(overlayData[x, y]);
+
+                                // Apply shadow intensity to overlay color as well
+                                int or = Math.Max(0, overlayColor.r - tileShadowIntensity);
+                                int og = Math.Max(0, overlayColor.g - tileShadowIntensity);
+                                int ob = Math.Max(0, overlayColor.b - tileShadowIntensity);
+
+                                string background = SetBackgroundColor(r, g, b);
+                                string foreground = SetForegroundColor(or, og, ob);
+                                Console.Write(background + foreground + $"{overlayData[x, y]}" + ResetColor());
+                            }
+                            else if (IsThereAWaveTile(x, y))
+                            {
+                                var waveColor = GetWaveColor(x, y);
+
+                                // Apply shadow intensity to wave color
+                                int wr = Math.Max(0, waveColor.r - tileShadowIntensity);
+                                int wg = Math.Max(0, waveColor.g - tileShadowIntensity);
+                                int wb = Math.Max(0, waveColor.b - tileShadowIntensity);
+
+                                Console.Write(SetBackgroundColor(wr, wg, wb) + "  " + ResetColor());
+                            }
+                            else
+                            {
+                                string background = SetBackgroundColor(r, g, b);
+                                Console.Write(background + "  " + ResetColor());
+                            }
                         }
                     }
                 }
+            }
+            private double CalculateNormalizedDistance(int x, int y)
+            {
+                double dx = 0;
+                double dy = 0;
+
+                switch (CurrentGradientDirection)
+                {
+                    case GradientDirection.TL_BR:
+                        dx = x;
+                        dy = y;
+                        break;
+                    case GradientDirection.BR_TL:
+                        dx = width - x;
+                        dy = height - y;
+                        break;
+                    case GradientDirection.BL_TR:
+                        dx = x;
+                        dy = height - y;
+                        break;
+                    case GradientDirection.TR_BL:
+                        dx = width - x;
+                        dy = y;
+                        break;
+                }
+
+                double distance = Math.Sqrt(dx * dx + dy * dy);
+                double maxDistance = Math.Sqrt(width * width + height * height);
+                return distance / maxDistance;
             }
             private double GetTransitionProgress()
             {
@@ -5582,8 +5636,8 @@ namespace Internal
                     transitionProgress = 0.0;
                 }
 
-                // For testing purposes, force transition progress to a constant value
-                // transitionProgress = 0.5; // Uncomment this line to see the effect
+                // Clamp transitionProgress to ensure it stays within bounds
+                transitionProgress = Math.Clamp(transitionProgress, 0.0, 1.0);
 
                 return transitionProgress;
             }
@@ -5600,7 +5654,7 @@ namespace Internal
             }
             private bool IsNightTime(double time, double sunsetEnd, double sunriseStart)
             {
-                return !IsTimeBetween(time, sunriseStart, sunsetEnd);
+                return IsTimeBetween(time, sunsetEnd, sunriseStart);
             }
             private static double EaseInOutQuad(double t)
             {
@@ -5615,10 +5669,6 @@ namespace Internal
                 if (IsThereAWaveTile(x, y))
                 {
                     return GetWaveColor(x, y);
-                }
-                else if (IsThereACloudShadow(x, y))
-                {
-                    return GetShadowColor(x, y);
                 }
                 else
                 {
@@ -5640,6 +5690,15 @@ namespace Internal
                     return (r, g, b);
                 }
                 return GetTileBaseColor(x, y);
+            }
+            private void DisplayDarkenedTiles()
+            {
+                foreach (var (x, y) in darkenedPositions)
+                {
+                    Console.SetCursorPosition(leftPadding + x * 2, y + topPadding);
+                    var color = GetDarkenedColor(x, y);
+                    Console.Write(SetBackgroundColor(color.r, color.g, color.b) + "  " + ResetColor());
+                }
             }
             #endregion
             #endregion
@@ -5685,6 +5744,7 @@ namespace Internal
                 Update();
                 AnimateWater();
                 DisplayCloudShadows();
+                DisplayDarkenedTiles();
                 if (isCloudsRendering) RenderClouds();
                 DisplayGUI();
             }
@@ -6574,6 +6634,7 @@ namespace Internal
             public void Update()
             {
                 UpdateWeather();
+                UpdateGradientDirection(weather.TimeOfDay);
                 UpdateCloudProperties();
                 UpdateCrabs();
                 UpdateTurtles();

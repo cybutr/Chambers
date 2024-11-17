@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\VScode\\Codium\\csharp\\Chambers\\Chambers.csproj": {}
+    "D:\\VScode\\csharp\\Chambers\\Chambers.csproj": {}
   },
   "projects": {
-    "D:\\VScode\\Codium\\csharp\\Chambers\\Chambers.csproj": {
+    "D:\\VScode\\csharp\\Chambers\\Chambers.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\VScode\\Codium\\csharp\\Chambers\\Chambers.csproj",
+        "projectUniqueName": "D:\\VScode\\csharp\\Chambers\\Chambers.csproj",
         "projectName": "Chambers",
-        "projectPath": "D:\\VScode\\Codium\\csharp\\Chambers\\Chambers.csproj",
+        "projectPath": "D:\\VScode\\csharp\\Chambers\\Chambers.csproj",
         "packagesPath": "C:\\Users\\sexyk\\.nuget\\packages\\",
-        "outputPath": "D:\\VScode\\Codium\\csharp\\Chambers\\obj\\",
+        "outputPath": "D:\\VScode\\csharp\\Chambers\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\sexyk\\AppData\\Roaming\\NuGet\\NuGet.Config"
