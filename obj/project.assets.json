@@ -8,19 +8,19 @@
     "net8.0": []
   },
   "packageFolders": {
-    "C:\\Users\\sexyk\\.nuget\\packages\\": {}
+    "/home/chedda/.nuget/packages/": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\VScode\\csharp\\Chambers\\Chambers.csproj",
+      "projectUniqueName": "/home/chedda/csharp/Chambers/Chambers.csproj",
       "projectName": "Chambers",
-      "projectPath": "D:\\VScode\\csharp\\Chambers\\Chambers.csproj",
-      "packagesPath": "C:\\Users\\sexyk\\.nuget\\packages\\",
-      "outputPath": "D:\\VScode\\csharp\\Chambers\\obj\\",
+      "projectPath": "/home/chedda/csharp/Chambers/Chambers.csproj",
+      "packagesPath": "/home/chedda/.nuget/packages/",
+      "outputPath": "/home/chedda/csharp/Chambers/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\sexyk\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "/home/chedda/.nuget/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -38,11 +38,6 @@
         "warnAsError": [
           "NU1605"
         ]
-      },
-      "restoreAuditProperties": {
-        "enableAudit": "true",
-        "auditLevel": "low",
-        "auditMode": "direct"
       }
     },
     "frameworks": {
@@ -59,12 +54,18 @@
         ],
         "assetTargetFallback": true,
         "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.AspNetCore.App.Ref",
+            "version": "[8.0.10, 8.0.10]"
+          }
+        ],
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "D:\\Program Files\\dotnet\\sdk\\8.0.303/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.110/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
