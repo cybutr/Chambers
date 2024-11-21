@@ -26,7 +26,7 @@ using System.Security.Authentication;
 // TODO: Animals
 // TODO: World layers
 // TODO: Seasons
-// TODO: Day/Night cycle
+// TODO: Day/Night cycle - almost done
 // TODO: Events
 // TODO: Meteors
 // TODO: Volcanoes
@@ -534,7 +534,6 @@ namespace Internal
                         chambers[currentChamberIndex].AnimateWater();
                         if (isCloudsShadowsRendering) chambers[currentChamberIndex].DisplayCloudShadows();
                         chambers[currentChamberIndex].DisplayDayNightTransition();
-                        chambers[currentChamberIndex].DisplayDarkenedWaveTiles();
                         foreach (var chamber in chambers)
                         {
                             chamber.UpdateClouds();
@@ -557,7 +556,7 @@ namespace Internal
                 {
                     if (isUpdating)
                     {
-                        chambers[currentChamberIndex].DisplayGUI();
+                        chambers[currentChamberIndex].UpdateGUIValues();
                         Console.SetCursorPosition(leftPadding, mapHeight + topPadding - 1);
                     }
                     Thread.Sleep(sleepTime); // Adjust the sleep time as needed
@@ -2508,6 +2507,7 @@ namespace Internal
                 public double Intensity { get; set; } = 0.0;
                 public HashSet<(int x, int y)> PreviousPoints { get; set; } = new HashSet<(int x, int y)>();
                 public bool IsNight { get; set; }
+                public bool IsDarkening { get; set; }
             }
             private List<Wave> waves = new List<Wave>();
             private Random waveRng = new Random();
@@ -2525,22 +2525,19 @@ namespace Internal
             private HashSet<(int x, int y)> wavePositions = new HashSet<(int x, int y)>();
             public void AnimateWater()
             {
-                bool globalIsNight = weather.TimeOfDay < sunriseTime || weather.TimeOfDay > sunsetTime;
-
                 // Clear the wavePositions at the start
                 wavePositions.Clear();
 
                 foreach (var wave in waves.ToList())
                 {
+                    // Adjust wave intensity based on time of day
+                    if (!wave.IsNight && wave.Intensity < 1.0)
+                        wave.Intensity = Math.Min(wave.Intensity + 0.1, 1.0);
+                    else if (wave.IsNight && wave.Intensity < 1.0)
+                        wave.Intensity = Math.Max(wave.Intensity + 0.1, 0.0);
                     // Store old positions to clear them
                     var oldPoints = new HashSet<(int x, int y)>(wave.PreviousPoints);
                     wave.PreviousPoints.Clear();
-
-                    // Adjust wave intensity based on time of day
-                    if (!globalIsNight && wave.Intensity < 1.0)
-                        wave.Intensity = Math.Min(wave.Intensity + 0.1, 1.0);
-                    else if (globalIsNight && wave.Intensity > 0.0)
-                        wave.Intensity = Math.Max(wave.Intensity - 0.1, 0.0);
 
                     // Introduce curvature by modifying the direction slightly
                     wave.Direction += (waveRng.NextDouble() - 0.5) * wave.Curvature;
@@ -2564,6 +2561,19 @@ namespace Internal
 
                         newPoints.Add((newX, newY));
                         wave.PreviousPoints.Add((checkX, checkY));
+                        if (GetDarkenedTileIntensity(checkX, checkY) > 10)
+                        {
+                            wave.IsDarkening = true;
+                        }
+                        if (GetDarkenedTileIntensity(checkX, checkY) > 45)
+                        {
+                            wave.IsNight = true;
+                            wave.IsDarkening = false;
+                        }
+                        else if (GetDarkenedTileIntensity(checkX, checkY) < 5)
+                        {
+                            wave.IsNight = false;
+                        }
                     }
 
                     // Clear old wave positions
@@ -2571,7 +2581,7 @@ namespace Internal
                     {
                         if (!wave.PreviousPoints.Contains(point))
                         {
-                            UpdateWaterTile(point.x, point.y, false, globalIsNight);
+                            if ((isCloudsRendering && !IsTileUnderCloud(point.x, point.y)) || !isCloudsRendering) UpdateWaterTile(point.x, point.y, false, false, wave.IsNight);
                             // Remove the point from wavePositions
                             wavePositions.Remove(point);
                         }
@@ -2585,7 +2595,7 @@ namespace Internal
                         bool isUnderCloud = IsTileUnderCloud(x, y);
                         if (!isCloudsRendering || (isCloudsRendering && !isUnderCloud))
                         {
-                            UpdateWaterTile(x, y, true, globalIsNight, wave.Intensity);
+                            UpdateWaterTile(x, y, true, wave.IsNight, wave.IsDarkening, wave.Intensity);
                         }
                         // Add the point to wavePositions
                         wavePositions.Add((x, y));
@@ -2596,7 +2606,7 @@ namespace Internal
                         // Clear final positions before removing
                         foreach (var (x, y) in wave.PreviousPoints)
                         {
-                            UpdateWaterTile(x, y, false, globalIsNight);
+                            UpdateWaterTile(x, y, false, false, wave.IsNight);
                             // Remove the point from wavePositions
                             wavePositions.Remove((x, y));
                         }
@@ -2609,8 +2619,7 @@ namespace Internal
                     }
                 }
             }
-
-            private void UpdateWaterTile(int x, int y, bool isWave, bool isNight, double intensity = 1.0)
+            private void UpdateWaterTile(int x, int y, bool isWave, bool isNight, bool isDarkening, double intensity = 1.0)
             {
                 if (x < 0 || x >= width || y < 0 || y >= height) return;
                 char tile = mapData[x, y];
@@ -2623,11 +2632,9 @@ namespace Internal
                 }
                 else
                 {
-                    bool isDaytime = timeOfDay >= (sunriseTime + 1) && timeOfDay <= (sunsetTime - 1);
-
-                    if (isDaytime)
+                    if (!isNight)
                     {
-                        if (IsThereACloudShadow(x, y))
+                        if (IsThereACloudShadow(x, y) && isCloudsShadowsRendering)
                         {
                             // Get cloud shadow color with correct intensity
                             baseColor = GetShadowColor(x, y);
@@ -2639,7 +2646,7 @@ namespace Internal
                     }
                     else // Night time
                     {
-                        baseColor = GetDarkenedColor(x, y);
+                        baseColor = GetColor(tile);
                     }
                 }
 
@@ -2649,16 +2656,43 @@ namespace Internal
                 {
                     // Apply wave color intensity effect
                     (int r, int g, int b) waveColor = ColorSpectrum.BLUE;
-                    finalColor = (
-                        Math.Clamp((int)(baseColor.r + (waveColor.r - baseColor.r) * intensity), 0, 255),
-                        Math.Clamp((int)(baseColor.g + (waveColor.g - baseColor.g) * intensity), 0, 255),
-                        Math.Clamp((int)(baseColor.b + (waveColor.b - baseColor.b) * intensity), 0, 255)
-                    );
+                    (int r, int g, int b) darkenedWaveColor = GetDarkenedColor(x, y);
+                    int darkenedIntensity = isDarkening ? (int)Math.Round(GetDarkenedTileIntensity(x, y)) : 0;
+                    switch (isNight)
+                    {
+                        case true:
+                            finalColor = (
+                                Math.Clamp((int)(baseColor.r + (darkenedWaveColor.r - baseColor.r) * intensity), 0, 255),
+                                Math.Clamp((int)(baseColor.g + (darkenedWaveColor.g - baseColor.g) * intensity), 0, 255),
+                                Math.Clamp((int)(baseColor.b + (darkenedWaveColor.b - baseColor.b) * intensity), 0, 255)
+                            );
+                            break;
+                        case false:
+                            finalColor = (
+                                Math.Clamp((int)(baseColor.r + (waveColor.r - baseColor.r) * intensity - darkenedIntensity), 0, 255),
+                                Math.Clamp((int)(baseColor.g + (waveColor.g - baseColor.g) * intensity - darkenedIntensity), 0, 255),
+                                Math.Clamp((int)(baseColor.b + (waveColor.b - baseColor.b) * intensity - darkenedIntensity), 0, 255)
+                            );
+                            break;
+                    }
+                }
+                else if (darkenedPositionsIntensities.TryGetValue((x, y), out int darkBaseIntensity))
+                {
+                    finalColor.r = GetTileBaseColor(x, y).r - darkBaseIntensity;
+                    finalColor.g = GetTileBaseColor(x, y).g - darkBaseIntensity;
+                    finalColor.b = GetTileBaseColor(x, y).b - darkBaseIntensity;
+                }
+                else if (IsTileDarkened(x, y))
+                {
+                    finalColor.r = GetTileBaseColor(x, y).r - 50;
+                    finalColor.g = GetTileBaseColor(x, y).g - 50;
+                    finalColor.b = GetTileBaseColor(x, y).b - 50;
                 }
                 else
                 {
-                    finalColor = baseColor;
+                    finalColor = GetColor(tile);
                 }
+
 
                 lock (consoleLock)
                 {
@@ -2670,7 +2704,7 @@ namespace Internal
                 if (!isWave)
                 {
                     // Ensure the map data retains the original water tile
-                    mapData[x, y] = tile;
+                    if ((isCloudsRendering && !IsTileUnderCloud(x, y)) || !isCloudsRendering) mapData[x, y] = tile;
                 }
             }
             private bool IsTileUnderCloud(int x, int y)
@@ -4077,6 +4111,50 @@ namespace Internal
 
                 return (startX, startY);
             }
+            private bool[,] cloudIsNight = new bool[mapWidth, mapHeight];
+            private bool[,] cloudIsDarkening = new bool[mapWidth, mapHeight];
+            private (int r, int g, int b) GetCloudColor(int x, int y)
+            {
+                (int mapX, int mapY) = CloudDataCordsToMapData(x, y);
+                double intensity = GetDarkenedTileIntensity(mapX, mapY);
+
+                if (intensity > 5)
+                {
+                    cloudIsDarkening[mapX, mapY] = true;
+                }
+                if (intensity > 45)
+                {
+                    cloudIsDarkening[mapX, mapY] = false;
+                    cloudIsNight[mapX, mapY] = true;
+                }
+                else if (intensity < 5)
+                {
+                    cloudIsNight[mapX, mapY] = false;
+                }
+
+                int darkenedIntensity = cloudIsDarkening[mapX, mapY] ? (int)Math.Round(intensity) : 0;
+
+                if (x < 0 || y < 0 || x >= cloudDataWidth || y >= cloudDataHeight)
+                {
+                    return (255, 255, 255); // Default color for out-of-bounds
+                }
+                (int r, int g, int b) baseColor = GetCloudDepthColor(GetCloudType(cloudData[x, y]), cloudDepthData[x, y]);
+
+                if (cloudIsNight[mapX, mapY])
+                {
+                    baseColor.r = Math.Max(baseColor.r - 50 - darkenedIntensity, 0);
+                    baseColor.g = Math.Max(baseColor.g - 50 - darkenedIntensity, 0);
+                    baseColor.b = Math.Max(baseColor.b - 50 - darkenedIntensity, 0);
+                }
+                else if (cloudIsDarkening[mapX, mapY])
+                {
+                    baseColor.r = Math.Max(baseColor.r - darkenedIntensity, 0);
+                    baseColor.g = Math.Max(baseColor.g - darkenedIntensity, 0);
+                    baseColor.b = Math.Max(baseColor.b - darkenedIntensity, 0);
+                }
+
+                return baseColor;
+            }
             #region weather state
             public void InitializeWeather()
             {
@@ -4712,6 +4790,39 @@ namespace Internal
                 {
                     for (int x = 0; x < width; x++)
                     {
+                        (int r, int g, int b) baseColor, finalColor;
+                        char tile = mapData[x, y];
+                        if (cloudIsNight[x, y])
+                        {
+                            baseColor = GetDarkenedTileColor(tile);
+                        }
+                        else
+                        {
+                            if (!cloudIsNight[x, y])
+                            {
+                                baseColor = GetColor(tile);
+                            }
+                            else // Night time
+                            {
+                                baseColor = GetColor(tile);
+                            }
+                        }
+                        if (darkenedPositionsIntensities.TryGetValue((x, y), out int darkBaseIntensity))
+                        {
+                            finalColor.r = GetTileBaseColor(x, y).r - darkBaseIntensity;
+                            finalColor.g = GetTileBaseColor(x, y).g - darkBaseIntensity;
+                            finalColor.b = GetTileBaseColor(x, y).b - darkBaseIntensity;
+                        }
+                        else if (IsTileDarkened(x, y))
+                        {
+                            finalColor.r = GetTileBaseColor(x, y).r - 50;
+                            finalColor.g = GetTileBaseColor(x, y).g - 50;
+                            finalColor.b = GetTileBaseColor(x, y).b - 50;
+                        }
+                        else
+                        {
+                            finalColor = GetColor(tile);
+                        }
                         var (cloudX, cloudY) = MapDataCordsToCloudData(x, y);
                         if (IsInCloudBounds(cloudX, cloudY))
                         {
@@ -4720,8 +4831,12 @@ namespace Internal
 
                             if (wasCloud && !isCloud)
                             {
-                                // Cloud moved away from this position, redraw the map tile
-                                UpdateTile(x, y);
+                                if (IsThereAnOverlayTile(x, y)) UpdateOverlayTile(x, y);
+                                else
+                                {
+                                    Console.SetCursorPosition(leftPadding + x * 2, y + topPadding);
+                                    Console.Write(SetBackgroundColor(finalColor.r, finalColor.g, finalColor.b) + "  " + ResetColor());
+                                }
                             }
                         }
                     }
@@ -4732,6 +4847,7 @@ namespace Internal
                 {
                     for (int x = 0; x < width; x++)
                     {
+
                         // Skip frame edges
                         if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
                             continue;
@@ -4741,7 +4857,8 @@ namespace Internal
                         {
                             int depth = cloudDepthData[cloudX, cloudY];
                             CloudType cloudType = GetCloudType(cloudData[cloudX, cloudY]);
-                            var cloudColor = GetCloudDepthColor(cloudType, depth);
+                            //var cloudColor = GetCloudDepthColor(cloudType, depth);
+                            var cloudColor = GetCloudColor(cloudX, cloudY);
                             Console.SetCursorPosition(leftPadding + x * 2, y + topPadding);
                             Console.Write(SetBackgroundColor(cloudColor.r, cloudColor.g, cloudColor.b) + "  " + ResetColor());
                         }
@@ -5493,6 +5610,10 @@ namespace Internal
             {
                 return (x + cloudDataOffsetX, y + cloudDataOffsetY);
             }
+            private (int x, int y) CloudDataCordsToMapData(int x, int y)
+            {
+                return (x - cloudDataOffsetX, y - cloudDataOffsetY);
+            }
             private (int x, int y) CloudToMapCoordinates(int cloudX, int cloudY)
             {
                 return (cloudX - cloudDataOffsetX, cloudY - cloudDataOffsetY);
@@ -5544,9 +5665,6 @@ namespace Internal
                 // Temporary list to track tiles to remove from darkened positions
                 List<(int x, int y)> tilesToRemove = new List<(int x, int y)>();
 
-                // Determine if the sun is rising based on transition progress
-                bool isRising = transitionProgress < 0.5;
-
                 // Update only the tiles that need to be updated
                 for (int x = 0; x < width; x++)
                 {
@@ -5572,7 +5690,7 @@ namespace Internal
                                     darkenedPositions.Add((x, y));
 
                                     // Update tile with new shadow intensity
-                                    UpdateTileShadow(x, y, tileShadowIntensity);
+                                    if ((isCloudsRendering && !IsTileUnderCloud(x, y)) || !isCloudsRendering) UpdateTileShadow(x, y, tileShadowIntensity);
                                 }
                             }
                             else
@@ -5582,13 +5700,13 @@ namespace Internal
                                 darkenedPositions.Add((x, y));
 
                                 // Update tile with shadow
-                                UpdateTileShadow(x, y, tileShadowIntensity);
+                                if ((isCloudsRendering && !IsTileUnderCloud(x, y)) || !isCloudsRendering) UpdateTileShadow(x, y, tileShadowIntensity);
                             }
                         }
                         else
                         {
-                            // Only remove tiles when the sun is rising
-                            if (isRising && darkenedPositionsIntensities.ContainsKey((x, y)))
+                            // Remove tiles that no longer have shadow
+                            if (darkenedPositionsIntensities.ContainsKey((x, y)))
                             {
                                 tilesToRemove.Add((x, y));
                             }
@@ -5606,7 +5724,6 @@ namespace Internal
                     ResetTileColor(tile.x, tile.y);
                 }
             }
-
             private void UpdateTileShadow(int x, int y, int shadowIntensity)
             {
                 // Get the base color of the tile
@@ -5631,7 +5748,7 @@ namespace Internal
 
                     string background = SetBackgroundColor(r, g, b);
                     string foreground = SetForegroundColor(or, og, ob);
-                    Console.Write(background + foreground + $"{overlayData[x, y]}" + ResetColor());
+                    Console.Write(background + foreground + $"{overlayData[x, y]} " + ResetColor());
                 }
                 else
                 {
@@ -5639,7 +5756,6 @@ namespace Internal
                     Console.Write(background + "  " + ResetColor());
                 }
             }
-
             private void ResetTileColor(int x, int y)
             {
                 // Get the base color of the tile
@@ -5658,7 +5774,6 @@ namespace Internal
                     Console.Write(background + foreground + $"{overlayData[x, y]}" + ResetColor());
                 }
             }
-
             private double CalculateNormalizedDistance(int x, int y)
             {
                 double dx = 0;
@@ -5826,6 +5941,19 @@ namespace Internal
                 }
                 return 0;
             }
+            private void DisplayDarkenedOverlayTiles()
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        if (overlayData[x, y] != '\0')
+                        {
+                            
+                        }
+                    }
+                }
+            }
             #endregion
             #endregion
             public void DisplayMap()
@@ -5933,17 +6061,49 @@ namespace Internal
                     return;
                 }
                 UpdateTile(x, y);
+
+                bool isNight = false;
+                bool isDarkening = false;
+                if (GetDarkenedTileIntensity(x, y) > 10)
+                {
+                    isDarkening = true;
+                }
+                if (GetDarkenedTileIntensity(x, y) > 45)
+                {
+                    isNight = true;
+                    isDarkening = false;
+                }
+                else if (GetDarkenedTileIntensity(x, y) < 5)
+                {
+                    isNight = false;
+                }
                 var bgColor = GetColor(mapData[x, y]); // Background color based on current chamber's mapData
                 var fgColor = GetOverlayColor(overlayData[x, y]); // Foreground color based on current chamber's overlayData
-
+                int darkenedIntensity = isDarkening ? (int)Math.Round(GetDarkenedTileIntensity(x, y)) : 0;
                 // Apply shadow if the tile is under a cloud shadow
-                if (currentShadowPositions.TryGetValue((x, y), out double shadowIntensity))
+                if (currentShadowPositions.TryGetValue((x, y), out double shadowIntensity) && !isCloudsShadowsRendering)
                 {
                     int shadowFactor = (int)(shadowIntensityFactor * shadowIntensity); // Adjust shadow intensity as needed
                     bgColor = (
                         Math.Max(0, bgColor.r - shadowFactor),
                         Math.Max(0, bgColor.g - shadowFactor),
                         Math.Max(0, bgColor.b - shadowFactor)
+                    );
+                }
+                if (isDarkening)
+                {
+                    bgColor = (
+                        Math.Max(0, bgColor.r - darkenedIntensity),
+                        Math.Max(0, bgColor.g - darkenedIntensity),
+                        Math.Max(0, bgColor.b - darkenedIntensity)
+                    );
+                }
+                else if (isNight)
+                {
+                    bgColor = (
+                        Math.Max(0, bgColor.r - 50),
+                        Math.Max(0, bgColor.g - 50),
+                        Math.Max(0, bgColor.b - 50)
                     );
                 }
 
@@ -5956,7 +6116,9 @@ namespace Internal
 
                 // Write the overlay character with the correct background and foreground colors
                 Console.SetCursorPosition(leftPadding + x * 2, y + topPadding);
-                Console.Write(background + foreground + $"{overlayData[x, y]}" + ResetColor());
+                Console.Write(background + "  " + ResetColor());
+                Console.SetCursorPosition(leftPadding + x * 2, y + topPadding);
+                Console.Write(background + foreground + $"{overlayData[x, y]} " + ResetColor());
             }
             private bool IsThereAnOverlayTile(int x, int y)
             {
@@ -6036,12 +6198,10 @@ namespace Internal
             {
                 return $"\u001b[38;2;{r};{g};{b}m";
             }
-
             public static string SetBackgroundColor(int r, int g, int b)
             {
                 return $"\u001b[48;2;{r};{g};{b}m";
             }
-
             public static string ResetColor()
             {
                 return "\u001b[0m";
@@ -6189,7 +6349,6 @@ namespace Internal
                     // Store old position
                     int oldX = crab.X;
                     int oldY = crab.Y;
-
                     // Update crab behavior
                     crab.Behave();
                     // Erase old position from overlayData
@@ -6224,6 +6383,98 @@ namespace Internal
             }
             #endregion
             #region GUI
+            // GUI Configuration Class
+            public class GUIConfig
+            {
+                // Padding properties
+                public int LeftPadding { get; set; }
+                public int TopPadding { get; set; }
+                public int RightPadding { get; set; }
+                public int BottomPadding { get; set; }
+                public int MinConsoleWidth { get; set; } = 150;
+                public int MinConsoleHeight { get; set; } = 30;
+
+                public int RadarWidth { get; set; }
+                public int RadarHeight { get; set; }
+                public string Title { get; set; }
+                public int TitleWidth { get; set; }
+                public int TitleHeight { get; set; }
+                public int StatsWidth { get; set; }
+                public int StatsHeight { get; set; }
+                public int TimeWidth { get; set; }
+                public int TimeHeight { get; set; }
+                public int HelpWidth { get; set; }
+                public int HelpHeight { get; set; }
+                public int TileWidth { get; set; }
+                public int TileHeight { get; set; }
+                public int ThanksWidth { get; set; }
+                public int ThanksHeight { get; set; }
+                public int OutputWidth { get; set; }
+                public int OutputHeight { get; set; }
+
+                public GUIConfig(int consoleWidth, int consoleHeight, int leftPadding, int topPadding, int rightPadding, int bottomPadding)
+                {
+                    LeftPadding = leftPadding;
+                    TopPadding = topPadding;
+                    RightPadding = rightPadding;
+                    BottomPadding = bottomPadding;
+
+                    // Weather Radar
+                    RadarWidth = TopPadding * 2;
+                    RadarHeight = TopPadding;
+
+                    // Title And Signature
+                    Title = "Chambers";
+                    TitleWidth = 50;
+                    TitleHeight = TopPadding - 2;
+
+                    // Weather Stats
+                    StatsWidth = ((consoleWidth / 2 - RadarWidth - TitleWidth / 2) / 2) + 1;
+                    StatsHeight = TopPadding - 2;
+
+                    // Time Info
+                    if (consoleWidth % 2 == 0)
+                    {
+                        TimeWidth = StatsWidth + 2;
+                    }
+                    else
+                    {
+                        TimeWidth = StatsWidth + 1;
+                    }
+                    TimeHeight = TopPadding - 2;
+
+                    // Help Menu
+                    HelpWidth = RightPadding * 2;
+                    HelpHeight = (consoleHeight - TopPadding - BottomPadding) / 3 * 2 + 4;
+
+                    // Tile Info
+                    TileWidth = RightPadding * 2;
+                    TileHeight = (consoleHeight - TopPadding - BottomPadding) / 3 - 5;
+
+                    // Thanks Info
+                    if (consoleWidth > 100)
+                    {
+                        ThanksWidth = RightPadding * 2;
+                        ThanksHeight = TopPadding;
+                    }
+                    else
+                    {
+                        ThanksWidth = 0;
+                        ThanksHeight = 0;
+                    }
+
+                    // Output Log
+                    if (consoleWidth > 100)
+                    {
+                        OutputWidth = (consoleWidth) / 2 - (TitleWidth / 2) - ThanksWidth + 1;
+                    }
+                    else
+                    {
+                        OutputWidth = 0;
+                    }
+                    OutputHeight = TopPadding + 1;
+                }
+            }
             public void DisplayGUI()
             {
                 double time = Math.Round(weather.TimeOfDay, 2);
@@ -6239,6 +6490,19 @@ namespace Internal
                 int consoleWidth = Console.WindowWidth;
                 int consoleHeight = Console.WindowHeight;
 
+                // Initialize GUI Configuration
+                GUIConfig config = new GUIConfig(consoleWidth, consoleHeight, leftPadding, topPadding, rightPadding, bottomPadding);
+
+                // Check console size
+                if (consoleWidth < config.MinConsoleWidth || consoleHeight < config.MinConsoleHeight)
+                {
+                    Console.Clear();
+                    Console.SetCursorPosition(0, 0);
+                    Console.Write("Please resize the console window to a larger size.");
+                    Program.continueSimulating = false;
+                    return;
+                }
+
                 // Define margins
                 int leftMargin = leftPadding;
                 int topMargin = topPadding;
@@ -6249,83 +6513,28 @@ namespace Internal
                 int contentWidth = consoleWidth - leftMargin - rightMargin;
                 int contentHeight = consoleHeight - topMargin - bottomMargin;
 
-                // Weather Radar
-                int radarWidth = topMargin * 2;
-                int radarHeight = topMargin;
-
-                // Title And Sigmature
-                string title = "Chambers";
-                int titleWidth = 50;
-                int titleHeight = topMargin - 2;
-
-                // Weather Stats
-                int statsWidth = (consoleWidth / 2 - radarWidth - titleWidth / 2) / 2 + 1;
-                int statsHeight = topMargin - 2;
-                
-                // Time Info
-                int timeWidth;
-                if (consoleWidth % 2 == 0)
-                {
-                    timeWidth = statsWidth + 2;
-                }
-                else
-                {
-                    timeWidth = statsWidth + 1;
-                }
-                int timeHeight = topMargin - 2;
-                // Help Menu
-                int helpWidth = rightMargin * 2;
-                int helpHeight = contentHeight / 3 * 2 + 4;
-
-                // Tile Info
-                int tileWidth = rightMargin * 2;
-                int tileHeight = contentHeight  / 3 - 5;
-
-                // Thanks Info
-                int thanksWidth = 0, thanksHeight = 0;
-                if (consoleWidth > 100)
-                {
-                    thanksWidth = rightMargin * 2;
-                    thanksHeight = topMargin;
-                }
-                else
-                {
-                    thanksWidth = 0;
-                }
-
-                // Output Log
-                int outputWidth, outputHeight = topMargin + 1;
-                if (consoleWidth > 100)
-                {
-                    outputWidth = (consoleWidth) / 2 - titleWidth / 2 - thanksWidth + 1;
-                }
-                else
-                {
-                    outputWidth = 0;
-                }
-
                 if (topMargin > 0 && contentWidth >= 20 && contentHeight >= 20 && topMargin >= 10)
                 {
                     // Weather Radar
-                    DrawBox(0, 0, radarWidth, radarHeight, "Weather Radar");
+                    DrawBox(0, 0, config.RadarWidth, config.RadarHeight, "Weather Radar");
                     Console.SetCursorPosition(2, 1);
                     Console.Write($"Not Implemented Yet");
                     // Time Info
-                    DisplayTimeInfo(time, season, radarWidth, timeWidth, timeHeight);
+                    DisplayTimeInfo(time, season, config.RadarWidth, config.TimeWidth, config.TimeHeight);
                     // Weather Stats
                     DisplayWeatherStats(
                         currentWeather, nextWeather, temperature, humidity, pressure, windSpeed, windDirection,
-                        radarWidth, statsWidth, statsHeight
+                        config.RadarWidth, config.StatsWidth, config.StatsHeight
                     );
                     // Thanks Info
                     if (Console.WindowWidth > 200 && rightMargin >= 20)
                     {
-                        DisplayThanksMessage(thanksWidth, thanksHeight);
+                        DisplayThanksMessage(config.ThanksWidth, config.ThanksHeight);
                     }
                     // Title
-                    DisplayTitleAndSignature(titleWidth, titleHeight, title);
+                    DisplayTitleAndSignature(config.TitleWidth, config.TitleHeight, "Chambers");
                     // Output Log
-                    DisplayOutputLog(outputWidth, outputHeight, titleWidth);
+                    DisplayOutputLog(config.OutputWidth, config.OutputHeight, config.TitleWidth);
                 }
                 else
                 {
@@ -6338,11 +6547,43 @@ namespace Internal
                 if (rightMargin >= 20)
                 {
                     // Help Info
-                    DisplayHelpInfo(helpWidth, helpHeight);
+                    DisplayHelpInfo(config.HelpWidth, config.HelpHeight);
                     // Tile Info
-                    DisplayTileInfo(tileWidth, tileHeight);
+                    DisplayTileInfo(config.TileWidth, config.TileHeight);
                 }
-                Console.SetCursorPosition(0, height + topPadding - 1);
+
+                Console.SetCursorPosition(0, height + topMargin - 1);
+            }
+            public void UpdateGUIValues()
+            {
+                double time = Math.Round(weather.TimeOfDay, 2);
+                double season = Math.Round(weather.Season, 2);
+                WeatherType currentWeather = weather.CurrentWeather;
+                WeatherType nextWeather = weather.NextWeather;
+                double temperature = Math.Round(weather.Temperature, 2);
+                double humidity = Math.Round(weather.Humidity, 2);
+                double pressure = Math.Round(weather.Pressure, 2);
+                double windSpeed = Math.Round(weather.WindSpeed, 2);
+                double windDirection = Math.Round(weather.WindDirection, 2);
+
+                // Get console dimensions
+                int consoleWidth = Console.WindowWidth;
+                int consoleHeight = Console.WindowHeight;
+
+                // Initialize GUI Configuration
+                GUIConfig config = new GUIConfig(consoleWidth, consoleHeight, leftPadding, topPadding, rightPadding, bottomPadding);
+
+                // Time Info
+                UpdateTimeInfo(time, season, config.RadarWidth, config.TimeWidth, config.TimeHeight);
+
+                // Weather Stats
+                UpdateWeatherStats(
+                    currentWeather, nextWeather, temperature, humidity, pressure, windSpeed, windDirection,
+                    config.RadarWidth, config.StatsWidth, config.StatsHeight
+                );
+                
+                // Output Log
+                UpdateOutputLog(config.OutputWidth, config.OutputHeight, config.TitleWidth);
             }
             private void DisplayWeatherRadar(int x, int y, int width, int height)
             {
@@ -6358,6 +6599,22 @@ namespace Internal
                 Console.Write($"{Map.SetForegroundColor(ColorSpectrum.CYAN.r, ColorSpectrum.CYAN.g, ColorSpectrum.CYAN.b)}Cloud Formations: {GetCloudFormations()}{Map.ResetColor()}");
                 Console.SetCursorPosition(radarWidth + 1, 4);
                 Console.Write($"{Map.SetForegroundColor(ColorSpectrum.CYAN.r, ColorSpectrum.CYAN.g, ColorSpectrum.CYAN.b)}Cloud Tiles: {GetCloudTilesCount()}{Map.ResetColor()}");
+                Console.SetCursorPosition(radarWidth + 1, 5);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.GREEN.r, ColorSpectrum.GREEN.g, ColorSpectrum.GREEN.b)}Temperature: {temperature}°C{Map.ResetColor()}");
+                Console.SetCursorPosition(radarWidth + 1, 6);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.BLUE.r, ColorSpectrum.BLUE.g, ColorSpectrum.BLUE.b)}Humidity: {humidity}%{Map.ResetColor()}");
+                Console.SetCursorPosition(radarWidth + 1, 7);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.MAGENTA.r, ColorSpectrum.MAGENTA.g, ColorSpectrum.MAGENTA.b)}Pressure: {pressure}hPa{Map.ResetColor()}");
+                Console.SetCursorPosition(radarWidth + 1, 8);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Wind Speed: {windSpeed}m/s{Map.ResetColor()}");
+                Console.SetCursorPosition(radarWidth + 1, 9);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PURPLE.r, ColorSpectrum.PURPLE.g, ColorSpectrum.PURPLE.b)}Wind Direction: {windDirection}Sl{Map.ResetColor()}");
+            }
+            private void UpdateWeatherStats(WeatherType currentWeather, WeatherType nextWeather, double temperature, double humidity,
+            double pressure, double windSpeed, double windDirection, int radarWidth, int statsWidth, int statsHeight)
+            {
+                Console.SetCursorPosition(radarWidth + 1, 1);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.YELLOW.r, ColorSpectrum.YELLOW.g, ColorSpectrum.YELLOW.b)}Current: {currentWeather}, Next: {nextWeather}{Map.ResetColor()}");
                 Console.SetCursorPosition(radarWidth + 1, 5);
                 Console.Write($"{Map.SetForegroundColor(ColorSpectrum.GREEN.r, ColorSpectrum.GREEN.g, ColorSpectrum.GREEN.b)}Temperature: {temperature}°C{Map.ResetColor()}");
                 Console.SetCursorPosition(radarWidth + 1, 6);
@@ -6398,6 +6655,13 @@ namespace Internal
                 Console.SetCursorPosition(radarWidth + statsWidth, 6);
                 Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PINK.r, ColorSpectrum.PINK.g, ColorSpectrum.PINK.b)}Day: {dayCount}{Map.ResetColor()}");
                 
+            }
+            private void UpdateTimeInfo(double time, double season, int radarWidth, int statsWidth, int statsHeight)
+            {
+                Console.SetCursorPosition(radarWidth + statsWidth, 1);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_BLUE.r, ColorSpectrum.LIGHT_BLUE.g, ColorSpectrum.LIGHT_BLUE.b)}Time: {time:F2}h{Map.ResetColor()}");
+                Console.SetCursorPosition(radarWidth + statsWidth, 2);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b)}Season: {season}{Map.ResetColor()}");
             }
             private void DisplayHelpInfo(int helpWidth, int helpHeight)
             {
@@ -6684,6 +6948,96 @@ namespace Internal
                     }
                 }
             }
+            public void UpdateOutputLog(int outputWidth, int outputHeight, int titleWidth)
+            {
+                int startX = Console.WindowWidth / 2 + titleWidth / 2 - 1;
+                int startY = 2;
+    
+                if (startX < 0) startX = 0;
+                if (startY < 0) startY = 0;
+
+                string text = eventBuffer.LastOrDefault() ?? "";
+                int textLength = text.Length;
+                int xPosition = startX + (outputWidth - textLength) / 2;
+                Console.SetCursorPosition(xPosition, 1);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.CYAN.r, ColorSpectrum.CYAN.g, ColorSpectrum.CYAN.b)}{text}{Map.ResetColor()}");
+                int cursorX = startX + 2;
+                int cursorY = startY + 1;
+    
+                int maxLines = outputHeight - 5;
+                int linesToDisplay = Math.Min(outputBuffer.Count, maxLines);
+    
+                // Define keyword-color mapping using ColorSpectrum
+                var keywordColors = new Dictionary<string, (int r, int g, int b)>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "Added", ColorSpectrum.GREEN },
+                    { "Removed", ColorSpectrum.RED },
+                    { "Updated", ColorSpectrum.YELLOW },
+                    { "Regenerated", ColorSpectrum.CYAN },
+                    { "Chamber", ColorSpectrum.DARKER_BLUE },
+                    { "Error", ColorSpectrum.RED },
+                    { "Warning", ColorSpectrum.YELLOW },
+                    { "Info", ColorSpectrum.CYAN },
+                    { "Debug", ColorSpectrum.DARK_GREY },
+                    { "Crab", ColorSpectrum.RED },
+                    { "Turtle", ColorSpectrum.GREEN },
+                    { "Sheep", ColorSpectrum.SILVER },
+                    { "Cow", ColorSpectrum.SILVER },
+                    { "Pig", ColorSpectrum.PINK },
+                    { "Chicken", ColorSpectrum.YELLOW },
+                    { "Fox", ColorSpectrum.ORANGE },
+                    { "Rabbit", ColorSpectrum.GREY },
+                    { "Wolf", ColorSpectrum.GREY },
+                    { "Bear", ColorSpectrum.BROWN },
+                    { "Goat", ColorSpectrum.DARK_GREY},
+                    { "Fish", ColorSpectrum.BLUE_VIOLET},
+                    { "Bird", ColorSpectrum.DARK_GREY},
+                    { "Weather", ColorSpectrum.CYAN },
+                    { "Time", ColorSpectrum.LIGHT_BLUE },
+                    { "Season", ColorSpectrum.LIGHT_GREEN },
+                    { "Temperature", ColorSpectrum.GREEN },
+                    { "Humidity", ColorSpectrum.BLUE },
+                    { "Pressure", ColorSpectrum.MAGENTA },
+                    { "Wind", ColorSpectrum.ORANGE },
+                    { "Sunrise", ColorSpectrum.ORANGE },
+                    { "Sunset", ColorSpectrum.ORANGE },
+                    { "Day", ColorSpectrum.PINK },
+                    { "Cloud", ColorSpectrum.SILVER},
+                    { "Plains", ColorSpectrum.GREEN},
+                    { "Forest", ColorSpectrum.DARK_GREEN},
+                    { "Mountain", ColorSpectrum.GREY},
+                    { "Snow", ColorSpectrum.WHITE},
+                    { "Water", ColorSpectrum.BLUE},
+                    { "Beach", ColorSpectrum.YELLOW},
+                };
+                string Reset = "\u001b[0m";
+    
+                // Get the latest lines and reverse them to display newest at the top
+                var lines = outputBuffer.Skip(Math.Max(0, outputBuffer.Count - maxLines))
+                                        .Take(maxLines)
+                                        .Reverse()
+                                        .ToList();
+    
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    string line = lines[i];
+                    var words = line.Split(' ');
+                    Console.SetCursorPosition(cursorX, cursorY + i);
+                    foreach (var word in words)
+                    {
+                        string trimmedWord = word.Trim(',', '.', '!', '?'); // Trim punctuation
+                        if (keywordColors.ContainsKey(trimmedWord))
+                        {
+                            var color = keywordColors[trimmedWord];
+                            Console.Write($"{Map.SetForegroundColor(color.r, color.g, color.b)}{word}{Reset} ");
+                        }
+                        else
+                        {
+                            Console.Write($"{word} ");
+                        }
+                    }
+                }
+            }
             private void DrawBox(int x, int y, int width, int height, string title, string titleLeftDecor = "{", string titleRightDecor = "}")
             {
                 
@@ -6825,7 +7179,6 @@ namespace Internal
             private int predatorX;
             private int predatorY;
             private List<char> allowedTiles = new List<char> { 'B', 'b' }; // Add your selected tiles here
-
             public Crab(int initialX, int initialY, int beachWidth, int beachHeight, char[,] mapData)
                 : base("Crab", "Beach")
             {
