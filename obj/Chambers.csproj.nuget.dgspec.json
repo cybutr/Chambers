@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/home/chedda/csharp/Chambers/Chambers.csproj": {}
+    "D:\\VScode\\csharp\\Chambers\\Chambers.csproj": {}
   },
   "projects": {
-    "/home/chedda/csharp/Chambers/Chambers.csproj": {
+    "D:\\VScode\\csharp\\Chambers\\Chambers.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/chedda/csharp/Chambers/Chambers.csproj",
+        "projectUniqueName": "D:\\VScode\\csharp\\Chambers\\Chambers.csproj",
         "projectName": "Chambers",
-        "projectPath": "/home/chedda/csharp/Chambers/Chambers.csproj",
-        "packagesPath": "/home/chedda/.nuget/packages/",
-        "outputPath": "/home/chedda/csharp/Chambers/obj/",
+        "projectPath": "D:\\VScode\\csharp\\Chambers\\Chambers.csproj",
+        "packagesPath": "C:\\Users\\sexyk\\.nuget\\packages\\",
+        "outputPath": "D:\\VScode\\csharp\\Chambers\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/home/chedda/.nuget/NuGet/NuGet.Config"
+          "C:\\Users\\sexyk\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -32,6 +32,11 @@
           "warnAsError": [
             "NU1605"
           ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
         }
       },
       "frameworks": {
@@ -48,18 +53,12 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
-          "downloadDependencies": [
-            {
-              "name": "Microsoft.AspNetCore.App.Ref",
-              "version": "[8.0.10, 8.0.10]"
-            }
-          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.110/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "D:\\Program Files\\dotnet\\sdk\\8.0.303/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

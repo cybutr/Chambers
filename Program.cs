@@ -26,7 +26,7 @@ using System.Security.Authentication;
 // TODO: Animals
 // TODO: World layers
 // TODO: Seasons
-// TODO: Day/Night cycle - almost done
+// TODO: Day/Night cycle - Done
 // TODO: Events
 // TODO: Meteors
 // TODO: Volcanoes
@@ -35,7 +35,7 @@ using System.Security.Authentication;
 // TODO: Creature History
 // TODO: Secrets
 // TODO: Sound Effects
-// TODO: Time Manipulation- Done
+// TODO: Time Manipulation - Done
 // TODO: Map Configuration
 
 
@@ -71,7 +71,7 @@ namespace Internal
             |==|, |     |==| , '='     |  /==/ -   ,|  |==|,|   | -|  |==| ,|  |==| -   _ |  |==|  , \_.' )                   
             |==|- `-._   \==\ -    ,_ /  /==/-  /\ - \ |==|  '='   /  |==|- |  |==|  /\ , |  \==\-  ,    (   .=.   .=.   .=.  
             /==/ - , ,/   '.='. -   .'   \==\ _.\=\.-' |==|-,   _`/   /==/. /  /==/, | |- |   /==/ _  ,  /  :=; : :=; : :=; : 
-            `--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=`  ";
+            `--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=` ";
 
             DisplayCenteredText(asciiArt);
 
@@ -338,9 +338,11 @@ namespace Internal
         public static double erosionFactor = 0.2;
         public static int minBiomeSize = 12;
         public static int minLakeSize = 16;
-        public static int minRiverWidth = 3;
-        public static int maxRiverWidth = 5;
-        public static double riverFlowChance = 0.2;
+        public static int minRiverWidth = 7;
+        public static int maxRiverWidth = 10;
+        public static int minMountainWidth = 3;
+        public static int maxMountainWidth = 6;
+        public static double riverFlowChance = 0.4;
         public static double forestHeightThreshold = 0.4;
         public static double plainsHeightThreshold = 0.7;
         public static double mountainHeightThreshold = 1.0;
@@ -353,7 +355,10 @@ namespace Internal
         public static bool isCloudsRendering = false;
         public static bool isCloudsShadowsRendering = true;
         public static int cloudShadowOffsetX;
-        public static int cloudShadowOffsetY;
+        public static int cloudShadowOffsetY;            
+        private static double sunriseTime;
+        private static double sunsetTime;
+        public static double time;
         #endregion
         #region GUI
         public static int topPadding = Console.WindowHeight / 12 + 5;
@@ -374,7 +379,7 @@ namespace Internal
                 };
         public static int sleepTime = 100;
         public int maxSleepTime = 3000;
-        public int minSleepTime = 0;
+        public int minSleepTime = 10;
         private void ListenForKeyPress()
         {
             while (continueSimulating)
@@ -867,6 +872,8 @@ namespace Internal
                 FrameMap('@');
                 InitializeSpecies(3, 6, new Crab(0, 0, 0, 0, mapData));
                 InitializeSpecies(2, 4, new Turtle(0, 0, 0, 0, mapData, overlayData));
+                InitializeCows(2, 3, 3, 8);
+                InitializeSheeps(2, 3, 3, 7);
                 InitializeWaves();
                 InitializeWeather();
                 InitializeClouds();
@@ -1599,7 +1606,7 @@ namespace Internal
                 // Define the mountain path
                 while (steps < maxSteps)
                 {
-                    int mountainWidth = rngMap.Next(minRiverWidth, maxRiverWidth + 1); // Mountain width between minRiverWidth and maxRiverWidth
+                    int mountainWidth = rngMap.Next(minMountainWidth, maxMountainWidth + 1); // Mountain width between minRiverWidth and maxRiverWidth
                     for (int i = -mountainWidth / 2; i <= mountainWidth / 2; i++)
                     {
                         if (x + i >= 0 && x + i < width)
@@ -2692,6 +2699,13 @@ namespace Internal
                 {
                     finalColor = GetColor(tile);
                 }
+                if (currentShadowPositions.TryGetValue((x, y), out double shadowIntensity) && isCloudsShadowsRendering)
+                {
+                    int shadowFactor = (int)(shadowIntensityFactor * shadowIntensity); // Adjust shadow intensity as needed
+                    finalColor.r = GetTileBaseColor(x, y).r - shadowFactor;
+                    finalColor.g = GetTileBaseColor(x, y).g - shadowFactor;
+                    finalColor.b = GetTileBaseColor(x, y).b - shadowFactor;
+                }
 
 
                 lock (consoleLock)
@@ -3018,7 +3032,7 @@ namespace Internal
                 double slowFactor = 0.1;
                 double windSpeed = weather.WindSpeed;
                 double windDirection = weather.WindDirection;
-                double radians = windDirection;
+                double radians = windDirection * (Math.PI / 180);
                 double velocityX = windSpeed * Math.Cos(radians) * slowFactor;
                 double velocityY = windSpeed * Math.Sin(radians) * slowFactor;
 
@@ -3971,8 +3985,6 @@ namespace Internal
 
                 return regions;
             }
-
-            #endregion
             private IEnumerable<(int, int)> GetNeighbors(int item1, int item2, int width, int height)
             {
                 for (int dx = -1; dx <= 1; dx++)
@@ -4155,6 +4167,7 @@ namespace Internal
 
                 return baseColor;
             }
+            #endregion
             #region weather state
             public void InitializeWeather()
             {
@@ -4163,18 +4176,19 @@ namespace Internal
                 weather.Intensity = 0.0;
                 weather.IntensityTarget = 0.0;
                 weather.IntensityChangeSpeed = 0.1;
-                weather.TimeOfDay = 18.5;
+                weather.TimeOfDay = 12.00;
                 weather.Season = 0.0;
                 weather.Temperature = GetTemperature(weather.Season, weather.TimeOfDay, weather.CurrentWeather);
-                weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, weather.TimeOfDay, weather.Season, weather.Humidity) - 20;
+                weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, weather.TimeOfDay, weather.Season, weather.Humidity) - 30;
                 weather.Pressure = GetPressure();
                 weather.WindSpeed = rng.NextDouble() * 10.0 + 5.0;
-                weather.WindDirection = rng.NextDouble() * 2 * Math.PI;
+                weather.WindDirection = rng.Next(1, 361);
             }
             public void UpdateWeather()
             {
                 // Update time of day and season
                 weather.TimeOfDay += deltaTime * 24.0 / 720.0; 
+                time = weather.TimeOfDay;
                 if (weather.TimeOfDay >= 24.0) // One day is 12 minutes
                 {
                     weather.TimeOfDay -= 24.0;
@@ -4208,14 +4222,31 @@ namespace Internal
                 weather.Pressure = GetPressure();
 
                 // Update wind speed and direction dynamically
+                UpdateSunTimes(weather.Season);
                 UpdateWind();
                 UpdateCloudShadows();
                 UpdateTime();
                 UpdateSeason();
             }
+            public static void UpdateSunTimes(double season)
+            {
+                // Use a combination of sine and cosine functions to interpolate between equinox and solstice times
+                double angle = season * 2 * Math.PI; // Convert season to angle (0 to 2π)
+                double sunriseOffset = Math.Sin(angle) * (summerSolsticeSunrise - equinoxSunrise) + Math.Cos(angle) * (winterSolsticeSunrise - equinoxSunrise);
+                double sunsetOffset = Math.Sin(angle) * (summerSolsticeSunset - equinoxSunset) + Math.Cos(angle) * (winterSolsticeSunset - equinoxSunset);
+
+                sunriseTime = Math.Round(equinoxSunrise + sunriseOffset, 2);
+                sunsetTime = Math.Round(equinoxSunset + sunsetOffset, 2);
+            }
             private double timeSinceLastWeatherChange = 0.0;
-            private static double sunriseTime = 7.0;
-            private static double sunsetTime = 20.0;
+
+            // Average times for sunrise and sunset at equinoxes and solstices (in hours)
+            private static readonly double equinoxSunrise = 6.0;
+            private static readonly double equinoxSunset = 18.0;
+            private static readonly double summerSolsticeSunrise = 5.0;
+            private static readonly double summerSolsticeSunset = 21.0;
+            private static readonly double winterSolsticeSunrise = 7.0;
+            private static readonly double winterSolsticeSunset = 17.0;
             private int dayCount;
             double minTimeBetweenChanges;
             private WeatherType GetSeasonWeatherType()
@@ -4511,10 +4542,10 @@ namespace Internal
                 pressure += (weatherRng.NextDouble() - 0.5) * 0.5; // ±0.25 hPa
                 return pressure;
             }
-            private double GetTemperature(double season, double timeOfDay, WeatherType weatherType)
+            private static double GetTemperature(double season, double timeOfDay, WeatherType weatherType)
             {
                 // Normalize the season value between 0 and 4
-                season = season % 4.0;
+                season %= 4.0;
 
                 // Define temperatures at key points for each season (in degrees Celsius)
                 // Index 0: Start of Spring, 1: Start of Summer, 2: Start of Autumn, 3: Start of Winter, 4: Wrap back to Spring
@@ -4529,70 +4560,79 @@ namespace Internal
                 double tempEnd = seasonTemperatures[seasonIndex + 1];
 
                 // Smoothly interpolate the base temperature between seasons
-                double baseTemp = tempStart + (tempEnd - tempStart) * seasonProgress;
+                double baseTemp = tempStart + tempEnd - tempStart * seasonProgress;
 
                 // Adjust temperature based on time of day (warmer during the day, cooler at night)
                 // Shift the time to peak at 14 hours
-                double dayTemperatureVariation = Math.Sin(((timeOfDay - 8.0) / 24.0) * 2 * Math.PI) * 5.0; // Variation between -5 and +5 degrees, peaking at 14 hours
+                double dayTemperatureVariation = Math.Sin((timeOfDay - 8.0) / 24.0 * 2 * Math.PI) * 5.0; // Variation between -5 and +5 degrees, peaking at 14 hours
                 baseTemp += dayTemperatureVariation;
 
                 // Adjust temperature based on current weather conditions
                 double weatherAdjustment = weatherType switch
                 {
                     WeatherType.Thunderstorm => -2.0,
-                    WeatherType.Rain => -1.5,
-                    WeatherType.Snow => -5.0,
-                    WeatherType.Sleet => -3.0,
-                    WeatherType.Overcast => -1.0,
-                    WeatherType.Clear => 2.0,
-                    WeatherType.Fog => -0.5,
-                    WeatherType.Hail => -2.5,
-                    WeatherType.Drizzle => -1.0,
-                    WeatherType.BlowingSnow => -4.0,
-                    WeatherType.Sandstorm => 3.0,
+                    WeatherType.Rain => -1.0,
+                    WeatherType.Snow => -3.0,
+                    WeatherType.Sleet => -1.5,
+                    WeatherType.Overcast => -0.5,
+                    WeatherType.Clear => 1.0,
+                    WeatherType.Fog => -0.2,
+                    WeatherType.Hail => -1.5,
+                    WeatherType.Drizzle => -0.5,
+                    WeatherType.BlowingSnow => -2.0,
+                    WeatherType.Sandstorm => 1.5,
                     _ => 0.0
                 };
                 baseTemp += weatherAdjustment;
-
+                
+                // Clamp the temperature to a realistic range
+                baseTemp = Math.Clamp(baseTemp, -10.0, 40.0);
+                
                 return baseTemp;
             }
             private void UpdateWind()
             {
                 windChangeTimer += deltaTime;
 
-                if (windChangeTimer >= windChangeInterval && !isTurning)
+                if (windChangeTimer >= minWindChangeInterval && !isTurning)
                 {
-                    // Start turning
-                    isTurning = true;
-                    windChangeTimer = 0.0;
-                    // Choose a random angle to turn, limited to 0.2 radians
-                    double maxTurn = 0.2;
-                    double turn = (rng.NextDouble() * 2 - 1) * maxTurn; // Random turn between -0.2 and 0.2
-                    windTargetDirection = (weather.WindDirection + turn + Math.PI * 2) % (Math.PI * 2);
+                    // Decide whether to change wind direction
+                    double changeChance = deltaTime / (maxWindChangeInterval - minWindChangeInterval);
+                    if (rng.NextDouble() < changeChance)
+                    {
+                        // Start turning
+                        isTurning = true;
+                        windChangeTimer = 0.0;
+                        // Choose a random angle to turn, limited to -20 to 20 degrees
+                        int turn = rng.Next(-20, 21); // Random integer between -20 and 20 inclusive
+                        windTargetDirection = (weather.WindDirection + turn + 360) % 360;
+                    }
                 }
 
                 if (isTurning)
                 {
                     // Calculate the smallest difference
                     double difference = windTargetDirection - weather.WindDirection;
-                    difference = (difference + Math.PI) % (2 * Math.PI) - Math.PI;
+                    difference = (difference + 180) % 360 - 180;
 
                     // Determine the direction to turn
                     double turnDirection = difference > 0 ? 1 : -1;
 
-                    // Apply a slower, smooth turn
-                    windDirectionChangeRate = 0.01; // Slower turning rate
-                    double turnAmount = windDirectionChangeRate * deltaTime;
-                    if (Math.Abs(difference) < turnAmount)
+                    // Apply a smooth turn by 1 degree per update
+                    double turnAmount = 1.0;
+
+                    if (Math.Abs(difference) <= turnAmount)
                     {
                         weather.WindDirection = windTargetDirection;
                         isTurning = false;
-                        windChangeInterval = 60.0 + rng.NextDouble() * 30.0;
+                        windChangeTimer = 0.0;
                     }
                     else
                     {
                         weather.WindDirection += turnDirection * turnAmount;
-                        weather.WindDirection = (weather.WindDirection + Math.PI * 2) % (Math.PI * 2);
+                        // Ensure degrees are integers
+                        weather.WindDirection = Math.Round(weather.WindDirection);
+                        weather.WindDirection = (weather.WindDirection + 360) % 360;
                     }
                 }
 
@@ -4679,10 +4719,10 @@ namespace Internal
                         return 0.0;
                 }
             }
-            private double windChangeTimer = 0.0;
-            private double windChangeInterval = 60.0 + new Random().NextDouble() * 30.0; // seconds
+            private double minWindChangeInterval = 30.0; // minimum interval in seconds
+            private double maxWindChangeInterval = 90.0; // maximum interval in seconds
+            private double windChangeTimer;
             private double windTargetDirection;
-            private double windDirectionChangeRate = 0.5; // radians per second
             private bool isTurning = false;
 
             // Helper method to calculate pressure gradient
@@ -4925,6 +4965,7 @@ namespace Internal
                         if (!currentShadowPositions.ContainsKey(pos) || (isCloudsRendering && IsTileUnderCloud(pos.x, pos.y)))
                         {
                             UpdateTile(pos.x, pos.y);
+                            UpdateOverlayTile(pos.x, pos.y);
                         }
                     }
                 }
@@ -4954,9 +4995,15 @@ namespace Internal
                                 if (IsThereAnOverlayTile(pos.x, pos.y))
                                 {
                                     var overlayColor = GetOverlayColor(overlayData[pos.x, pos.y]);
+
+                                    // Apply shadow intensity to overlay color as well
+                                    int or = Math.Max(0, overlayColor.r - shadowFactor);
+                                    int og = Math.Max(0, overlayColor.g - shadowFactor);
+                                    int ob = Math.Max(0, overlayColor.b - shadowFactor);
+
                                     string background = SetBackgroundColor(r, g, b);
-                                    string foreground = SetForegroundColor(overlayColor.r, overlayColor.g, overlayColor.b);
-                                    Console.Write(background + foreground + $"{overlayData[pos.x, pos.y]}" + ResetColor());
+                                    string foreground = SetForegroundColor(or, og, ob);
+                                    Console.Write(background + foreground + $"{overlayData[pos.x, pos.y]} " + ResetColor());
                                 }
                                 else
                                 {
@@ -4978,7 +5025,16 @@ namespace Internal
                                 Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
                                 if (IsThereAnOverlayTile(pos.x, pos.y))
                                 {
-                                    UpdateOverlayTile(pos.x, pos.y);
+                                    var overlayColor = GetOverlayColor(overlayData[pos.x, pos.y]);
+
+                                    // Apply shadow intensity to overlay color as well
+                                    int or = Math.Max(0, overlayColor.r - shadowFactor);
+                                    int og = Math.Max(0, overlayColor.g - shadowFactor);
+                                    int ob = Math.Max(0, overlayColor.b - shadowFactor);
+
+                                    string background = SetBackgroundColor(r, g, b);
+                                    string foreground = SetForegroundColor(or, og, ob);
+                                    Console.Write(background + foreground + $"{overlayData[pos.x, pos.y]} " + ResetColor());
                                 }
                                 else
                                 {
@@ -5063,7 +5119,7 @@ namespace Internal
                 cloudShadowOffsetX = baseOffsetX;
                 cloudShadowOffsetY = baseOffsetY;
 
-                double peakShadowIntensity = 45.0;
+                double peakShadowIntensity = 30.0;
                 // Adjust shadow intensity factor based on time of day
                 shadowIntensityFactor = GetShadowIntensityFactor(timeOfDay, sunriseTime, sunsetTime, peakShadowIntensity);
             }
@@ -5638,7 +5694,7 @@ namespace Internal
             {
                 if (timeOfDay == 0.0)
                 {
-                    CurrentGradientDirection = GradientDirection.BR_TL;
+                    CurrentGradientDirection = GradientDirection.TL_BR;
                 }
                 else if (timeOfDay == 12.0)
                 {
@@ -5665,10 +5721,10 @@ namespace Internal
                 // Temporary list to track tiles to remove from darkened positions
                 List<(int x, int y)> tilesToRemove = new List<(int x, int y)>();
 
-                // Update only the tiles that need to be updated
-                for (int x = 0; x < width; x++)
+                // Update only the tiles that need to be updated, excluding edges
+                for (int x = 1; x < width - 1; x++)
                 {
-                    for (int y = 0; y < height; y++)
+                    for (int y = 1; y < height - 1; y++)
                     {
                         // Calculate normalized distance based on selected gradient direction
                         double normalizedDistance = CalculateNormalizedDistance(x, y);
@@ -6081,7 +6137,7 @@ namespace Internal
                 var fgColor = GetOverlayColor(overlayData[x, y]); // Foreground color based on current chamber's overlayData
                 int darkenedIntensity = isDarkening ? (int)Math.Round(GetDarkenedTileIntensity(x, y)) : 0;
                 // Apply shadow if the tile is under a cloud shadow
-                if (currentShadowPositions.TryGetValue((x, y), out double shadowIntensity) && !isCloudsShadowsRendering)
+                if (currentShadowPositions.TryGetValue((x, y), out double shadowIntensity) && isCloudsShadowsRendering)
                 {
                     int shadowFactor = (int)(shadowIntensityFactor * shadowIntensity); // Adjust shadow intensity as needed
                     bgColor = (
@@ -6187,10 +6243,16 @@ namespace Internal
             {
                 switch (overlayTile)
                 {
-                    case 'X': return ColorSpectrum.RED;
-                    case 'O': return ColorSpectrum.YELLOW;
-                    case 'C': return ColorSpectrum.BRIGHT_RED; // Crabs
+                    case 'c': return ColorSpectrum.BRIGHT_RED; // Crabs
                     case 'T': return ColorSpectrum.NAVY; // Turtles
+                    case 'C': return ColorSpectrum.BLACK; // Cows
+                    case 'S': return ColorSpectrum.SILVER; // Sheep
+                    case 'W': return ColorSpectrum.GREY; // Wolves
+                    case 'B': return ColorSpectrum.BROWN; // Bears
+                    case 'G': return ColorSpectrum.BROWN; // Goats
+                    case 'F': return ColorSpectrum.BRIGHT_RED; // Fish
+                    case 'A': return ColorSpectrum.BRIGHT_RED; // Birds
+                    case 'V': return ColorSpectrum.BROWN; // Villagers
                     default: return ColorSpectrum.BLACK;
                 }
             }
@@ -6210,7 +6272,8 @@ namespace Internal
             #region update functions
             private List<Crab> crabs = new List<Crab>();
             private List<Turtle> turtles = new List<Turtle>();
-
+            public List<Cow> cows = new List<Cow>();
+            public List<Sheep> sheeps = new List<Sheep>();
             public void InitializeSpecies(int minSpecies, int maxSpecies, Species species)
             {
                 List<char> allowedTiles = new List<char> { };
@@ -6223,12 +6286,10 @@ namespace Internal
                 else if (species is Wolf or Bear)
                 {
                     allowedTiles.Add('F');
-                    allowedTiles.Add('f');
                 }
                 else if (species is Sheep or Cow)
                 {
                     allowedTiles.Add('P');
-                    allowedTiles.Add('p');
                 }
                 else if (species is Goat)
                 {
@@ -6247,9 +6308,7 @@ namespace Internal
                 else if (species is Bird)
                 {
                     allowedTiles.Add('F');
-                    allowedTiles.Add('f');
                     allowedTiles.Add('P');
-                    allowedTiles.Add('p');
                     allowedTiles.Add('B');
                     allowedTiles.Add('b');
                     allowedTiles.Add('O');
@@ -6293,7 +6352,7 @@ namespace Internal
                             (int x, int y) = GetRandomPointInAllowedTiles(allowedTiles);
                             var crab = new Crab(x, y, mapWidth, mapHeight, mapData);
                             crabs.Add(crab);
-                            overlayData[x, y] = 'C'; // Represent Crab with 'C'
+                            overlayData[x, y] = 'c'; // Represent Crab with 'C'
                         }
                         catch (InvalidOperationException)
                         {
@@ -6323,6 +6382,145 @@ namespace Internal
                     }
                 }
             }
+            private void InitializeCows(int minGroups, int maxGroups, int minPerGroup, int maxPerGroup)
+            {
+                int numberOfGroups = rng.Next(minGroups, maxGroups);
+                for (int i = 0; i < numberOfGroups; i++)
+                {
+                    int numberOfCows = rng.Next(minPerGroup, maxPerGroup);
+                    bool validPointFound = false;
+                    (int startX, int startY) = (0, 0);
+                    int attempts = 0;
+
+                    while (!validPointFound && attempts < 100)
+                    {
+                        (startX, startY) = GetRandomPointInAllowedTiles(new List<char> { 'P' });
+                        if (IsAtLeastDistanceFromMountains(startX, startY, 5))
+                        {
+                            validPointFound = true;
+                        }
+                        attempts++;
+                    }
+
+                    if (!validPointFound)
+                    {
+                        outputBuffer.Add("Failed to find a valid starting point for cow group.");
+                        continue;
+                    }
+
+                    for (int j = 0; j < numberOfCows; j++)
+                    {
+                        try
+                        {
+                            int iterations = 0;
+                            (int x, int y) = (0, 0);
+                            bool placedCows = false;
+                            while (!placedCows && iterations < 100)
+                            {
+                                (x, y) = GetRandomPointInRange(startX, startY, 1, 3);
+                                if (mapData[x, y] == 'P')
+                                {
+                                    var cow = new Cow(x, y, mapData, overlayData);
+                                    cows.Add(cow);
+                                    overlayData[x, y] = 'C'; // Represent Cow with 'C'
+                                    placedCows = true;
+                                }
+                                iterations++;
+                            }
+                            if (iterations >= 100)
+                            {
+                                outputBuffer.Add("Failed to place cows.");
+                                break;
+                            }
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // Handle case where no plains biomes are available
+                            outputBuffer.Add("No plains biomes available to place cows.");
+                            break;
+                        }
+                    }
+                }
+            }
+            private void InitializeSheeps(int minGroups, int maxGroups, int minPerGroup, int maxPerGroup)
+            {
+                int numberOfGroups = rng.Next(minGroups, maxGroups);
+                for (int i = 0; i < numberOfGroups; i++)
+                {
+                    int numberOfSheeps = rng.Next(minPerGroup, maxPerGroup);
+                    bool validPointFound = false;
+                    (int startX, int startY) = (0, 0);
+                    int attempts = 0;
+
+                    while (!validPointFound && attempts < 100)
+                    {
+                        (startX, startY) = GetRandomPointInAllowedTiles(new List<char> { 'P' });
+                        if (IsAtLeastDistanceFromMountains(startX, startY, 5))
+                        {
+                            validPointFound = true;
+                        }
+                        attempts++;
+                    }
+
+                    if (!validPointFound)
+                    {
+                        outputBuffer.Add("Failed to find a valid starting point for sheep group.");
+                        continue;
+                    }
+
+                    for (int j = 0; j < numberOfSheeps; j++)
+                    {
+                        try
+                        {
+                            int iterations = 0;
+                            (int x, int y) = (0, 0);
+                            bool placedCows = false;
+                            while (!placedCows && iterations < 100)
+                            {
+                                (x, y) = GetRandomPointInRange(startX, startY, 1, 3);
+                                if (mapData[x, y] == 'P')
+                                {
+                                    var sheep = new Sheep(x, y, mapData, overlayData);
+                                    sheeps.Add(sheep);
+                                    overlayData[x, y] = 'S'; // Represent Sheep with 'S'
+                                    placedCows = true;
+                                }
+                                iterations++;
+                            }
+                            if (iterations >= 100)
+                            {
+                                outputBuffer.Add("Failed to place sheeps.");
+                                break;
+                            }
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            // Handle case where no plains biomes are available
+                            outputBuffer.Add("No plains biomes available to place sheeps.");
+                            break;
+                        }
+                    }
+                }
+            }
+            private bool IsAtLeastDistanceFromMountains(int x, int y, int minDistance)
+            {
+                for (int dx = -minDistance; dx <= minDistance; dx++)
+                {
+                    for (int dy = -minDistance; dy <= minDistance; dy++)
+                    {
+                        int checkX = x + dx;
+                        int checkY = y + dy;
+                        if (checkX >= 0 && checkX < mapWidth && checkY >= 0 && checkY < mapHeight)
+                        {
+                            if (mapData[checkX, checkY] == 'M' || mapData[checkX, checkY] == 'm')
+                            {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
             private (int x, int y) GetRandomPointInAllowedTiles(List<char> allowedTiles)
             {
                 int maxAttempts = 1000;
@@ -6349,15 +6547,27 @@ namespace Internal
                     // Store old position
                     int oldX = crab.X;
                     int oldY = crab.Y;
+
                     // Update crab behavior
                     crab.Behave();
-                    // Erase old position from overlayData
-                    overlayData[oldX, oldY] = '\0';
 
-                    // Draw new position on overlayData if not under a cloud
-                    if (!IsTileUnderCloud(crab.X, crab.Y))
+                    // Check if new position is already occupied
+                    if (overlayData[crab.X, crab.Y] != '\0')
                     {
-                        overlayData[crab.X, crab.Y] = 'C';
+                        // Assign crab back to old position
+                        crab.X = oldX;
+                        crab.Y = oldY;
+                    }
+                    else
+                    {
+                        // Erase old position from overlayData
+                        overlayData[oldX, oldY] = '\0';
+
+                        // Draw new position on overlayData if not under a cloud
+                        if (!IsTileUnderCloud(crab.X, crab.Y))
+                        {
+                            overlayData[crab.X, crab.Y] = 'c';
+                        }
                     }
                 }
             }
@@ -6371,13 +6581,86 @@ namespace Internal
 
                     // Update turtle behavior
                     turtle.Behave();
-                    // Erase old position from overlayData
-                    overlayData[oldX, oldY] = '\0';
 
-                    // Draw new position on overlayData if not under a cloud
-                    if (!IsTileUnderCloud(turtle.X, turtle.Y))
+                    // Check if new position is already occupied
+                    if (overlayData[turtle.X, turtle.Y] != '\0')
                     {
-                        overlayData[turtle.X, turtle.Y] = 'T';
+                        // Assign turtle back to old position
+                        turtle.X = oldX;
+                        turtle.Y = oldY;
+                    }
+                    else
+                    {
+                        // Erase old position from overlayData
+                        overlayData[oldX, oldY] = '\0';
+
+                        // Draw new position on overlayData if not under a cloud
+                        if (!IsTileUnderCloud(turtle.X, turtle.Y))
+                        {
+                            overlayData[turtle.X, turtle.Y] = 'T';
+                        }
+                    }
+                }
+            }
+            public void UpdateCows()
+            {
+                foreach (Cow cow in cows)
+                {
+                    // Store old position
+                    int oldX = cow.X;
+                    int oldY = cow.Y;
+
+                    // Update cow behavior
+                    cow.Behave();
+
+                    // Check if new position is already occupied
+                    if (overlayData[cow.X, cow.Y] != '\0')
+                    {
+                        // Assign cow back to old position
+                        cow.X = oldX;
+                        cow.Y = oldY;
+                    }
+                    else
+                    {
+                        // Erase old position from overlayData
+                        overlayData[oldX, oldY] = '\0';
+
+                        // Draw new position on overlayData if not under a cloud
+                        if (!IsTileUnderCloud(cow.X, cow.Y))
+                        {
+                            overlayData[cow.X, cow.Y] = 'C';
+                        }
+                    }
+                }
+            }
+            public void UpdateSheeps()
+            {
+                foreach (Sheep sheep in sheeps)
+                {
+                    // Store old position
+                    int oldX = sheep.X;
+                    int oldY = sheep.Y;
+
+                    // Update sheep behavior
+                    sheep.Behave();
+
+                    // Check if new position is occupied
+                    if (overlayData[sheep.X, sheep.Y] != '\0')
+                    {
+                        // Assign sheep back to old position
+                        sheep.X = oldX;
+                        sheep.Y = oldY;
+                    }
+                    else
+                    {
+                        // Erase old position from overlayData
+                        overlayData[oldX, oldY] = '\0';
+
+                        // Draw new position on overlayData if not under a cloud
+                        if (!IsTileUnderCloud(sheep.X, sheep.Y))
+                        {
+                            overlayData[sheep.X, sheep.Y] = 'S';
+                        }
                     }
                 }
             }
@@ -6608,7 +6891,7 @@ namespace Internal
                 Console.SetCursorPosition(radarWidth + 1, 8);
                 Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Wind Speed: {windSpeed}m/s{Map.ResetColor()}");
                 Console.SetCursorPosition(radarWidth + 1, 9);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PURPLE.r, ColorSpectrum.PURPLE.g, ColorSpectrum.PURPLE.b)}Wind Direction: {windDirection}Sl{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PURPLE.r, ColorSpectrum.PURPLE.g, ColorSpectrum.PURPLE.b)}Wind Direction: {windDirection}°{Map.ResetColor()}");
             }
             private void UpdateWeatherStats(WeatherType currentWeather, WeatherType nextWeather, double temperature, double humidity,
             double pressure, double windSpeed, double windDirection, int radarWidth, int statsWidth, int statsHeight)
@@ -6624,19 +6907,19 @@ namespace Internal
                 Console.SetCursorPosition(radarWidth + 1, 8);
                 Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Wind Speed: {windSpeed}m/s{Map.ResetColor()}");
                 Console.SetCursorPosition(radarWidth + 1, 9);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PURPLE.r, ColorSpectrum.PURPLE.g, ColorSpectrum.PURPLE.b)}Wind Direction: {windDirection}Sl{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PURPLE.r, ColorSpectrum.PURPLE.g, ColorSpectrum.PURPLE.b)}Wind Direction: {windDirection}°{Map.ResetColor()}");
             }
             private void DisplayTimeInfo(double time, double season, int radarWidth, int statsWidth, int statsHeight)
             {
                 DrawBox(radarWidth + statsWidth - 2, 0, statsWidth, statsHeight + 2, "Time Info");
                 Console.SetCursorPosition(radarWidth + statsWidth, 1);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_BLUE.r, ColorSpectrum.LIGHT_BLUE.g, ColorSpectrum.LIGHT_BLUE.b)}Time: {time:F2}h{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_BLUE.r, ColorSpectrum.LIGHT_BLUE.g, ColorSpectrum.LIGHT_BLUE.b)}Time: {time:F2}h{Map.ResetColor()}   ");
                 Console.SetCursorPosition(radarWidth + statsWidth, 2);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b)}Season: {season}{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b)}Season: {season}{Map.ResetColor()}   ");
                 Console.SetCursorPosition(radarWidth + statsWidth, 3);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Sunrise: {sunriseTime}h{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Sunrise: {sunriseTime}h{Map.ResetColor()}   ");
                 Console.SetCursorPosition(radarWidth + statsWidth, 4);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Sunset: {sunsetTime}h{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Sunset: {sunsetTime}h{Map.ResetColor()}  ");
                 Console.SetCursorPosition(radarWidth + statsWidth, 5);
                 if (time < sunriseTime)
                 {
@@ -6653,15 +6936,36 @@ namespace Internal
                     Console.Write($"{Map.SetForegroundColor(ColorSpectrum.GREEN.r, ColorSpectrum.GREEN.g, ColorSpectrum.GREEN.b)}Time Until Sunrise: {timeUntilSunrise:F2}h{Map.ResetColor()}");
                 }
                 Console.SetCursorPosition(radarWidth + statsWidth, 6);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PINK.r, ColorSpectrum.PINK.g, ColorSpectrum.PINK.b)}Day: {dayCount}{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PINK.r, ColorSpectrum.PINK.g, ColorSpectrum.PINK.b)}Day: {dayCount}{Map.ResetColor()}   ");
                 
             }
             private void UpdateTimeInfo(double time, double season, int radarWidth, int statsWidth, int statsHeight)
             {
                 Console.SetCursorPosition(radarWidth + statsWidth, 1);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_BLUE.r, ColorSpectrum.LIGHT_BLUE.g, ColorSpectrum.LIGHT_BLUE.b)}Time: {time:F2}h{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_BLUE.r, ColorSpectrum.LIGHT_BLUE.g, ColorSpectrum.LIGHT_BLUE.b)}Time: {time:F2}h{Map.ResetColor()}   ");
                 Console.SetCursorPosition(radarWidth + statsWidth, 2);
-                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b)}Season: {season}{Map.ResetColor()}");
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b)}Season: {season}{Map.ResetColor()}   ");
+                Console.SetCursorPosition(radarWidth + statsWidth, 3);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Sunrise: {sunriseTime}h{Map.ResetColor()}   ");
+                Console.SetCursorPosition(radarWidth + statsWidth, 4);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.ORANGE.r, ColorSpectrum.ORANGE.g, ColorSpectrum.ORANGE.b)}Sunset: {sunsetTime}h{Map.ResetColor()}  ");
+                Console.SetCursorPosition(radarWidth + statsWidth, 5);
+                if (time < sunriseTime)
+                {
+                    Console.Write($"{Map.SetForegroundColor(ColorSpectrum.GREEN.r, ColorSpectrum.GREEN.g, ColorSpectrum.GREEN.b)}Time Until Sunrise: {sunriseTime - time:F2}h{Map.ResetColor()}   ");
+                }
+                else if (time >= sunriseTime && time < sunsetTime)
+                {
+                    Console.Write($"{Map.SetForegroundColor(ColorSpectrum.RED.r, ColorSpectrum.RED.g, ColorSpectrum.RED.b)}Time Until Sunset: {sunsetTime - time:F2}h{Map.ResetColor()}   ");
+                }
+                else
+                {
+                    double timeUntilMidnight = 24.0 - time;
+                    double timeUntilSunrise = timeUntilMidnight + sunriseTime;
+                    Console.Write($"{Map.SetForegroundColor(ColorSpectrum.GREEN.r, ColorSpectrum.GREEN.g, ColorSpectrum.GREEN.b)}Time Until Sunrise: {timeUntilSunrise:F2}h{Map.ResetColor()}   ");
+                }
+                Console.SetCursorPosition(radarWidth + statsWidth, 6);
+                Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PINK.r, ColorSpectrum.PINK.g, ColorSpectrum.PINK.b)}Day: {dayCount}{Map.ResetColor()}   ");
             }
             private void DisplayHelpInfo(int helpWidth, int helpHeight)
             {
@@ -7118,6 +7422,8 @@ namespace Internal
                 UpdateCloudProperties();
                 UpdateCrabs();
                 UpdateTurtles();
+                UpdateCows();
+                UpdateSheeps();
             }
         }
         public abstract class Species
@@ -7686,21 +7992,640 @@ namespace Internal
         #region plains species
         public class Sheep : Species
         {
-            public Sheep() : base("Sheep", "Plains") { }
-
+            private Random random;
+            public int X { get; set; }
+            public int Y { get; set; }
+            private bool isAggressive;
+            private bool predatorNearby;
+            private bool isHunted;
+            private char[,] mapData;
+            private char[,] overlayData;
+            private int predatorX;
+            private int predatorY;
+            private bool isNight;
+            private List<char> allowedTiles = new List<char> {'P'}; // Add your selected tiles here
+            public Sheep(int initialX, int initialY, char[,] mapData, char[,] overlayData)
+                : base("Sheep", "Plains")
+            {
+                random = new Random();
+                X = initialX;
+                Y = initialY;
+                this.mapData = mapData;
+                this.overlayData = overlayData;
+                isAggressive = random.NextDouble() > 0.005;
+            }
             public override void Behave()
             {
-                // Implement sheep behavior
+                if (random.NextDouble() > 0.8 && !isHunted)
+                {
+                    isNight = time > sunsetTime || time < sunriseTime;
+                }
+                if (random.NextDouble() > 0.7 && !isHunted && !isNight)
+                {
+                    MoveInGroups();
+                    //MoveRandomly();
+                }
+                SearchForFood();
+                if (isAggressive)
+                {
+                    Attack();
+                }
+                CheckForPredatorsInRange();
+                AvoidPredators();
+            }
+            private void Attack()
+            {
+                // Simulate attacking with a 10% chance
+                bool attack = random.NextDouble() > 0.9;
+                if (attack)
+                {
+                    // Logic to attack nearby species
+                    // e.g., Map.Attack(X, Y);
+                }
+            }
+            private void MoveInGroups()
+            {
+                // Find the nearest cow within 3 tiles
+                (int x, int y) nearestCow = (X, Y);
+                bool cowNearby = false;
+                double minDistance = double.MaxValue;
+
+                for (int dx = -3; dx <= 3; dx++)
+                {
+                    for (int dy = -3; dy <= 3; dy++)
+                    {
+                        int checkX = X + dx;
+                        int checkY = Y + dy;
+
+                        // Ensure coordinates are within map bounds
+                        if (checkX >= 0 && checkX < mapWidth && checkY >= 0 && checkY < mapHeight)
+                        {
+                            // Check if there's a cow at this position
+                            if (overlayData[checkX, checkY] == 'C' && !(checkX == X && checkY == Y))
+                            {
+                                double distance = GetDistance(X, Y, checkX, checkY);
+                                if (distance < minDistance)
+                                {
+                                    minDistance = distance;
+                                    nearestCow = (checkX, checkY);
+                                    cowNearby = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // If another cow is found and distance exceeds 3, move closer
+                if (cowNearby)
+                {
+                    if (minDistance > 3)
+                    {
+                        int deltaX = nearestCow.x - X;
+                        int deltaY = nearestCow.y - Y;
+
+                        // Determine move direction
+                        int moveX = deltaX > 0 ? 1 : deltaX < 0 ? -1 : 0;
+                        int moveY = deltaY > 0 ? 1 : deltaY < 0 ? -1 : 0;
+
+                        // Possible directions sorted by preference
+                        List<(int, int)> directions = new List<(int, int)>
+                        {
+                            (moveX, moveY),     // Diagonal
+                            (moveX, 0),         // Horizontal
+                            (0, moveY)          // Vertical
+                        };
+
+                        bool moved = false;
+
+                        foreach (var dir in directions)
+                        {
+                            int newX = X + dir.Item1;
+                            int newY = Y + dir.Item2;
+                            if (newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight && allowedTiles.Contains(mapData[newX, newY]))
+                            {
+                                X = newX;
+                                Y = newY;
+                                moved = true;
+                                break;
+                            }
+                        }
+
+                        if (!moved)
+                        {
+                            MoveRandomly();
+                        }
+                    }
+                    else
+                    {
+                        // Cows are within 3 tiles, restrict random movement to stay within range
+                        List<(int, int)> possibleDirections = new List<(int, int)>
+                        {
+                            (-1, 0), (1, 0), (0, -1), (0, 1),
+                            (-1, -1), (-1, 1), (1, -1), (1, 1)
+                        };
+
+                        foreach (var dir in possibleDirections.OrderBy(x => Guid.NewGuid()))
+                        {
+                            int newX = X + dir.Item1;
+                            int newY = Y + dir.Item2;
+                            if (newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight && allowedTiles.Contains(mapData[newX, newY]))
+                            {
+                                double distance = GetDistance(newX, newY, nearestCow.x, nearestCow.y);
+                                if (distance <= 3)
+                                {
+                                    X = newX;
+                                    Y = newY;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    MoveToTheNearestSheep();
+                }
+            }
+            private void MoveToTheNearestSheep()
+            {
+                (int x, int y) nearestCow = (X, Y);
+                for (int dx = -20; dx <= 20; dx++)
+                {
+                    for (int dy = -20; dy <= 20; dy++)
+                    {
+                        int checkX = X + dx;
+                        int checkY = Y + dy;
+
+                        // Ensure coordinates are within map bounds
+                        if (checkX >= 0 && checkX < mapWidth && checkY >= 0 && checkY < mapHeight)
+                        {
+                            // Check if there's a cow at this position
+                            if (overlayData[checkX, checkY] == 'C' && !(checkX == X && checkY == Y))
+                            {
+                                nearestCow = (checkX, checkY);
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Move towards the nearest cow
+                int deltaX = nearestCow.x - X;
+                int deltaY = nearestCow.y - Y;
+                int moveX = deltaX > 0 ? 1 : (deltaX < 0 ? -1 : 0);
+                int moveY = deltaY > 0 ? 1 : (deltaY < 0 ? -1 : 0);
+
+                // Determine new position
+                int newX = X + moveX;
+                int newY = Y + moveY;
+
+                // Check if the new position is within bounds and allowed
+                if (newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight && allowedTiles.Contains(mapData[newX, newY]))
+                {
+                    X = newX;
+                    Y = newY;
+                }
+            }
+            private void MoveRandomly()
+            {
+                List<int> possibleDirections = new List<int>();
+
+                // Check each direction and add to possibleDirections if the tile is allowed
+                if (Y > 0 && allowedTiles.Contains(mapData[X, Y - 1])) possibleDirections.Add(0); // Up
+                if (Y < mapHeight - 1 && allowedTiles.Contains(mapData[X, Y + 1])) possibleDirections.Add(1); // Down
+                if (X > 0 && allowedTiles.Contains(mapData[X - 1, Y])) possibleDirections.Add(2); // Left
+                if (X < mapWidth - 1 && allowedTiles.Contains(mapData[X + 1, Y])) possibleDirections.Add(3); // Right
+
+                if (possibleDirections.Count > 0)
+                {
+                    int direction = possibleDirections[random.Next(possibleDirections.Count)];
+                    switch (direction)
+                    {
+                        case 0:
+                            Y -= 1; // Move up
+                            break;
+                        case 1:
+                            Y += 1; // Move down
+                            break;
+                        case 2:
+                            X -= 1; // Move left
+                            break;
+                        case 3:
+                            X += 1; // Move right
+                            break;
+                    }
+                }
+            }
+            private void SearchForFood()
+            {
+                // Simulate searching for food with a 30% chance
+                bool foundFood = random.NextDouble() > 0.7;
+                if (foundFood)
+                {
+                    // Logic to consume food at (X, Y)
+                    // e.g., Map.ConsumeFood(X, Y);
+                }
+            }
+            private void AvoidPredators()
+            {
+                // Simulate predator detection with a 20% chance
+                if (predatorNearby)
+                {
+                    isHunted = true;
+                    // Move away from predator
+
+                    // Assuming predatorX and predatorY are the predator's coordinates
+                    int deltaX = X - predatorX;
+                    int deltaY = Y - predatorY;
+
+                    // Determine move direction
+                    int moveX = deltaX > 0 ? 1 : deltaX < 0 ? -1 : 0;
+                    int moveY = deltaY > 0 ? 1 : deltaY < 0 ? -1 : 0;
+
+                    // Possible directions sorted by preference
+                    List<(int, int)> directions = new List<(int, int)>
+                    {
+                        (moveX, moveY),     // Diagonal away
+                        (moveX, 0),         // Horizontal away
+                        (0, moveY)          // Vertical away
+                    };
+
+                    bool moved = false;
+
+                    foreach (var dir in directions)
+                    {
+                        int newX = X + dir.Item1;
+                        int newY = Y + dir.Item2;
+                        if (newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight && allowedTiles.Contains(mapData[newX, newY]))
+                        {
+                            X = newX;
+                            Y = newY;
+                            moved = true;
+                            break;
+                        }
+                    }
+
+                    if (!moved)
+                    {
+                        // Could not move away, move randomly
+                        MoveRandomly();
+                    }
+                    // Move to a random allowed tile away from the predator
+                    MoveRandomly();
+                }
+                // Return to beach and restore normal behavior
+                isHunted = false;
+            }
+            private void CheckForPredatorsInRange()
+            {
+                // Check in a 10 tile radius for wolves
+                for (int dx = -10; dx <= 10; dx++)
+                {
+                    for (int dy = -10; dy <= 10; dy++)
+                    {
+                        int checkX = X + dx;
+                        int checkY = Y + dy;
+
+                        // Ensure coordinates are within map bounds
+                        if (checkX >= 0 && checkX < mapWidth && checkY >= 0 && checkY < mapHeight)
+                        {
+                            // Check if there's a wolf ('W') at this position
+                            if (overlayData[checkX, checkY] == 'W')
+                            {
+                                predatorNearby = true;
+                                predatorX = checkX;
+                                predatorY = checkY;
+                                return;
+                            }
+                            else
+                            {
+                                predatorNearby = false;
+                            }
+                        }
+                    }
+                }
+            }
+            private double GetDistance(int x1, int y1, int x2, int y2)
+            {
+                return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
             }
         }
-
         public class Cow : Species
         {
-            public Cow() : base("Cow", "Plains") { }
-
+            private Random random;
+            public int X { get; set; }
+            public int Y { get; set; }
+            private bool isAggressive;
+            private bool predatorNearby;
+            private bool isHunted;
+            private char[,] mapData;
+            private char[,] overlayData;
+            private int predatorX;
+            private int predatorY;
+            private bool isNight;
+            private List<char> allowedTiles = new List<char> {'P'}; // Add your selected tiles here
+            public Cow(int initialX, int initialY, char[,] mapData, char[,] overlayData)
+                : base("Cow", "Plains")
+            {
+                random = new Random();
+                X = initialX;
+                Y = initialY;
+                this.mapData = mapData;
+                this.overlayData = overlayData;
+                isAggressive = random.NextDouble() > 0.005;
+            }
             public override void Behave()
             {
-                // Implement cow behavior
+                if (random.NextDouble() > 0.8 && !isHunted)
+                {
+                    isNight = time > sunsetTime || time < sunriseTime;
+                }
+                if (random.NextDouble() > 0.7 && !isHunted && !isNight)
+                {
+                    MoveInGroups();
+                    //MoveRandomly();
+                }
+                SearchForFood();
+                if (isAggressive)
+                {
+                    Attack();
+                }
+                CheckForPredatorsInRange();
+                AvoidPredators();
+            }
+            private void Attack()
+            {
+                // Simulate attacking with a 10% chance
+                bool attack = random.NextDouble() > 0.9;
+                if (attack)
+                {
+                    // Logic to attack nearby species
+                    // e.g., Map.Attack(X, Y);
+                }
+            }
+            private void MoveInGroups()
+            {
+                // Find the nearest cow within 3 tiles
+                (int x, int y) nearestCow = (X, Y);
+                bool cowNearby = false;
+                double minDistance = double.MaxValue;
+
+                for (int dx = -3; dx <= 3; dx++)
+                {
+                    for (int dy = -3; dy <= 3; dy++)
+                    {
+                        int checkX = X + dx;
+                        int checkY = Y + dy;
+
+                        // Ensure coordinates are within map bounds
+                        if (checkX >= 0 && checkX < mapWidth && checkY >= 0 && checkY < mapHeight)
+                        {
+                            // Check if there's a cow at this position
+                            if (overlayData[checkX, checkY] == 'C' && !(checkX == X && checkY == Y))
+                            {
+                                double distance = GetDistance(X, Y, checkX, checkY);
+                                if (distance < minDistance)
+                                {
+                                    minDistance = distance;
+                                    nearestCow = (checkX, checkY);
+                                    cowNearby = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // If another cow is found and distance exceeds 3, move closer
+                if (cowNearby)
+                {
+                    if (minDistance > 3)
+                    {
+                        int deltaX = nearestCow.x - X;
+                        int deltaY = nearestCow.y - Y;
+
+                        // Determine move direction
+                        int moveX = deltaX > 0 ? 1 : deltaX < 0 ? -1 : 0;
+                        int moveY = deltaY > 0 ? 1 : deltaY < 0 ? -1 : 0;
+
+                        // Possible directions sorted by preference
+                        List<(int, int)> directions = new List<(int, int)>
+                        {
+                            (moveX, moveY),     // Diagonal
+                            (moveX, 0),         // Horizontal
+                            (0, moveY)          // Vertical
+                        };
+
+                        bool moved = false;
+
+                        foreach (var dir in directions)
+                        {
+                            int newX = X + dir.Item1;
+                            int newY = Y + dir.Item2;
+                            if (newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight && allowedTiles.Contains(mapData[newX, newY]))
+                            {
+                                X = newX;
+                                Y = newY;
+                                moved = true;
+                                break;
+                            }
+                        }
+
+                        if (!moved)
+                        {
+                            MoveRandomly();
+                        }
+                    }
+                    else
+                    {
+                        // Cows are within 3 tiles, restrict random movement to stay within range
+                        List<(int, int)> possibleDirections = new List<(int, int)>
+                        {
+                            (-1, 0), (1, 0), (0, -1), (0, 1),
+                            (-1, -1), (-1, 1), (1, -1), (1, 1)
+                        };
+
+                        foreach (var dir in possibleDirections.OrderBy(x => Guid.NewGuid()))
+                        {
+                            int newX = X + dir.Item1;
+                            int newY = Y + dir.Item2;
+                            if (newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight && allowedTiles.Contains(mapData[newX, newY]))
+                            {
+                                double distance = GetDistance(newX, newY, nearestCow.x, nearestCow.y);
+                                if (distance <= 3)
+                                {
+                                    X = newX;
+                                    Y = newY;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    MoveToTheNearestCow();
+                }
+            }
+            private void MoveToTheNearestCow()
+            {
+                (int x, int y) nearestCow = (X, Y);
+                for (int dx = -20; dx <= 20; dx++)
+                {
+                    for (int dy = -20; dy <= 20; dy++)
+                    {
+                        int checkX = X + dx;
+                        int checkY = Y + dy;
+
+                        // Ensure coordinates are within map bounds
+                        if (checkX >= 0 && checkX < mapWidth && checkY >= 0 && checkY < mapHeight)
+                        {
+                            // Check if there's a cow at this position
+                            if (overlayData[checkX, checkY] == 'C' && !(checkX == X && checkY == Y))
+                            {
+                                nearestCow = (checkX, checkY);
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Move towards the nearest cow
+                int deltaX = nearestCow.x - X;
+                int deltaY = nearestCow.y - Y;
+                int moveX = deltaX > 0 ? 1 : (deltaX < 0 ? -1 : 0);
+                int moveY = deltaY > 0 ? 1 : (deltaY < 0 ? -1 : 0);
+
+                // Determine new position
+                int newX = X + moveX;
+                int newY = Y + moveY;
+
+                // Check if the new position is within bounds and allowed
+                if (newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight && allowedTiles.Contains(mapData[newX, newY]))
+                {
+                    X = newX;
+                    Y = newY;
+                }
+            }
+            private void MoveRandomly()
+            {
+                List<int> possibleDirections = new List<int>();
+
+                // Check each direction and add to possibleDirections if the tile is allowed
+                if (Y > 0 && allowedTiles.Contains(mapData[X, Y - 1])) possibleDirections.Add(0); // Up
+                if (Y < mapHeight - 1 && allowedTiles.Contains(mapData[X, Y + 1])) possibleDirections.Add(1); // Down
+                if (X > 0 && allowedTiles.Contains(mapData[X - 1, Y])) possibleDirections.Add(2); // Left
+                if (X < mapWidth - 1 && allowedTiles.Contains(mapData[X + 1, Y])) possibleDirections.Add(3); // Right
+
+                if (possibleDirections.Count > 0)
+                {
+                    int direction = possibleDirections[random.Next(possibleDirections.Count)];
+                    switch (direction)
+                    {
+                        case 0:
+                            Y -= 1; // Move up
+                            break;
+                        case 1:
+                            Y += 1; // Move down
+                            break;
+                        case 2:
+                            X -= 1; // Move left
+                            break;
+                        case 3:
+                            X += 1; // Move right
+                            break;
+                    }
+                }
+            }
+            private void SearchForFood()
+            {
+                // Simulate searching for food with a 30% chance
+                bool foundFood = random.NextDouble() > 0.7;
+                if (foundFood)
+                {
+                    // Logic to consume food at (X, Y)
+                    // e.g., Map.ConsumeFood(X, Y);
+                }
+            }
+            private void AvoidPredators()
+            {
+                // Simulate predator detection with a 20% chance
+                if (predatorNearby)
+                {
+                    isHunted = true;
+                    // Move away from predator
+
+                    // Assuming predatorX and predatorY are the predator's coordinates
+                    int deltaX = X - predatorX;
+                    int deltaY = Y - predatorY;
+
+                    // Determine move direction
+                    int moveX = deltaX > 0 ? 1 : deltaX < 0 ? -1 : 0;
+                    int moveY = deltaY > 0 ? 1 : deltaY < 0 ? -1 : 0;
+
+                    // Possible directions sorted by preference
+                    List<(int, int)> directions = new List<(int, int)>
+                    {
+                        (moveX, moveY),     // Diagonal away
+                        (moveX, 0),         // Horizontal away
+                        (0, moveY)          // Vertical away
+                    };
+
+                    bool moved = false;
+
+                    foreach (var dir in directions)
+                    {
+                        int newX = X + dir.Item1;
+                        int newY = Y + dir.Item2;
+                        if (newX >= 0 && newX < mapWidth && newY >= 0 && newY < mapHeight && allowedTiles.Contains(mapData[newX, newY]))
+                        {
+                            X = newX;
+                            Y = newY;
+                            moved = true;
+                            break;
+                        }
+                    }
+
+                    if (!moved)
+                    {
+                        // Could not move away, move randomly
+                        MoveRandomly();
+                    }
+                    // Move to a random allowed tile away from the predator
+                    MoveRandomly();
+                }
+                // Return to beach and restore normal behavior
+                isHunted = false;
+            }
+            private void CheckForPredatorsInRange()
+            {
+                // Check in a 10 tile radius for wolves
+                for (int dx = -10; dx <= 10; dx++)
+                {
+                    for (int dy = -10; dy <= 10; dy++)
+                    {
+                        int checkX = X + dx;
+                        int checkY = Y + dy;
+
+                        // Ensure coordinates are within map bounds
+                        if (checkX >= 0 && checkX < mapWidth && checkY >= 0 && checkY < mapHeight)
+                        {
+                            // Check if there's a wolf ('W') at this position
+                            if (overlayData[checkX, checkY] == 'W')
+                            {
+                                predatorNearby = true;
+                                predatorX = checkX;
+                                predatorY = checkY;
+                                return;
+                            }
+                            else
+                            {
+                                predatorNearby = false;
+                            }
+                        }
+                    }
+                }
+            }
+            private double GetDistance(int x1, int y1, int x2, int y2)
+            {
+                return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
             }
         }
         #endregion
