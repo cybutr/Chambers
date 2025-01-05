@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Internal;
 public class Config
 {
     // Map Configuration
@@ -17,9 +18,66 @@ public class Config
     public double PlainsHeightThreshold { get; set; }
     public double ForestHeightThreshold { get; set; }
     public double MountainHeightThreshold { get; set; }
+    public bool EnableRivers { get; set; }
+    public bool EnableLakes { get; set; }
+    public bool EnableMountainRanges { get; set; }
+    public bool EnableTempatureBiomeChanges { get; set; }
+    public bool EnableHumidityBiomeChanges { get; set; }
+    public int BiomeBlend { get; set; }
+
+    // Gamerules
+    public bool EnableWildfires { get; set; }
+    public bool EnableSecrets { get; set; }
+    public bool DoTimeCycle { get; set; }
+    public bool DoWeatherCycle { get; set; }
+
+    // Structures
+    public bool GenerateStructures { get; set; }
+    public bool EnableVillages { get; set; }
+    public bool EnableCities { get; set; }
+    public bool EnableDungeons { get; set; }
+    
+    // Animals
+    public bool GenerateAnimals { get; set; }
+    public bool EnableAnimalMovement { get; set; }
+    public bool EnableAnimalBreeding { get; set; }
+    public bool EnableAnimalDeath { get; set; }
+    public bool EnableAnimalExtinction { get; set; }
+    public bool EnableAnimalMigration { get; set; }
+    public bool EnableAnimalHunting { get; set; }
+    public bool EnableAnimalDomestication { get; set; }
+
+    // Disasters
+    public bool EnableTornadoes { get; set; }
+    public bool EnableEarthquakes { get; set; }
+    public bool EnableVolcanoes { get; set; }
+    public bool EnableFloods { get; set; }
+    public bool EnableMeteors { get; set; }
+
+    // Events
+    public bool EnableRobberies { get; set; }
+    public bool EnableKidnappings { get; set; }
+    public bool EnableMurders { get; set; }
+    public bool EnableRiots { get; set; }
+    public bool EnablePlagues { get; set; }
+    public bool EnableInvasions { get; set; }
+    public bool EnableWars { get; set; }
+
+    // Economy
+    public bool EnableTrade { get; set; }
+    public bool EnableBartering { get; set; }
+    public bool EnableCurrency { get; set; }
+    public bool EnableTaxes { get; set; }
+    public bool EnableBanks { get; set; }
+
+    // Visuals
+    public bool DisplayShadows { get; set; }
+    public bool DisplayWaves { get; set; }
+    public int NumberOfWaves { get; set; }
+
     public int Seed { get; set; }
 
-    public Config(int mapWidth, int mapHeight, double noiseScale, double erosionFactor, int minBiomeSize, int minLakeSize, int minRiverWidth, int maxRiverWidth, double riverFlowChance, double plainsHeightThreshold, double forestHeightThreshold, double mountainHeightThreshold, int seed)
+    public Config(int mapWidth, int mapHeight, double noiseScale, double erosionFactor, int minBiomeSize, int minLakeSize, int minRiverWidth, int maxRiverWidth, double riverFlowChance, double plainsHeightThreshold, double forestHeightThreshold, double mountainHeightThreshold, string seed)
     {
         Width = mapWidth;
         Height = mapHeight;
@@ -33,7 +91,7 @@ public class Config
         PlainsHeightThreshold = plainsHeightThreshold;
         ForestHeightThreshold = forestHeightThreshold;
         MountainHeightThreshold = mountainHeightThreshold;
-        Seed = seed;
+        Seed = Program.ConvertStringToNumbers(seed);
     }
 }
 public class GUIConfig

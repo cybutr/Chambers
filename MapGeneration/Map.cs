@@ -24,7 +24,6 @@ public class Map
     private int cloudDataHeight;
     private int cloudDataOffsetX;
     private int cloudDataOffsetY;
-    private const int cloudSize = 10; // Size of individual clouds
     public char[,] mapData;
     public char[,] overlayData;
     public char[,] previousOverlayData;
@@ -35,7 +34,7 @@ public class Map
     private double[,] precipitationData;
     private double[,] previousPrecipitationData;
     private Random rngMap;
-    public Random rng = new Random();
+    public Random rng;
     private double noiseScale;
     private double erosionFactor;
     private int minBiomeSize;
@@ -57,12 +56,14 @@ public class Map
     private int bottomPadding;
     private int leftPadding;
     private int rightPadding;
-    private int seed;
-    private static Config conf = new Config(100, 50, 0.1, 0.5, 8, 12, 1, 3, 0.5, 0.4, 0.3, 0.2, 0);
+    private static int seed;
+    private static Config conf = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding, 
+        10.0, 0.2, 12, 16, 7, 10, 0.4, 0.7, 0.4, 1.0, new Random().Next().ToString());
 
-    public Map(Config config, int seed)
+    public Map(Config config)
     {
-        this.seed = seed;
+        seed = config.Seed;
+        rng = new Random(seed);
         conf = config;
         topPadding = GUIConfig.TopPadding;
         bottomPadding = GUIConfig.BottomPadding;
@@ -96,36 +97,57 @@ public class Map
         temperatureData = new int[width, height];
         humidityData = new int[width, height];
         rngMap = new Random(seed); // Initialize with a seed
-        noise = Perlin.GeneratePerlinNoise(width, height, noiseScale);
-        tempatureNoise = Perlin.GeneratePerlinNoise(width, height, noiseScale * 25);
-        humidityNoise = Perlin.GeneratePerlinNoise(width, height, noiseScale * 8);
+        noise = Perlin.GeneratePerlinNoise(width, height, noiseScale, rng.Next());
+        tempatureNoise = Perlin.GeneratePerlinNoise(width, height, noiseScale * 25, rng.Next());
+        humidityNoise = Perlin.GeneratePerlinNoise(width, height, noiseScale * 12, rng.Next());
         cloudIsNight = new bool[width, height];
         cloudIsDarkening = new bool[width, height];
     }
     #endregion
+    bool debug = false;
     public void Generate()
     {
         SetAvarageTempatureHumidity();
+        if (debug) Console.WriteLine(1);
         AssignTempAndHumData();
+        if (debug) Console.WriteLine(2);
         SmoothOutTempatureHumidity();
+        if (debug) Console.WriteLine(3);
         AssignBiomes(noise);
+        if (debug) Console.WriteLine(4);
         EnsureMinimumBiomeSize();
+        if (debug) Console.WriteLine(5);
         ReplaceBiome('M', 'P');
+        if (debug) Console.WriteLine(6);
         CreateMountains();
+        if (debug) Console.WriteLine(7);
         CreateRiver();
+        if (debug) Console.WriteLine(8);
         CreateLakes();
-        //CreateComplexFrame();
+        if (debug) Console.WriteLine(9);
+        CreateComplexFrame();
+        if (debug) Console.WriteLine(10);
         SingleTileCheckPF('P', 'F', 2);
+        if (debug) Console.WriteLine(11);
         CreateBeaches();
-        CreateStreams();
+        if (debug) Console.WriteLine(12);
+        //CreateStreams();
         WaterDepth();
+        if (debug) Console.WriteLine(13);
         FrameMap('@');
-        InitializeSpecies(3, 6, new Crab(0, 0, 0, 0, mapData));
-        InitializeSpecies(2, 4, new Turtle(0, 0, 0, 0, mapData, overlayData, width, height));
+        if (debug) Console.WriteLine(14);
+        InitializeSpecies(3, 6, new Crab(0, 0, 0, 0, mapData, seed));
+        if (debug) Console.WriteLine(15);
+        InitializeSpecies(2, 4, new Turtle(0, 0, 0, 0, mapData, overlayData, width, height, seed));
+        if (debug) Console.WriteLine(16);
         InitializeCows(1, 2, 2, 4);
+        if (debug) Console.WriteLine(17);
         InitializeSheeps(1, 2, 1, 3);
+        if (debug) Console.WriteLine(18);
         InitializeWaves();
+        if (debug) Console.WriteLine(19);
         InitializeWeather();
+        if (debug) Console.WriteLine(20);
         InitializeClouds();
     }
     #region essential functions
@@ -270,24 +292,120 @@ public class Map
     }
     private void SmoothOutTempatureHumidity()
     {
-        for (int x = 1; x < conf.Width - 1; x++)
+        // Create temporary buffers to store smoothed data
+        int[,] tempData = new int[conf.Width, conf.Height];
+        int[,] humData = new int[conf.Width, conf.Height];
+
+        // Number of smoothing iterations
+        int smoothingIterations = 3;
+
+        for (int iteration = 0; iteration < smoothingIterations; iteration++)
         {
-            for (int y = 1; y < conf.Height - 1; y++)
+            for (int x = 1; x < conf.Width - 1; x++)
             {
-                double sumTemp = 0;
-                double sumHum = 0;
-                int count = 0;
-                for (int ny = -1; ny <= 1; ny++)
+                for (int y = 1; y < conf.Height - 1; y++)
                 {
-                    for (int nx = -1; nx <= 1; nx++)
+                    // Smooth temperature
+                    var tempNeighbors = new List<int>();
+                    for (int ny = -1; ny <= 1; ny++)
                     {
-                        sumTemp += tempatureNoise[x + nx, y + ny];
-                        sumHum += humidityNoise[x + nx, y + ny];
-                        count++;
+                        for (int nx = -1; nx <= 1; nx++)
+                        {
+                            if (nx == 0 && ny == 0) continue;
+                            tempNeighbors.Add(temperatureData[x + nx, y + ny]);
+                        }
+                    }
+                    int tempMode = tempNeighbors
+                        .GroupBy(zone => zone)
+                        .OrderByDescending(g => g.Count())
+                        .First()
+                        .Key;
+                    tempData[x, y] = tempMode;
+
+                    // Smooth humidity
+                    var humNeighbors = new List<int>();
+                    for (int ny = -1; ny <= 1; ny++)
+                    {
+                        for (int nx = -1; nx <= 1; nx++)
+                        {
+                            if (nx == 0 && ny == 0) continue;
+                            humNeighbors.Add(humidityData[x + nx, y + ny]);
+                        }
+                    }
+                    int humMode = humNeighbors
+                        .GroupBy(zone => zone)
+                        .OrderByDescending(g => g.Count())
+                        .First()
+                        .Key;
+                    humData[x, y] = humMode;
+                }
+            }
+
+            // Update the main data with smoothed data
+            for (int x = 1; x < conf.Width - 1; x++)
+            {
+                for (int y = 1; y < conf.Height - 1; y++)
+                {
+                    temperatureData[x, y] = tempData[x, y];
+                    humidityData[x, y] = humData[x, y];
+                }
+            }
+        }
+
+        // Final pass to assure no straight edges by adjusting single outliers
+        AssureNoStraightEdges(temperatureData);
+        AssureNoStraightEdges(humidityData);
+    }
+    private void AssureNoStraightEdges(int[,] zoneData)
+    {
+        for (int a = 0; a < 5; a++)
+        {
+            for (int x = 1; x < conf.Width - 1; x++)
+            {
+                for (int y = 1; y < conf.Height - 1; y++)
+                {
+                    int currentZone = zoneData[x, y];
+                    int[] surroundingZones = new int[8];
+                    int index = 0;
+                    for (int ny = -1; ny <= 1; ny++)
+                    {
+                        for (int nx = -1; nx <= 1; nx++)
+                        {
+                            if (nx == 0 && ny == 0) continue;
+                            surroundingZones[index++] = zoneData[x + nx, y + ny];
+                        }
+                    }
+
+                    var zoneGroups = surroundingZones.GroupBy(z => z)
+                                                    .OrderByDescending(g => g.Count())
+                                                    .ToList();
+
+                    if (zoneGroups.First().Count() == 5)
+                    {
+                        // 80% chance to enforce the dominant zone on the current tile
+                        if (rng.NextDouble() < 0.8)
+                        {
+                            zoneData[x, y] = zoneGroups.First().Key;
+                        }
+
+                        // Chance to fill some surrounding tiles that don't have the dominant zone
+                        foreach (var zone in zoneGroups.Skip(1))
+                        {
+                            if (rng.NextDouble() < 0.5) // 50% chance to change each non-dominant zone
+                            {
+                                for (int i = 0; i < surroundingZones.Length; i++)
+                                {
+                                    if (surroundingZones[i] == zone.Key && rng.NextDouble() < 0.5)
+                                    {
+                                        int dx = (i % 3) - 1;
+                                        int dy = (i / 3) - 1;
+                                        zoneData[x + dx, y + dy] = zoneGroups.First().Key;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                tempatureNoise[x, y] = sumTemp / count;
-                humidityNoise[x, y] = sumHum / count;
             }
         }
     }
@@ -390,7 +508,7 @@ public class Map
             {
                 int sampleX = x;
                 int sampleY = y;
-                double noiseValue = Perlin.GeneratePerlinNoise(width, height, noiseScale)[x, y];
+                double noiseValue = Perlin.GeneratePerlinNoise(width, height, noiseScale, rng.Next())[x, y];
                 noiseValue = noiseMap[x, y];
                 noiseMap[x, y] = noiseValue;
             }
@@ -511,7 +629,7 @@ public class Map
     }
     private void FillCircle(int x, int y, char tile, int minRadius, int maxRadius)
     {
-        Random rng = new Random();
+        Random rng = new Random(seed);
         int radius = rng.Next(minRadius, maxRadius + 1);
 
         for (int i = -radius; i <= radius; i++)
@@ -662,7 +780,7 @@ public class Map
     }
     private (int x, int y) GetRandomPointOnPath(List<(int x, int y)> path, int minRange, int maxRange)
     {
-        Random rng = new Random();
+        Random rng = new Random(seed);
         int index = rng.Next(minRange, Math.Min(maxRange, path.Count));
         return path[index];
     }
@@ -670,7 +788,7 @@ public class Map
     {
         List<(int x, int y)> points = new List<(int x, int y)>();
         List<(int x, int y)> path = GetPath(start, end);
-        Random rng = new Random();
+        Random rng = new Random(seed);
         int additionalPointsCount = 0;
 
         for (int i = minRange; i < path.Count - minRange && additionalPointsCount < maxAdditionalPoints; i++)
@@ -714,7 +832,7 @@ public class Map
     {
         List<(int x, int y)> points = new List<(int x, int y)>();
         List<(int x, int y)> path = GetPath(start, end);
-        Random rng = new Random();
+        Random rng = new Random(seed);
 
         for (int i = minRange; i < path.Count - minRange; i++)
         {
@@ -867,19 +985,61 @@ public class Map
         if (rngMap.NextDouble() < 1)
         {
             GenerateMountainRanges();
+            if (debug) Console.WriteLine("Generated mountain ranges");
             MountainDepth();
+            if (debug) Console.WriteLine("Added mountain depth");
             ErodeMountainRanges();
+            if (debug) Console.WriteLine("Eroded mountain ranges");
             GenerateSnowPeaks();
+            if (debug) Console.WriteLine("Generated snow peaks");
             DeleteBadSnowPeaks();
+            if (debug) Console.WriteLine("Deleted bad snow peaks");
+        }
+    }
+    private void GenerateMountainRanges()
+    {
+        int maxMountains = 2; // Maximum number of mountain ranges to generate
+        int maxAdditionalMountains = 4; // Maximum number of additional mountain ranges
+
+        for (int m = 0; m < maxMountains; m++)
+        {
+            int startX, startY;
+            int attempts = 0;
+            int maxAttempts = 10000;
+            do
+            {
+                (startX, startY) = GetRandomPoint();
+                attempts++;
+                if (attempts > maxAttempts)
+                {
+                    Console.WriteLine("Unable to find a valid start tile for mountain creation");
+                    return;
+                }
+            } while (!IsInBiome(startX, startY, 'P') && !IsInBiome(startX, startY, 'F'));
+
+            int endX, endY;
+            attempts = 0;
+            do
+            {
+                (endX, endY) = GetRandomPointInRange(startX, startY, 10, 80);
+                attempts++;
+                if (attempts > maxAttempts)
+                {
+                    Console.WriteLine("Unable to find a valid end tile for mountain creation");
+                    return;
+                }
+            } while (!IsInBiome(endX, endY, 'P') && !IsInBiome(endX, endY, 'F'));
+
+            CreateMountainRange(startX, startY, endX, endY);
+            CreateAdditionalMountainRange(startX, startY, maxAdditionalMountains);
         }
     }
     private void CreateAdditionalMountainRange(int oldStartX, int oldStartY, int maxAttempts)
     {
-        Random rng = new Random(seed);
         int currentAttempts = 0;
         while (currentAttempts < maxAttempts)
         {
-            if (rng.NextDouble() < 0.5) // 50% chance to create an additional mountain range
+            if (rngMap.NextDouble() < 0.5) // 50% chance to create an additional mountain range
             {
                 int newStartX, newStartY;
                 do
@@ -896,29 +1056,6 @@ public class Map
                 oldStartY = newStartY;
             }
             currentAttempts++;
-        }
-    }
-    private void GenerateMountainRanges()
-    {
-        int maxMountains = 2; // Maximum number of mountain ranges to generate
-        int maxAdditionalMountains = 4; // Maximum number of additional mountain ranges
-
-        for (int m = 0; m < maxMountains; m++)
-        {
-            int startX, startY;
-            do
-            {
-                (startX, startY) = GetRandomPoint();
-            } while (!IsInBiome(startX, startY, 'P') && !IsInBiome(startX, startY, 'F'));
-
-            int endX, endY;
-            do
-            {
-                (endX, endY) = GetRandomPointInRange(startX, startY, 10, 80);
-            } while (!IsInBiome(endX, endY, 'P') && !IsInBiome(endX, endY, 'F'));
-
-            CreateMountainRange(startX, startY, endX, endY);
-            CreateAdditionalMountainRange(startX, startY, maxAdditionalMountains);
         }
     }
     private void CreateMountainRange(int startX, int startY, int endX, int endY)
@@ -1110,7 +1247,7 @@ public class Map
     private double CalculateTemperatureErosion(int x, int y, double temperatureFactor)
     {
         // Simulate temperature erosion based on random temperature changes
-        Random rng = new Random();
+        Random rng = new Random(seed);
         double temperatureChange = rng.NextDouble() * temperatureFactor;
         return temperatureChange;
     }
@@ -1434,7 +1571,7 @@ public class Map
             (int x, int y) startPoint = FindValidStartingPoint();
             if (startPoint == (-1, -1)) continue;
 
-            int targetCount = new Random().Next(1, 4);
+            int targetCount = new Random(seed).Next(1, 4);
             List<(int x, int y)> targetPoints = new List<(int x, int y)>();
 
             for (int j = 0; j < targetCount; j++)
@@ -1453,7 +1590,7 @@ public class Map
     }
     private (int x, int y) FindValidStartingPoint()
     {
-        Random rng = new Random();
+        Random rng = new Random(seed);
         for (int attempts = 0; attempts < 100; attempts++)
         {
             int x = rng.Next(0, conf.Height);
@@ -1489,7 +1626,7 @@ public class Map
     }
     private (int x, int y) FindValidTargetPoint((int x, int y) startPoint, int minRadius, int maxRadius)
     {
-        Random rng = new Random();
+        Random rng = new Random(seed);
         for (int attempts = 0; attempts < 100; attempts++)
         {
             int radius = rng.Next(minRadius, maxRadius + 1);
@@ -1678,7 +1815,7 @@ public class Map
         path.Add(current);
         visited.Add(current);
 
-        var rng = new Random();
+        var rng = new Random(seed);
         double angle = Math.Atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
         double angleOffset = rng.NextDouble() * Math.PI / 2 - Math.PI / 4;
         double angleChange = 0.3;
@@ -1780,7 +1917,7 @@ public class Map
  */
     private List<(int x, int y)> GenerateSwirlyPath((int x, int y) startPoint, (int x, int y) endPoint)
     {
-        List<(int x, int y)> path = new List<(int x, int y)>();
+        var path = new List<(int x, int y)>();
         double angle = Math.Atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
         double distance = GetDistance(startPoint.x, startPoint.y, endPoint.x, endPoint.y);
         double angleOffset = (rngMap.NextDouble() - 0.5) * Math.PI / 4; // Random initial offset
@@ -1793,19 +1930,26 @@ public class Map
             (int px, int py) = ((int)x, (int)y);
             path.Add((px, py));
             angleOffset += (rngMap.NextDouble() - 0.5) * angleChange; // Randomly adjust the angle
+        }
 
-            // Ensure each path point has 2 neighbors
-            if (CountNeighbors(path, px, py) < 2)
+        // Ensure each path point has 2 side neighbors
+        for (int i = 1; i < path.Count - 1 && i < 1000; i++)
+        {
+            var (px, py) = path[i];
+            if (CountSideNeighbors(path, px, py) < 2)
             {
-                (int nx, int ny) = GetNextPointWithNeighbors(px, py, path);
-                path.Add((nx, ny));
+                (int nx, int ny) = GetNextCornerPoint(px, py, path);
+                if (!path.Contains((nx, ny)) && CountSideNeighbors(path, nx, ny) == 2)
+                {
+                    path.Add((nx, ny));
+                }
             }
         }
 
         return path;
     }
 
-    private int CountNeighbors(List<(int x, int y)> path, int x, int y)
+    private int CountSideNeighbors(List<(int x, int y)> path, int x, int y)
     {
         int count = 0;
         if (path.Contains((x + 1, y))) count++;
@@ -1815,7 +1959,7 @@ public class Map
         return count;
     }
 
-    private (int x, int y) GetNextPointWithNeighbors(int x, int y, List<(int x, int y)> path)
+    private (int x, int y) GetNextCornerPoint(int x, int y, List<(int x, int y)> path)
     {
         List<(int x, int y)> possiblePoints = new List<(int x, int y)>
         {
@@ -1825,15 +1969,12 @@ public class Map
             (x + 1, y - 1)
         };
 
-        // Filter points to only include those that would touch exactly 2 other path points
-        possiblePoints = possiblePoints.Where(p => CountNeighbors(path, p.x, p.y) == 2).ToList();
-
         // Shuffle the possible points to add randomness
         possiblePoints = possiblePoints.OrderBy(p => rngMap.Next()).ToList();
 
         foreach ((int nx, int ny) in possiblePoints)
         {
-            if (!path.Contains((nx, ny)))
+            if (!path.Contains((nx, ny)) && CountSideNeighbors(path, nx, ny) == 2)
             {
                 return (nx, ny);
             }
@@ -2112,7 +2253,6 @@ public class Map
         public bool IsDarkening { get; set; }
     }
     private List<Wave> waves = new List<Wave>();
-    private Random waveRng = new Random();
     private readonly int MAX_WAVES = (int)Math.Round(conf.Width / 17.5);
     private const double WAVE_SPEED = 0.2;
     private void InitializeWaves()
@@ -2142,7 +2282,7 @@ public class Map
             wave.PreviousPoints.Clear();
 
             // Introduce curvature by modifying the direction slightly
-            wave.Direction += (waveRng.NextDouble() - 0.5) * wave.Curvature;
+            wave.Direction += (rng.NextDouble() - 0.5) * wave.Curvature;
 
             bool removeWave = false;
             List<(double x, double y)> newPoints = new List<(double x, double y)>();
@@ -2361,7 +2501,7 @@ public class Map
         if (validPositions.Count == 0) return;
 
         // Pick a random valid position
-        int index = waveRng.Next(validPositions.Count);
+        int index = rng.Next(validPositions.Count);
         (int x, int y) = validPositions[index];
 
         // Calculate wave direction towards nearest land
@@ -2370,9 +2510,9 @@ public class Map
         Wave wave = new Wave
         {
             Direction = direction,
-            Speed = WAVE_SPEED * (0.8 + waveRng.NextDouble() * 0.4),
-            Length = waveRng.Next(5, 10),
-            Curvature = waveRng.NextDouble() * 0.2 - 0.1
+            Speed = WAVE_SPEED * (0.8 + rng.NextDouble() * 0.4),
+            Length = rng.Next(5, 10),
+            Curvature = rng.NextDouble() * 0.2 - 0.1
         };
 
         // Create wave points perpendicular to movement direction
@@ -2434,7 +2574,7 @@ public class Map
         if (nearestLandX == -1)
         {
             // No land found, default to random direction
-            return waveRng.NextDouble() * 2 * Math.PI;
+            return rng.NextDouble() * 2 * Math.PI;
         }
 
         // Calculate direction towards land
@@ -2548,7 +2688,6 @@ public class Map
     }
     public  Weather weather = new Weather();
     private List<Cloud> clouds = new List<Cloud>();
-    private static Random weatherRng = new Random();
     private double deltaTime = 0.5;
     #endregion
     public void InitializeClouds()
@@ -2699,7 +2838,7 @@ public class Map
         char[,] tempCloudData = (char[,])cloudData.Clone();
         List<(int startX, int startY, int endX, int endY)> regions = GetCloudRegions();
         object lockObj = new object();
-        Random localRng = new Random();
+        Random localRng = new Random(seed);
 
         // Precompute cloud sizes
 
@@ -3164,7 +3303,7 @@ public class Map
     {
         List<(int startX, int startY, int endX, int endY)> regions = GetCloudRegions();
         object lockObj = new object();
-        Random localRng = new Random();
+        Random localRng = new Random(seed);
 
         Parallel.ForEach(regions, region =>
         {
@@ -3246,7 +3385,7 @@ public class Map
         object lockCloudData = new object();
         object lockCloudPositions = new object();
 
-        Parallel.ForEach(regions, () => new Random(), (region, state, localRng) =>
+        Parallel.ForEach(regions, () => new Random(seed), (region, state, localRng) =>
         {
             (int startX, int startY, int endX, int endY) = region;
             Dictionary<(int, int), (double, double)> localPositions = new Dictionary<(int, int), (double, double)>();
@@ -3780,7 +3919,7 @@ public class Map
         weather.TimeOfDay = 12.0;
         weather.Season = rngMap.NextDouble() * 4.0;
         weather.Temperature = GetTemperature(weather.Season, weather.TimeOfDay, weather.CurrentWeather, avarageTempature);
-        weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, weather.TimeOfDay, weather.Season, avarageHumidity);
+        weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, weather.TimeOfDay, weather.Season, avarageHumidity, seed);
         weather.Pressure = GetPressure();
         weather.WindSpeed = rng.NextDouble() * 10.0 + 5.0;
         weather.WindDirection = rng.Next(360);
@@ -3809,7 +3948,7 @@ public class Map
         {
             weather.CurrentWeather = weather.NextWeather;
             weather.NextWeather = GetSeasonWeatherType();
-            weather.IntensityTarget = weatherRng.NextDouble();
+            weather.IntensityTarget = rng.NextDouble();
             InitializeMinTimeBetweenChanges();
         }
 
@@ -3817,7 +3956,7 @@ public class Map
         weather.Temperature = GetTemperature(weather.Season, weather.TimeOfDay, weather.CurrentWeather, avarageTempature);
 
         // Update humidity based on weather type and temperature
-        weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, weather.TimeOfDay, weather.Season, avarageHumidity);
+        weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, weather.TimeOfDay, weather.Season, avarageHumidity, seed);
 
         // Update pressure based on weather conditions
         weather.Pressure = GetPressure();
@@ -4043,7 +4182,7 @@ public class Map
         }
 
         // Generate random number to select weather type
-        double rand = weatherRng.NextDouble() * totalProbability;
+        double rand = rng.NextDouble() * totalProbability;
         double cumulative = 0.0;
 
         foreach (KeyValuePair<WeatherType, double> pair in weatherProbabilities)
@@ -4088,7 +4227,7 @@ public class Map
 
         // Probability-based weather change
         double changeProbability = 0.01 * deltaTime * 10;
-        if (weatherRng.NextDouble() < changeProbability)
+        if (rng.NextDouble() < changeProbability)
         {
             timeSinceLastWeatherChange = 0.0;
             return true;
@@ -4099,16 +4238,16 @@ public class Map
     private WeatherType GetRandomWeatherType()
     {
         Array values = Enum.GetValues(typeof(WeatherType));
-        object? value = values.GetValue(weatherRng.Next(values.Length));
+        object? value = values.GetValue(rng.Next(values.Length));
         return value != null ? (WeatherType)value : WeatherType.Clear;
     }
     static double weatherFactor = 40;
-    private static double GetHumidity(WeatherType weatherType, double tempature, double timeOfDay, double season, double avarageHumidity)
+    private static double GetHumidity(WeatherType weatherType, double tempature, double timeOfDay, double season, double avarageHumidity, int seed)
     {
         double seasonFactor = Math.Cos(season / 2.0 * Math.PI);
         double timeFactor = Math.Cos(timeOfDay / 24.0 * 2 * Math.PI);
         double tempatureFactor = Math.Cos(tempature / 40.0 * Math.PI);
-        Random rng = new Random();
+        Random rng = new Random(seed);
         double humidity;
         double weather = weatherType switch
         {
@@ -4196,7 +4335,7 @@ public class Map
         pressure = basePressure * seasonAdjustment * timeAdjustment * weatherAdjustment;
 
         // Introduce minor random fluctuations for realism
-        pressure += (weatherRng.NextDouble() - 0.5) * 0.5; // ±0.25 hPa
+        pressure += (rng.NextDouble() - 0.5) * 0.5; // ±0.25 hPa
         return pressure;
     }
     private static double GetTemperature(double season, double timeOfDay, WeatherType weatherType, double avarageTempature)
@@ -4469,12 +4608,12 @@ public class Map
     {
         return type switch
         {
-            CloudType.Cumulonimbus => 1.0 * weather.Humidity * weather.Temperature * weatherRng.NextDouble() * 4,
-            CloudType.Nimbostratus => 0.8 * weather.Humidity * weather.Temperature * weatherRng.NextDouble() * 2,
-            CloudType.Cumulus => 0.5 * weather.Humidity * weather.Temperature * weatherRng.NextDouble(),
-            CloudType.Altocumulus => 0.3 * weather.Humidity * weather.Temperature * weatherRng.NextDouble(),
-            CloudType.Cirrus => 0.1 * weather.Humidity * weather.Temperature * weatherRng.NextDouble(),
-            CloudType.Stratus => 0.2 * weather.Humidity * weather.Temperature * weatherRng.NextDouble(),
+            CloudType.Cumulonimbus => 1.0 * weather.Humidity * weather.Temperature * rng.NextDouble() * 4,
+            CloudType.Nimbostratus => 0.8 * weather.Humidity * weather.Temperature * rng.NextDouble() * 2,
+            CloudType.Cumulus => 0.5 * weather.Humidity * weather.Temperature * rng.NextDouble(),
+            CloudType.Altocumulus => 0.3 * weather.Humidity * weather.Temperature * rng.NextDouble(),
+            CloudType.Cirrus => 0.1 * weather.Humidity * weather.Temperature * rng.NextDouble(),
+            CloudType.Stratus => 0.2 * weather.Humidity * weather.Temperature * rng.NextDouble(),
             _ => 0.0
         };
     }
@@ -4979,7 +5118,7 @@ public class Map
     }
     private (int x, int y) FindValidCloudTargetPoint((int x, int y) startPoint, int minRadius, int maxRadius)
     {
-        Random rng = new Random();
+        Random rng = new Random(seed);
         for (int attempts = 0; attempts < 100; attempts++)
         {
             int radius = rng.Next(minRadius, maxRadius + 1);
@@ -5942,6 +6081,10 @@ public class Map
         int tempZone = temperatureData[x, y];
 
         int r, g, b;
+        if (tile is '@')
+        {
+            return baseColor;
+        }
         // Water
         if (tile is 'R' or 'L' or 'O' or 'r' or 'l' or 'o' or 's')
         {
@@ -6263,7 +6406,6 @@ public class Map
         Console.SetCursorPosition(radarWidth + 1, 9);
         Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PURPLE.r, ColorSpectrum.PURPLE.g, ColorSpectrum.PURPLE.b)}Wind Direction: {windDirection}°{Map.ResetColor()}");
     }
-
     private void UpdateWeatherStats(WeatherType currentWeather, WeatherType nextWeather, double temperature, double humidity,
     double pressure, double windSpeed, double windDirection, int radarWidth, int statsWidth, int statsHeight)
     {
@@ -6283,7 +6425,6 @@ public class Map
         Console.SetCursorPosition(radarWidth + 1, 9);
         Console.Write($"{Map.SetForegroundColor(ColorSpectrum.PURPLE.r, ColorSpectrum.PURPLE.g, ColorSpectrum.PURPLE.b)}Wind Direction: {windDirection}°{Map.ResetColor()}   ");
     }
-
     private string GetShortWeatherName(WeatherType weather)
     {
         return weather switch
@@ -6799,77 +6940,211 @@ public class Map
         }
     }
     private void DrawBox(int x, int y, int width, int height, string title, string titleLeftDecor = "{", string titleRightDecor = "}")
+    {
+        
+        // Define box drawing characters
+        string topLeft = "╔";
+        string topRight = "╗";
+        string bottomLeft = "╚";
+        string bottomRight = "╝";
+        string doubleHorizontal = "═";
+        string doubleVertical = "║";
+        string horizontal = "-";
+        string vertical = "|";
+        string corner = "+";
+
+        // Draw top border with double lines
+        Console.SetCursorPosition(x, y);
+        if (!isLinux) Console.Write(topLeft + new string(doubleHorizontal[0], width - 2) + topRight);
+        else Console.Write(corner + new string(horizontal[0], width - 2) + corner);
+
+        // Draw sides and content area
+        for (int i = 1; i < height - 1; i++)
         {
-            
-            // Define box drawing characters
-            string topLeft = "╔";
-            string topRight = "╗";
-            string bottomLeft = "╚";
-            string bottomRight = "╝";
-            string doubleHorizontal = "═";
-            string doubleVertical = "║";
-            string horizontal = "-";
-            string vertical = "|";
-            string corner = "+";
+            Console.SetCursorPosition(x, y + i);
+            if (!isLinux) Console.Write(doubleVertical + new string(' ', width - 2) + doubleVertical);
+            else Console.Write(vertical + new string(' ', width - 2) + vertical);
+        }
 
-            // Draw top border with double lines
-            Console.SetCursorPosition(x, y);
-            if (!isLinux) Console.Write(topLeft + new string(doubleHorizontal[0], width - 2) + topRight);
-            else Console.Write(corner + new string(horizontal[0], width - 2) + corner);
+        // Draw bottom border with double lines
+        Console.SetCursorPosition(x, y + height - 1);
+        if (!isLinux) Console.Write(bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight);
+        else Console.Write(corner + new string(horizontal[0], width - 2) + horizontal);
 
-            // Draw sides and content area
-            for (int i = 1; i < height - 1; i++)
+        // Write the decorated title in the middle of the top of the box if not empty or whitespace
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            string decoratedTitle = $"{titleLeftDecor} {title} {titleRightDecor}";
+            int titleLength = decoratedTitle.Length;
+            int padding = (width - 2 - titleLength) / 2;
+            int cursorX = x + 1 + padding;
+            int cursorY = y;
+
+            if (cursorX + titleLength < Console.WindowWidth && cursorY < Console.WindowHeight)
             {
-                Console.SetCursorPosition(x, y + i);
-                if (!isLinux) Console.Write(doubleVertical + new string(' ', width - 2) + doubleVertical);
-                else Console.Write(vertical + new string(' ', width - 2) + vertical);
-            }
-
-            // Draw bottom border with double lines
-            Console.SetCursorPosition(x, y + height - 1);
-            if (!isLinux) Console.Write(bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight);
-            else Console.Write(corner + new string(horizontal[0], width - 2) + horizontal);
-
-            // Write the decorated title in the middle of the top of the box if not empty or whitespace
-            if (!string.IsNullOrWhiteSpace(title))
-            {
-                string decoratedTitle = $"{titleLeftDecor} {title} {titleRightDecor}";
-                int titleLength = decoratedTitle.Length;
-                int padding = (width - 2 - titleLength) / 2;
-                int cursorX = x + 1 + padding;
-                int cursorY = y;
-
-                if (cursorX + titleLength < Console.WindowWidth && cursorY < Console.WindowHeight)
-                {
-                    Console.SetCursorPosition(cursorX, cursorY);
-                    Console.Write(Map.SetForegroundColor(ColorSpectrum.DARK_GREEN.r, ColorSpectrum.DARK_GREEN.g, ColorSpectrum.DARK_GREEN.b) + decoratedTitle + Map.ResetColor());
-                }
-            }
-
-            // Add decorative corners
-            if (!isLinux)
-            {
-                Console.SetCursorPosition(x, y);
-                Console.Write(topLeft);
-                Console.SetCursorPosition(x + width - 1, y);
-                Console.Write(topRight);
-                Console.SetCursorPosition(x, y + height - 1);
-                Console.Write(bottomLeft);
-                Console.SetCursorPosition(x + width - 1, y + height - 1);
-                Console.Write(bottomRight);
-            }
-            else 
-            {
-                Console.SetCursorPosition(x, y);
-                Console.Write(corner);
-                Console.SetCursorPosition(x + width - 1, y);
-                Console.Write(corner);
-                Console.SetCursorPosition(x, y + height - 1);
-                Console.Write(corner);
-                Console.SetCursorPosition(x + width - 1, y + height - 1);
-                Console.Write(corner);
+                Console.SetCursorPosition(cursorX, cursorY);
+                Console.Write(Map.SetForegroundColor(ColorSpectrum.DARK_GREEN.r, ColorSpectrum.DARK_GREEN.g, ColorSpectrum.DARK_GREEN.b) + decoratedTitle + Map.ResetColor());
             }
         }
+
+        // Add decorative corners
+        if (!isLinux)
+        {
+            Console.SetCursorPosition(x, y);
+            Console.Write(topLeft);
+            Console.SetCursorPosition(x + width - 1, y);
+            Console.Write(topRight);
+            Console.SetCursorPosition(x, y + height - 1);
+            Console.Write(bottomLeft);
+            Console.SetCursorPosition(x + width - 1, y + height - 1);
+            Console.Write(bottomRight);
+        }
+        else 
+        {
+            Console.SetCursorPosition(x, y);
+            Console.Write(corner);
+            Console.SetCursorPosition(x + width - 1, y);
+            Console.Write(corner);
+            Console.SetCursorPosition(x, y + height - 1);
+            Console.Write(corner);
+            Console.SetCursorPosition(x + width - 1, y + height - 1);
+            Console.Write(corner);
+        }
+    }
+    private void DrawColoredBox(int x, int y, int width, int height, string title, (int r, int g, int b) color, string titleLeftDecor = "{", string titleRightDecor = "}")
+    {
+        
+        // Define box drawing characters
+        string topLeft = "╔";
+        string topRight = "╗";
+        string bottomLeft = "╚";
+        string bottomRight = "╝";
+        string doubleHorizontal = "═";
+        string doubleVertical = "║";
+        string horizontal = "-";
+        string vertical = "|";
+        string corner = "+";
+
+        // Draw top border with double lines
+        Console.SetCursorPosition(x, y);
+        if (!isLinux)
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + topLeft + new string(doubleHorizontal[0], width - 2) + topRight + Map.ResetColor());
+        else
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + Map.ResetColor());
+
+        // Draw sides and content area
+        for (int i = 1; i < height - 1; i++)
+        {
+            Console.SetCursorPosition(x, y + i);
+            if (!isLinux)
+                Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + doubleVertical + new string(' ', width - 2) + doubleVertical + Map.ResetColor());
+            else
+                Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + vertical + new string(' ', width - 2) + vertical + Map.ResetColor());
+        }
+
+        // Draw bottom border with double lines
+        Console.SetCursorPosition(x, y + height - 1);
+        if (!isLinux)
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight + Map.ResetColor());
+        else
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + horizontal + Map.ResetColor());
+
+        // Write the decorated title in the middle of the top of the box if not empty or whitespace
+        if (!string.IsNullOrWhiteSpace(title))
+        {
+            string decoratedTitle = $"{titleLeftDecor} {title} {titleRightDecor}";
+            int titleLength = decoratedTitle.Length;
+            int padding = (width - 2 - titleLength) / 2;
+            int cursorX = x + 1 + padding;
+            int cursorY = y;
+
+            if (cursorX + titleLength < Console.WindowWidth && cursorY < Console.WindowHeight)
+            {
+                Console.SetCursorPosition(cursorX, cursorY);
+                Console.Write(Map.SetForegroundColor(ColorSpectrum.DARK_GREEN.r, ColorSpectrum.DARK_GREEN.g, ColorSpectrum.DARK_GREEN.b) + decoratedTitle + Map.ResetColor());
+            }
+        }
+
+        // Add decorative corners
+        if (!isLinux)
+        {
+            Console.SetCursorPosition(x, y);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), topLeft + Map.ResetColor());
+            Console.SetCursorPosition(x + width - 1, y);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), topRight + Map.ResetColor());
+            Console.SetCursorPosition(x, y + height - 1);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), bottomLeft + Map.ResetColor());
+            Console.SetCursorPosition(x + width - 1, y + height - 1);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), bottomRight + Map.ResetColor());
+        }
+        else 
+        {
+            Console.SetCursorPosition(x, y);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
+            Console.SetCursorPosition(x + width - 1, y);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
+            Console.SetCursorPosition(x, y + height - 1);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
+            Console.SetCursorPosition(x + width - 1, y + height - 1);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
+        }
+    }
+    private void DisplayCenteredTextAtCords(string text, int x, int y, (int r, int g, int b) color)
+    {
+        string[] lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+        int maxLineWidth = lines.Max(l => l.Length);
+        int width = maxLineWidth + 2;
+        int height = lines.Length + 2;
+
+        int startX = x - width / 2;
+        int startY = y - height / 2;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            Console.SetCursorPosition(startX + 1, startY + 1 + i);
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + lines[i] + Map.ResetColor());
+        }
+    }
+    #endregion
+    #region map config GUI
+    public bool GetConfig()
+    {
+        DisplayMapConfig();
+        Console.ReadKey(true);
+        Console.Clear();
+        return false;
+    }
+    string title = @"
+   __  _ __  _   _   __ ___   ___  ___    ___
+ ,'_/ /// /.' \ / \,' // o.) / _/ / o | ,' _/
+/ /_ / ` // o // \,' // o \ / _/ /  ,' _\ `. 
+|__//_n_//_n_//_/ /_//___,'/___//_/`_\/___,' 
+";
+    public void DisplayMapConfig()
+    {
+        int configWidth = 95;
+        int configHeight = Console.WindowHeight;
+        int mapConfigOffset = 25;
+        int mapConfigHeight = configHeight / 2 - 10;
+        int gamerulesHeight = configHeight / 2 - 20;
+        int structuresHeight = 15;
+        int bottomHeight = configHeight / 2 - 18;
+        int heightOffset = (Console.WindowHeight - (10 + gamerulesHeight + structuresHeight + bottomHeight)) / 2;
+
+        (int r, int g, int b) tColor = ColorSpectrum.CYAN;
+        (int x, int y) terminalCentre = (Console.WindowWidth / 2, Console.WindowHeight / 2);
+        DrawColoredBox(terminalCentre.x - configWidth / 2, terminalCentre.y - configHeight / 2 + heightOffset, configWidth, 10, "", ColorSpectrum.LIGHT_CYAN); // Title
+        DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset, terminalCentre.y - configHeight / 2 + 10 + heightOffset, configWidth - mapConfigOffset, mapConfigHeight, "Map Config", ColorSpectrum.BURNT_ORANGE); // Map Config
+        DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset, terminalCentre.y - configHeight / 2 + 10 + configHeight / 2 - 10 + heightOffset, configWidth - mapConfigOffset, gamerulesHeight + structuresHeight - mapConfigHeight, "Events", ColorSpectrum.YELLOW); // Events
+        DrawColoredBox(terminalCentre.x - configWidth / 2, terminalCentre.y - configHeight / 2 + 10 + heightOffset, mapConfigOffset - 1, gamerulesHeight, "Gamerules", ColorSpectrum.LIGHT_CORAL); // Gamerules
+        DrawColoredBox(terminalCentre.x - configWidth / 2, terminalCentre.y - configHeight / 2 + 10 + configHeight / 2 - 20 + heightOffset, mapConfigOffset - 1, structuresHeight, "Structures", ColorSpectrum.BROWN); // Structures
+        DrawColoredBox(terminalCentre.x - configWidth / 2, terminalCentre.y - configHeight / 2 + 10 + configHeight / 2 - 20 + structuresHeight + heightOffset, mapConfigOffset - 1, bottomHeight, "Economy", ColorSpectrum.GREEN); // Economy
+        DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset, terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset, (configWidth - mapConfigOffset) / 2 - 1, bottomHeight, "Animals", ColorSpectrum.PALE_TURQUOISE); // Animals
+        DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset + (configWidth - mapConfigOffset) / 2, terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset, (configWidth - mapConfigOffset) / 2, bottomHeight / 2, "Disasters", ColorSpectrum.INDIAN_RED); // Disasters
+        DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset + (configWidth - mapConfigOffset) / 2, terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + bottomHeight / 2 + heightOffset, (configWidth - mapConfigOffset) / 2, bottomHeight % 2 == 0 ? bottomHeight / 2 : bottomHeight / 2 + 1, "Visuals", ColorSpectrum.LIGHT_STEEL_BLUE);  // Visuals
+
+        DisplayCenteredTextAtCords(title, terminalCentre.x, terminalCentre.y - configHeight / 2 + heightOffset + 5, tColor);
+    }
     #endregion
     #region update functions
     private List<Crab> crabs = new List<Crab>();
@@ -6952,7 +7227,7 @@ public class Map
                 try
                 {
                     (int x, int y) = GetRandomPointInAllowedTiles(allowedTiles);
-                    Crab crab = new Crab(x, y, conf.Width, conf.Height, mapData);
+                    Crab crab = new Crab(x, y, conf.Width, conf.Height, mapData, seed);
                     crabs.Add(crab);
                     overlayData[x, y] = 'c'; // Represent Crab with 'C'
                 }
@@ -6971,7 +7246,7 @@ public class Map
                 try
                 {
                     (int x, int y) = GetRandomPointInAllowedTiles(allowedTiles);
-                    Turtle turtle = new Turtle(x, y, conf.Width, conf.Height, mapData, overlayData, conf.Height, conf.Width);
+                    Turtle turtle = new Turtle(x, y, conf.Width, conf.Height, mapData, overlayData, conf.Height, conf.Width, seed);
                     turtles.Add(turtle);
                     overlayData[x, y] = 'T'; // Represent Turtle with 'T'
                 }
@@ -7022,7 +7297,7 @@ public class Map
                         (x, y) = GetRandomPointInRange(startX, startY, 1, 3);
                         if (mapData[x, y] == 'P')
                         {
-                            Cow cow = new Cow(x, y, mapData, overlayData);
+                            Cow cow = new Cow(x, y, mapData, overlayData, seed);
                             cows.Add(cow);
                             overlayData[x, y] = 'C'; // Represent Cow with 'C'
                             placedCows = true;
@@ -7082,7 +7357,7 @@ public class Map
                         (x, y) = GetRandomPointInRange(startX, startY, 1, 3);
                         if (mapData[x, y] == 'P')
                         {
-                            Sheep sheep = new Sheep(x, y, mapData, overlayData);
+                            Sheep sheep = new Sheep(x, y, mapData, overlayData, seed);
                             sheeps.Add(sheep);
                             overlayData[x, y] = 'S'; // Represent Sheep with 'S'
                             placedCows = true;

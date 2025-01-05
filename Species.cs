@@ -4,11 +4,13 @@ public abstract class Species
 {
     public string Name { get; set; }
     public string Habitat { get; set; }
+    private Random rng;
 
-    protected Species(string name, string habitat)
+    protected Species(string name, string habitat, int seedOffset)
     {
         Name = name;
         Habitat = habitat;
+        rng = new Random(seedOffset);
     }
 
     public abstract void Behave();
@@ -59,10 +61,10 @@ public class Crab : Species
     private int predatorX;
     private int predatorY;
     private List<char> allowedTiles = new List<char> { 'B', 'b' }; // Add your selected tiles here
-    public Crab(int initialX, int initialY, int beachWidth, int beachHeight, char[,] mapData)
-        : base("Crab", "Beach")
+    public Crab(int initialX, int initialY, int beachWidth, int beachHeight, char[,] mapData, int seedOffset)
+        : base("Crab", "Beach", seedOffset)
     {
-        random = new Random();
+        random = new Random(seedOffset);
         X = initialX;
         Y = initialY;
         this.beachWidth = beachWidth;
@@ -272,10 +274,10 @@ public class Turtle : Species
     private int predatorY;
     private List<char> allowedTiles = new List<char> { 'B', 'b' }; // Add your selected tiles here
 
-    public Turtle(int initialX, int initialY, int beachWidth, int beachHeight, char[,] mapData, char[,] overlayData, int mapWidth, int mapHeight)
-        : base("Turtle", "Beach")
+    public Turtle(int initialX, int initialY, int beachWidth, int beachHeight, char[,] mapData, char[,] overlayData, int mapWidth, int mapHeight, int seedOffset)
+        : base("Turtle", "Beach", seedOffset)
     {
-        random = new Random();
+        random = new Random(seedOffset);
         X = initialX;
         Y = initialY;
         this.beachWidth = beachWidth;
@@ -587,10 +589,10 @@ public class Sheep : Species
     private int mapWidth;
     private int mapHeight;
     private List<char> allowedTiles = new List<char> {'P'}; // Add your selected tiles here
-    public Sheep(int initialX, int initialY, char[,] mapData, char[,] overlayData)
-        : base("Sheep", "Plains")
+    public Sheep(int initialX, int initialY, char[,] mapData, char[,] overlayData, int seedOffset)
+        : base("Sheep", "Plains", seedOffset)
     {
-        random = new Random();
+        random = new Random(seedOffset);
         X = initialX;
         Y = initialY;
         this.mapData = mapData;
@@ -919,10 +921,10 @@ public class Cow : Species
     private int mapWidth;
     private int mapHeight;
     private List<char> allowedTiles = new List<char> {'P'}; // Add your selected tiles here
-    public Cow(int initialX, int initialY, char[,] mapData, char[,] overlayData)
-        : base("Cow", "Plains")
+    public Cow(int initialX, int initialY, char[,] mapData, char[,] overlayData, int seedOffset)
+        : base("Cow", "Plains", seedOffset)
     {
-        random = new Random();
+        random = new Random(seedOffset);
         X = initialX;
         Y = initialY;
         this.mapData = mapData;
@@ -1236,7 +1238,7 @@ public class Cow : Species
 #region forest species
 public class Bear : Species
 {
-    public Bear() : base("Bear", "Forest") { }
+    public Bear(int seedOffset) : base("Bear", "Forest", seedOffset) { }
 
     public override void Behave()
     {
@@ -1246,7 +1248,7 @@ public class Bear : Species
 
 public class Wolf : Species
 {
-    public Wolf() : base("Wolf", "Forest") { }
+    public Wolf(int seedOffset) : base("Wolf", "Forest", seedOffset) { }
 
     public override void Behave()
     {
@@ -1257,7 +1259,7 @@ public class Wolf : Species
 #region mountain species
 public class Goat : Species
 {
-    public Goat() : base("Goat", "Mountain") { }
+    public Goat(int seedOffset) : base("Goat", "Mountain", seedOffset) { }
 
     public override void Behave()
     {
@@ -1268,7 +1270,7 @@ public class Goat : Species
 #region water species
 public class Fish : Species
 {
-    public Fish() : base("Fish", "Water") { }
+    public Fish(int seedOffset) : base("Fish", "Water", seedOffset) { }
 
     public override void Behave()
     {
@@ -1279,7 +1281,7 @@ public class Fish : Species
 #region air species
 public class Bird : Species
 {
-    public Bird() : base("Bird", "Air") { }
+    public Bird(int seedOffset) : base("Bird", "Air", seedOffset) { }
 
     public override void Behave()
     {

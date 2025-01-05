@@ -23,12 +23,28 @@ namespace Internal
 {
     public class Program
     {
+        #region map
+        //public static int seed = DateTime.Now.Millisecond;
+        public static string seedString = "marekgirly";
+        public static int seed = ConvertStringToNumbers(seedString);
+        public Random rng = new Random(seed);
+        public static List<Map> chambers = new List<Map>();
+        public static int currentChamberIndex;
+        public static bool continueSimulating = true;
+        public static bool isUpdating = false;
+        public static bool isCommandInputMode = false;
+        public static bool isCloudsRendering = false;
+        public static bool isCloudsShadowsRendering = true;
+        public static bool IsHumidityRendering = false;
+        public static bool IsTemperatureRendering = false;
+        public static bool isConfiguring = true;
+        #endregion
         private static bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
         private static readonly object mapLock = new object();
         public static List<string> outputBuffer = new List<string>();
         public static List<string> eventBuffer = new List<string>();
         public static Config config = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding, 
-        10.0, 0.2, 12, 16, 7, 10, 0.4, 0.7, 0.4, 1.0, new Random().Next());
+        10.0, 0.2, 12, 16, 7, 10, 0.4, 0.7, 0.4, 1.0, seedString);
         public static void Main(string[] args)
         {
             EnableVirtualTerminalProcessing();
@@ -51,11 +67,23 @@ namespace Internal
             /==/ - , ,/   '.='. -   .'   \==\ _.\=\.-' |==|-,   _`/   /==/. /  /==/, | |- |   /==/ _  ,  /  :=; : :=; : :=; : 
             `--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=` ";
 
-            DisplayCenteredText(asciiArt);
+            if (Console.WindowHeight < 60 || Console.WindowWidth < 100)
+            {
+                DisplayCenteredText("Please resize the console window to at least 50 lines.");
+                return;
+            }
 
             // Main Loop
             Program programInstance = new Program();
-            Map chamber1 = new Map(config, new Random().Next());
+            if (args.Length > 0)
+            {
+                int.TryParse(args[0], out seed);
+            }
+            Random globalRandom = new Random(seed);
+            Map chamber1 = new Map(config);
+            Console.Clear();
+            isConfiguring = chamber1.GetConfig();
+            DisplayCenteredText(asciiArt);
             chamber1.Generate();
             chambers.Add(chamber1);
             DisplayCurrentChamber();
@@ -77,7 +105,7 @@ namespace Internal
             Thread guiThread = new Thread(() => programInstance.UpdateGUI());
             guiThread.Start();
 
-            while (continueSimulating)
+            while (continueSimulating && !isConfiguring)
             {
                 if (isCommandInputMode)
                 {
@@ -125,6 +153,19 @@ namespace Internal
             weatherThread.Join();
             guiThread.Join();
         }
+        public static int ConvertStringToNumbers(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return new Random().Next();
+
+            int hash = 17;
+            foreach (char c in input)
+            {
+                hash = hash * 31 + c;
+            }
+
+            return hash;
+        }
         public static void DisplayCenteredText(string text)
         {
             var lines = text.Split('\n');
@@ -165,19 +206,6 @@ namespace Internal
             }
         }
         #endregion
-        #region map
-        public static int seed = DateTime.Now.Millisecond;
-        public static List<Map> chambers = new List<Map>();
-        public static int currentChamberIndex;
-        public static bool continueSimulating = true;
-        public static bool isUpdating = false;
-        public static bool isCommandInputMode = false;
-        public static bool isCloudsRendering = false;
-        public static bool isCloudsShadowsRendering = true;
-        public static bool IsHumidityRendering = true;
-        public static bool IsTemperatureRendering = true;
-
-        #endregion
         public static readonly List<string> Commands = new List<string>
                 {
                     "help",
@@ -194,7 +222,7 @@ namespace Internal
         public int minSleepTime = 10;
         private void ListenForKeyPress()
         {
-            while (continueSimulating)
+            while (continueSimulating && !isConfiguring)
             {
                 if (Console.KeyAvailable)
                 {
@@ -319,17 +347,17 @@ namespace Internal
                             sleepTime -= 10;
                         }
                     }
-                    else if (key == ConsoleKey.T && !isUpdating)
+                    else if (key == ConsoleKey.T && !isUpdating && !IsHumidityRendering)
                     {
-                        isCloudsShadowsRendering = !isCloudsShadowsRendering;
+                        if (IsTemperatureRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
                         IsHumidityRendering = false;
                         if (!IsTemperatureRendering) chambers[currentChamberIndex].RenderTemperatureNoise();
                         else chambers[currentChamberIndex].DisplayMap();
                         IsTemperatureRendering = !IsTemperatureRendering;
                     }
-                    else if (key == ConsoleKey.H && !isUpdating)
+                    else if (key == ConsoleKey.H && !isUpdating && !IsTemperatureRendering)
                     {
-                        isCloudsShadowsRendering = !isCloudsShadowsRendering;
+                        if (!IsHumidityRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
                         IsTemperatureRendering = false;
                         if (!IsHumidityRendering) chambers[currentChamberIndex].RenderHumidityNoise();
                         else chambers[currentChamberIndex].DisplayMap();
@@ -341,7 +369,7 @@ namespace Internal
         }
         private void UpdateMaps()
         {
-            while (continueSimulating)
+            while (continueSimulating && !isConfiguring)
             {
                 lock (mapLock)
                 {
@@ -377,7 +405,7 @@ namespace Internal
         }
         private void UpdateWeather()
         {
-            while (continueSimulating)
+            while (continueSimulating && !isConfiguring)
             {
                 lock (mapLock)
                 {  
@@ -404,7 +432,7 @@ namespace Internal
         }
         private void UpdateGUI()
         {
-            while (continueSimulating)
+            while (continueSimulating && !isConfiguring)
             {
                 lock (mapLock)
                 {
@@ -495,7 +523,8 @@ namespace Internal
                     {
                         for (int i = 0; i < int.Parse(tokens[1]); i++)
                         {
-                            Map newChamber = new Map(config, new Random().Next());
+                            seed = rng.Next();
+                            Map newChamber = new Map(config);
                             newChamber.Generate();
                             chambers.Add(newChamber);
                             outputBuffer.Add("Added a new chamber.");
@@ -503,7 +532,8 @@ namespace Internal
                     }
                     else
                     {
-                        Map newChamber = new Map(config, new Random().Next());
+                        seed = rng.Next();
+                        Map newChamber = new Map(config);
                         newChamber.Generate();
                         chambers.Add(newChamber);
                         outputBuffer.Add("Added a new chamber.");
@@ -641,7 +671,7 @@ namespace Internal
         #region run functions
         public void SpawnMoreTurtles(int count)
         {
-            chambers[currentChamberIndex].InitializeSpecies(count - 1, count, new Turtle(0, 0, 0, 0, chambers[currentChamberIndex].mapData, chambers[currentChamberIndex].overlayData, config.Height, config.Width));
+            chambers[currentChamberIndex].InitializeSpecies(count - 1, count, new Turtle(0, 0, 0, 0, chambers[currentChamberIndex].mapData, chambers[currentChamberIndex].overlayData, config.Height, config.Width, seed));
         }
         public void SpawnCloud(int x, int y, Map.CloudType type)
         {

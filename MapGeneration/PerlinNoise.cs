@@ -23,25 +23,23 @@ public static class Perlin
     };
 
     private static int[] p;
-
     static Perlin()
     {
         p = new int[512];
-        RandomizePermutation();
     }
 
-    private static void RandomizePermutation()
+    private static void RandomizePermutation(int seed)
     {
-        Random rng = new Random();
+        Random rng = new Random(seed);
         for (int i = 0; i < 512; i++)
         {
             p[i] = permutation[rng.Next(256)];
         }
     }
 
-    public static double[,] GeneratePerlinNoise(int width, int height, double scale)
+    public static double[,] GeneratePerlinNoise(int width, int height, double scale, int seed)
     {
-        RandomizePermutation(); // Randomize permutation each time noise is generated
+        RandomizePermutation(seed); // Randomize permutation each time noise is generated
         double[,] noise = new double[width, height];
         for (int y = 0; y < height; y++)
         {
