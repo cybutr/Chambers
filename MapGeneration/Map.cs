@@ -9,14 +9,13 @@ public class Map
     public static List<string> outputBuffer = new List<string>();
     public List<string> actualOutputBuffer = new List<string>();
     public static List<string> eventBuffer = new List<string>();
-    public static int cloudShadowOffsetX;
-    public static int cloudShadowOffsetY;            
-    private static double sunriseTime;
-    private static double sunsetTime;
-    public static double time;
+    public int cloudShadowOffsetX;
+    public int cloudShadowOffsetY;            
+    private double sunriseTime;
+    private double sunsetTime;
+    public double time;
     public bool isCloudsRendering, isCloudsShadowsRendering;
     public bool shouldSimulationContinue = true;
-    private HashSet<(int x, int y)> tilesToUpdate = new HashSet<(int x, int y)>();
     #region map parameters
     public int width;
     public int height;
@@ -35,16 +34,6 @@ public class Map
     private double[,] previousPrecipitationData;
     private Random rngMap;
     public Random rng;
-    private double noiseScale;
-    private double erosionFactor;
-    private int minBiomeSize;
-    private int minLakeSize;
-    private int minRiverWidth;
-    private int maxRiverWidth;
-    private double riverFlowChance;
-    private double plainsHeightThreshold;
-    private double forestHeightThreshold;
-    private double mountainHeightThreshold;
     private const double waterAnimationSpeed = 0.1;
     private double[,] noise;
     private double[,] tempatureNoise;
@@ -56,35 +45,25 @@ public class Map
     private int bottomPadding;
     private int leftPadding;
     private int rightPadding;
-    private static int seed;
-    private static Config conf = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding, 
-        10.0, 0.2, 12, 16, 7, 10, 0.4, 0.7, 0.4, 1.0, new Random().Next().ToString());
+    private int seed;
+    public Config conf;
+    private static int numberOfWaves;
 
-    public Map(Config config)
+    public Map()
     {
-        seed = config.Seed;
+        conf = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding, 
+        10.0, 0.2, 12, 16, 7, 10, 0.4, 0.7, 0.4, 1.0, Math.Round(new Random().Next() * ((new Random().NextDouble() - 0.5) * 2)).ToString());
         rng = new Random(seed);
-        conf = config;
         topPadding = GUIConfig.TopPadding;
         bottomPadding = GUIConfig.BottomPadding;
         leftPadding = GUIConfig.LeftPadding;
         rightPadding = GUIConfig.RightPadding;
-        width = config.Width;
-        height = config.Height;
-        noiseScale = config.NoiseScale;
-        erosionFactor = config.ErosionFactor;
-        minBiomeSize = config.MinBiomeSize;
-        minLakeSize = config.MinLakeSize;
-        minRiverWidth = config.MinRiverWidth;
-        maxRiverWidth = config.MaxRiverWidth;
-        riverFlowChance = config.RiverFlowChance;
-        plainsHeightThreshold = config.PlainsHeightThreshold;
-        forestHeightThreshold = config.ForestHeightThreshold;
-        mountainHeightThreshold = config.MountainHeightThreshold;
-        cloudDataWidth = conf.Width * 3;
-        cloudDataHeight = conf.Height * 3;
-        cloudDataOffsetX = conf.Width;
-        cloudDataOffsetY = conf.Height;
+        width = conf.Width;
+        height = conf.Height;
+        cloudDataWidth = width * 3;
+        cloudDataHeight = height * 3;
+        cloudDataOffsetX = width;
+        cloudDataOffsetY = height;
         mapData = new char[width, height];
         previousMapData = new char[width, height];
         overlayData = new char[width, height];
@@ -97,16 +76,22 @@ public class Map
         temperatureData = new int[width, height];
         humidityData = new int[width, height];
         rngMap = new Random(seed); // Initialize with a seed
-        noise = Perlin.GeneratePerlinNoise(width, height, noiseScale, rng.Next());
-        tempatureNoise = Perlin.GeneratePerlinNoise(width, height, noiseScale * 25, rng.Next());
-        humidityNoise = Perlin.GeneratePerlinNoise(width, height, noiseScale * 12, rng.Next());
         cloudIsNight = new bool[width, height];
         cloudIsDarkening = new bool[width, height];
+        noise = new double[width, height];
+        tempatureNoise = new double[width, height];
+        humidityNoise = new double[width, height];
     }
     #endregion
     bool debug = false;
     public void Generate()
     {
+        isCloudsShadowsRendering = conf.DisplayShadows;
+        seed = Program.ConvertStringToNumbers(conf.Seed);
+        rng = new Random(seed);
+        noise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale, rng.Next());
+        tempatureNoise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 25, rng.Next());
+        humidityNoise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 12, rng.Next());
         SetAvarageTempatureHumidity();
         if (debug) Console.WriteLine(1);
         AssignTempAndHumData();
@@ -119,11 +104,11 @@ public class Map
         if (debug) Console.WriteLine(5);
         ReplaceBiome('M', 'P');
         if (debug) Console.WriteLine(6);
-        CreateMountains();
+        if (conf.EnableMountainRanges) CreateMountains();
         if (debug) Console.WriteLine(7);
-        CreateRiver();
+        if (conf.EnableRivers) CreateRiver();
         if (debug) Console.WriteLine(8);
-        CreateLakes();
+        if (conf.EnableLakes) CreateLakes();
         if (debug) Console.WriteLine(9);
         CreateComplexFrame();
         if (debug) Console.WriteLine(10);
@@ -136,19 +121,23 @@ public class Map
         if (debug) Console.WriteLine(13);
         FrameMap('@');
         if (debug) Console.WriteLine(14);
-        InitializeSpecies(3, 6, new Crab(0, 0, 0, 0, mapData, seed));
-        if (debug) Console.WriteLine(15);
-        InitializeSpecies(2, 4, new Turtle(0, 0, 0, 0, mapData, overlayData, width, height, seed));
-        if (debug) Console.WriteLine(16);
-        InitializeCows(1, 2, 2, 4);
-        if (debug) Console.WriteLine(17);
-        InitializeSheeps(1, 2, 1, 3);
-        if (debug) Console.WriteLine(18);
-        InitializeWaves();
+        RemoveSeperatedOceanTiles();
+        if (conf.GenerateAnimals)
+        {
+            InitializeSpecies(3, 6, new Crab(0, 0, 0, 0, mapData, seed));
+            if (debug) Console.WriteLine(15);
+            InitializeSpecies(2, 4, new Turtle(0, 0, 0, 0, mapData, overlayData, width, height, seed));
+            if (debug) Console.WriteLine(16);
+            InitializeCows(1, 2, 2, 4);
+            if (debug) Console.WriteLine(17);
+            InitializeSheeps(1, 2, 1, 3);
+            if (debug) Console.WriteLine(18);
+        }
+        if (conf.DisplayWaves) InitializeWaves();
         if (debug) Console.WriteLine(19);
-        InitializeWeather();
+        if (conf.DoWeatherCycle) InitializeWeather();
         if (debug) Console.WriteLine(20);
-        InitializeClouds();
+        if (conf.DoWeatherCycle) InitializeClouds();
     }
     #region essential functions
     private void AssignBiomes(double[,] noise)
@@ -157,15 +146,15 @@ public class Map
         {
             for (int y = 0; y < height; y++)
             {
-                if (noise[x, y] < forestHeightThreshold)
+                if (noise[x, y] < conf.ForestHeightThreshold)
                 {
                     mapData[x, y] = 'F'; // Forest
                 }
-                else if (noise[x, y] < plainsHeightThreshold)
+                else if (noise[x, y] < conf.PlainsHeightThreshold)
                 {
                     mapData[x, y] = 'P'; // Plains
                 }
-                else if (noise[x, y] < mountainHeightThreshold)
+                else if (noise[x, y] < conf.MountainHeightThreshold)
                 {
                     mapData[x, y] = 'M'; // Mountain
                 }
@@ -184,7 +173,7 @@ public class Map
             for (int y = 0; y < height; y++)
             {
                 int biomeSize = GetBiomeSize(x, y);
-                if (biomeSize < minBiomeSize * minBiomeSize)
+                if (biomeSize < conf.MinBiomeSize * conf.MinBiomeSize)
                 {
                     ExpandBiome(x, y);
                 }
@@ -358,7 +347,7 @@ public class Map
     }
     private void AssureNoStraightEdges(int[,] zoneData)
     {
-        for (int a = 0; a < 5; a++)
+        for (int a = 0; a < conf.BiomeBlend; a++)
         {
             for (int x = 1; x < conf.Width - 1; x++)
             {
@@ -508,8 +497,8 @@ public class Map
             {
                 int sampleX = x;
                 int sampleY = y;
-                double noiseValue = Perlin.GeneratePerlinNoise(width, height, noiseScale, rng.Next())[x, y];
-                noiseValue = noiseMap[x, y];
+                _ = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale, rng.Next())[x, y];
+                double noiseValue = noiseMap[x, y];
                 noiseMap[x, y] = noiseValue;
             }
         }
@@ -653,6 +642,42 @@ public class Map
             return true;
         }
         return false;
+    }
+    private void RemoveSeperatedOceanTiles()
+    {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                if (mapData[x, y] == 'O')
+                {
+                    int plainsCount = 0;
+                    int forestCount = 0;
+
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        for (int dy = -1; dy <= 1; dy++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+
+                            int nx = x + dx;
+                            int ny = y + dy;
+
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height)
+                            {
+                                if (mapData[nx, ny] == 'P') plainsCount++;
+                                if (mapData[nx, ny] == 'F') forestCount++;
+                            }
+                        }
+                    }
+
+                    if (plainsCount + forestCount >= 5)
+                    {
+                        mapData[x, y] = plainsCount > forestCount ? 'P' : 'F';
+                    }
+                }
+            }
+        }
     }
     #endregion
     // Map Frame
@@ -1406,7 +1431,7 @@ public class Map
             // Define the river path
             while (true)
             {
-                int riverWidth = rngMap.Next(minRiverWidth, maxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
+                int riverWidth = rngMap.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
                 for (int i = -riverWidth / 2; i <= riverWidth / 2; i++)
                 {
                     if (x + i >= 0 && x + i < width)
@@ -1475,7 +1500,7 @@ public class Map
             // Ensure the river reaches an edge
             while (true)
             {
-                int riverWidth = rngMap.Next(minRiverWidth, maxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
+                int riverWidth = rngMap.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
                 for (int i = -riverWidth / 2; i <= riverWidth / 2; i++)
                 {
                     if (x + i >= 0 && x + i < width)
@@ -1513,7 +1538,7 @@ public class Map
                         y = (y + height / 3) % height;
                         if (Math.Abs(y - startY) < height / 3)
                         {
-                            y = (y + height / 2) % height;
+                            _ = (y + height / 2) % height;
                         }
                     }
                     else if ((startEdge == 0 || startEdge == 1) && Math.Abs(x - startX) < width / 3)
@@ -1521,7 +1546,7 @@ public class Map
                         x = (x + width / 3) % width;
                         if (Math.Abs(x - startX) < width / 3)
                         {
-                            x = (x + width / 2) % width;
+                            _ = (x + width / 2) % width;
                         }
                     }
                     break;
@@ -2253,12 +2278,11 @@ public class Map
         public bool IsDarkening { get; set; }
     }
     private List<Wave> waves = new List<Wave>();
-    private readonly int MAX_WAVES = (int)Math.Round(conf.Width / 17.5);
     private const double WAVE_SPEED = 0.2;
     private void InitializeWaves()
     {
         waves.Clear();
-        for (int i = 0; i < MAX_WAVES; i++)
+        for (int i = 0; i < numberOfWaves; i++)
         {
             AddNewWave();
         }
@@ -2478,8 +2502,9 @@ public class Map
             return false;
         }
 
-        return cloudData[cloudX, cloudY] == '1' || cloudData[cloudX, cloudY] == '2' || cloudData[cloudX, cloudY] == '3' || cloudData[cloudX, cloudY] == '4' ||
-                cloudData[cloudX, cloudY] == '5' || cloudData[cloudX, cloudY] == '6';
+        return cloudData[cloudX, cloudY] == '1' || cloudData[cloudX, cloudY] == '2' || cloudData[cloudX, cloudY] == '3' ||
+                cloudData[cloudX, cloudY] == '4' || cloudData[cloudX, cloudY] == '5' || cloudData[cloudX, cloudY] == '6' ||
+                cloudData[cloudX, cloudY] == '7' || cloudData[cloudX, cloudY] == '8' || cloudData[cloudX, cloudY] == '9';
     }
     private void AddNewWave()
     {
@@ -3922,24 +3947,28 @@ public class Map
         weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, weather.TimeOfDay, weather.Season, avarageHumidity, seed);
         weather.Pressure = GetPressure();
         weather.WindSpeed = rng.NextDouble() * 10.0 + 5.0;
-        weather.WindDirection = rng.Next(360);
+        weather.WindDirection = rng.Next(361);
+        sunriseTime = 6.0;
+        sunsetTime = 18.0;
     }
     public void UpdateWeather()
     {
-        // Update time of day and season
-        weather.TimeOfDay += deltaTime * 24.0 / 720.0; 
-        time = weather.TimeOfDay;
-        if (weather.TimeOfDay >= 24.0) // One day is 12 minutes
+        if (conf.DoTimeCycle)
         {
-            weather.TimeOfDay -= 24.0;
-            dayCount++;
+            // Update time of day and season
+            weather.TimeOfDay += deltaTime * 24.0 / 720.0; 
+            time = weather.TimeOfDay;
+            if (weather.TimeOfDay >= 24.0) // One day is 12 minutes
+            {
+                weather.TimeOfDay -= 24.0;
+                dayCount++;
+            }
+
+            int daysPerSeason = 10; // Customize the number of days per season
+            weather.Season += deltaTime / (daysPerSeason * 720.0);
+            if (weather.Season >= 4.0)
+                weather.Season -= 4.0;
         }
-
-        int daysPerSeason = 5; // Customize the number of days per season
-        weather.Season += deltaTime / (daysPerSeason * 720.0); // Season changes every 5 days
-        if (weather.Season >= 4.0)
-            weather.Season -= 4.0;
-
         // Smoothly transition intensity
         weather.Intensity += (weather.IntensityTarget - weather.Intensity) * weather.IntensityChangeSpeed * deltaTime;
 
@@ -3962,13 +3991,13 @@ public class Map
         weather.Pressure = GetPressure();
 
         // Update wind speed and direction dynamically
-        UpdateSunTimes(weather.Season);
         UpdateWind();
         UpdateCloudShadows();
         UpdateTime();
         UpdateSeason();
+        if (conf.DoTimeCycle) UpdateSunTimes(weather.Season);
     }
-    public static void UpdateSunTimes(double season)
+    public void UpdateSunTimes(double season)
     {
         // Define the exact season values for solstices
         double summerSolstice = 1.8;
@@ -4025,9 +4054,9 @@ public class Map
         double temperature = weather.Temperature;
         double humidity = weather.Humidity;
         double pressure = weather.Pressure;
-        double windSpeed = weather.WindSpeed;
-        double windDirection = weather.WindDirection;
-        double timeOfDay = weather.TimeOfDay;
+        _ = weather.WindSpeed;
+        _ = weather.WindDirection;
+        _ = weather.TimeOfDay;
         double season = weather.Season;
 
         WeatherType weatherType = WeatherType.Clear;
@@ -4705,8 +4734,8 @@ public class Map
                 (int cloudX, int cloudY) = MapDataCordsToCloudData(x, y);
                 if (IsInCloudBounds(cloudX, cloudY) && cloudData[cloudX, cloudY] != '\0')
                 {
-                    int depth = cloudDepthData[cloudX, cloudY];
-                    CloudType cloudType = GetCloudType(cloudData[cloudX, cloudY]);
+                    _ = cloudDepthData[cloudX, cloudY];
+                    _ = GetCloudType(cloudData[cloudX, cloudY]);
                     //var cloudColor = GetCloudDepthColor(cloudType, depth);
                     (int r, int g, int b) cloudColor = GetCloudColor(cloudX, cloudY);
                     Console.SetCursorPosition(leftPadding + x * 2, y + topPadding);
@@ -4724,40 +4753,43 @@ public class Map
     private static double shadowIntensityFactor;
     public void DisplayCloudShadows()
     {
-        currentShadowPositions.Clear();
-        // Calculate shadow positions and intensities
-        for (int x = 0; x < cloudDataWidth; x++)
+        if (conf.DisplayShadows)
         {
-            for (int y = 0; y < cloudDataHeight; y++)
+            currentShadowPositions.Clear();
+            // Calculate shadow positions and intensities
+            for (int x = 0; x < cloudDataWidth; x++)
             {
-                if (cloudData[x, y] != '\0')
+                for (int y = 0; y < cloudDataHeight; y++)
                 {
-                    (int mapX, int mapY) = CloudToMapCoordinates(x, y);
-                    int shadowX = mapX + cloudShadowOffsetX;
-                    int shadowY = mapY + cloudShadowOffsetY;
-
-                    // Add shadow with intensity falloff
-                    for (int dx = -shadowRadius; dx <= shadowRadius; dx++)
+                    if (cloudData[x, y] != '\0')
                     {
-                        for (int dy = -shadowRadius; dy <= shadowRadius; dy++)
+                        (int mapX, int mapY) = CloudToMapCoordinates(x, y);
+                        int shadowX = mapX + cloudShadowOffsetX;
+                        int shadowY = mapY + cloudShadowOffsetY;
+
+                        // Add shadow with intensity falloff
+                        for (int dx = -shadowRadius; dx <= shadowRadius; dx++)
                         {
-                            int smoothX = shadowX + dx;
-                            int smoothY = shadowY + dy;
-
-                            if (smoothX > 0 && smoothX < width - 1 && smoothY > 0 && smoothY < height - 1)
+                            for (int dy = -shadowRadius; dy <= shadowRadius; dy++)
                             {
-                                double distance = Math.Sqrt(dx * dx + dy * dy);
-                                if (distance <= shadowRadius)
-                                {
-                                    (int x, int y) pos = (x: smoothX, y: smoothY);
-                                    double intensity = 1.0 - (distance / shadowRadius);
+                                int smoothX = shadowX + dx;
+                                int smoothY = shadowY + dy;
 
-                                    if (intensity > 0)
+                                if (smoothX > 0 && smoothX < width - 1 && smoothY > 0 && smoothY < height - 1)
+                                {
+                                    double distance = Math.Sqrt(dx * dx + dy * dy);
+                                    if (distance <= shadowRadius)
                                     {
-                                        if (!currentShadowPositions.ContainsKey(pos))
-                                            currentShadowPositions[pos] = intensity;
-                                        else
-                                            currentShadowPositions[pos] = Math.Max(currentShadowPositions[pos], intensity);
+                                        (int x, int y) pos = (x: smoothX, y: smoothY);
+                                        double intensity = 1.0 - (distance / shadowRadius);
+
+                                        if (intensity > 0)
+                                        {
+                                            if (!currentShadowPositions.ContainsKey(pos))
+                                                currentShadowPositions[pos] = intensity;
+                                            else
+                                                currentShadowPositions[pos] = Math.Max(currentShadowPositions[pos], intensity);
+                                        }
                                     }
                                 }
                             }
@@ -4765,100 +4797,100 @@ public class Map
                     }
                 }
             }
-        }
 
-        // Clear old shadows
-        if (shadowIntensityFactor > 0)
-        {
-            foreach ((int x, int y) pos in previousShadowPositions)
+            // Clear old shadows
+            if (shadowIntensityFactor > 0)
             {
-                if (!currentShadowPositions.ContainsKey(pos) || (isCloudsRendering && IsTileUnderCloud(pos.x, pos.y)))
+                foreach ((int x, int y) pos in previousShadowPositions)
                 {
-                    UpdateTile(pos.x, pos.y);
-                    UpdateOverlayTile(pos.x, pos.y);
-                }
-            }
-        }
-
-        // Draw new shadows with smooth intensity
-        foreach (KeyValuePair<(int x, int y), double> pair in currentShadowPositions)
-        {
-            (int x, int y) pos = pair.Key;
-            double intensity = pair.Value;
-
-            if (intensity > 0 && pos.x > 0 && pos.x < width - 1 && pos.y > 0 && pos.y < height - 1)
-            {
-                bool isUnderCloud = IsTileUnderCloud(pos.x, pos.y);
-
-                if (((isCloudsRendering && !isUnderCloud) || !isCloudsRendering) && !IsThereAWaveTile(pos.x, pos.y))
-                {
-                    (int r, int g, int b) baseColor = IsTileDarkened(pos.x, pos.y) ? GetDarkenedColor(pos.x, pos.y) : GetColor(mapData[pos.x, pos.y], pos.x, pos.y);
-                    int shadowFactor = (int)(shadowIntensityFactor * intensity);
-
-                    int r = Math.Max(0, baseColor.r - shadowFactor);
-                    int g = Math.Max(0, baseColor.g - shadowFactor);
-                    int b = Math.Max(0, baseColor.b - shadowFactor);
-
-                    if (shadowFactor > 0)
+                    if (!currentShadowPositions.ContainsKey(pos) || (isCloudsRendering && IsTileUnderCloud(pos.x, pos.y)))
                     {
-                        Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
-                        if (IsThereAnOverlayTile(pos.x, pos.y))
-                        {
-                            (int r, int g, int b) overlayColor = GetOverlayColor(overlayData[pos.x, pos.y]);
-
-                            // Apply shadow intensity to overlay color as well
-                            int or = Math.Max(0, overlayColor.r - shadowFactor);
-                            int og = Math.Max(0, overlayColor.g - shadowFactor);
-                            int ob = Math.Max(0, overlayColor.b - shadowFactor);
-
-                            string background = SetBackgroundColor(r, g, b);
-                            string foreground = SetForegroundColor(or, og, ob);
-                            Console.Write(background + foreground + GetSpeciesIcon(overlayData[pos.x, pos.y]) + ResetColor());
-                        }
-                        else
-                        {
-                            Console.Write(SetBackgroundColor(r, g, b) + "  " + ResetColor());
-                        }
-                    }
-                }
-                else if (((isCloudsRendering && !isUnderCloud) || !isCloudsRendering) && IsThereAWaveTile(pos.x, pos.y))
-                {
-                    (int r, int g, int b) baseColor = IsTileDarkened(pos.x, pos.y) ? GetDarkenedColor(pos.x, pos.y) : GetWaveColor(pos.x, pos.y);
-                    int shadowFactor = (int)(shadowIntensityFactor * intensity);
-
-                    int r = Math.Max(0, baseColor.r - shadowFactor);
-                    int g = Math.Max(0, baseColor.g - shadowFactor);
-                    int b = Math.Max(0, baseColor.b - shadowFactor);
-
-                    if (shadowFactor > 0)
-                    {
-                        Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
-                        if (IsThereAnOverlayTile(pos.x, pos.y))
-                        {
-                            (int r, int g, int b) overlayColor = GetOverlayColor(overlayData[pos.x, pos.y]);
-
-                            // Apply shadow intensity to overlay color as well
-                            int or = Math.Max(0, overlayColor.r - shadowFactor);
-                            int og = Math.Max(0, overlayColor.g - shadowFactor);
-                            int ob = Math.Max(0, overlayColor.b - shadowFactor);
-
-                            string background = SetBackgroundColor(r, g, b);
-                            string foreground = SetForegroundColor(or, og, ob);
-                            Console.Write(background + foreground + GetSpeciesIcon(overlayData[pos.x, pos.y]) + ResetColor());
-                        }
-                        else
-                        {
-                            Console.Write(SetBackgroundColor(r, g, b) + "  " + ResetColor());
-                        }
+                        UpdateTile(pos.x, pos.y);
+                        UpdateOverlayTile(pos.x, pos.y);
                     }
                 }
             }
-        }
 
-        // Update previous shadow positions, excluding positions under clouds
-        previousShadowPositions = new HashSet<(int x, int y)>(
-            currentShadowPositions.Keys.Where(pos => !isCloudsRendering || !IsTileUnderCloud(pos.x, pos.y))
-        );
+            // Draw new shadows with smooth intensity
+            foreach (KeyValuePair<(int x, int y), double> pair in currentShadowPositions)
+            {
+                (int x, int y) pos = pair.Key;
+                double intensity = pair.Value;
+
+                if (intensity > 0 && pos.x > 0 && pos.x < width - 1 && pos.y > 0 && pos.y < height - 1)
+                {
+                    bool isUnderCloud = IsTileUnderCloud(pos.x, pos.y);
+
+                    if (((isCloudsRendering && !isUnderCloud) || !isCloudsRendering) && !IsThereAWaveTile(pos.x, pos.y))
+                    {
+                        (int r, int g, int b) baseColor = IsTileDarkened(pos.x, pos.y) ? GetDarkenedColor(pos.x, pos.y) : GetColor(mapData[pos.x, pos.y], pos.x, pos.y);
+                        int shadowFactor = (int)(shadowIntensityFactor * intensity);
+
+                        int r = Math.Max(0, baseColor.r - shadowFactor);
+                        int g = Math.Max(0, baseColor.g - shadowFactor);
+                        int b = Math.Max(0, baseColor.b - shadowFactor);
+
+                        if (shadowFactor > 0)
+                        {
+                            Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
+                            if (IsThereAnOverlayTile(pos.x, pos.y))
+                            {
+                                (int r, int g, int b) overlayColor = GetOverlayColor(overlayData[pos.x, pos.y]);
+
+                                // Apply shadow intensity to overlay color as well
+                                int or = Math.Max(0, overlayColor.r - shadowFactor);
+                                int og = Math.Max(0, overlayColor.g - shadowFactor);
+                                int ob = Math.Max(0, overlayColor.b - shadowFactor);
+
+                                string background = SetBackgroundColor(r, g, b);
+                                string foreground = SetForegroundColor(or, og, ob);
+                                Console.Write(background + foreground + GetSpeciesIcon(overlayData[pos.x, pos.y]) + ResetColor());
+                            }
+                            else
+                            {
+                                Console.Write(SetBackgroundColor(r, g, b) + "  " + ResetColor());
+                            }
+                        }
+                    }
+                    else if (((isCloudsRendering && !isUnderCloud) || !isCloudsRendering) && IsThereAWaveTile(pos.x, pos.y))
+                    {
+                        (int r, int g, int b) baseColor = IsTileDarkened(pos.x, pos.y) ? GetDarkenedColor(pos.x, pos.y) : GetWaveColor(pos.x, pos.y);
+                        int shadowFactor = (int)(shadowIntensityFactor * intensity);
+
+                        int r = Math.Max(0, baseColor.r - shadowFactor);
+                        int g = Math.Max(0, baseColor.g - shadowFactor);
+                        int b = Math.Max(0, baseColor.b - shadowFactor);
+
+                        if (shadowFactor > 20 && !IsTileUnderCloud(pos.x, pos.y))
+                        {
+                            Console.SetCursorPosition(leftPadding + pos.x * 2, pos.y + topPadding);
+                            if (IsThereAnOverlayTile(pos.x, pos.y))
+                            {
+                                (int r, int g, int b) overlayColor = GetOverlayColor(overlayData[pos.x, pos.y]);
+
+                                // Apply shadow intensity to overlay color as well
+                                int or = Math.Max(0, overlayColor.r - shadowFactor);
+                                int og = Math.Max(0, overlayColor.g - shadowFactor);
+                                int ob = Math.Max(0, overlayColor.b - shadowFactor);
+
+                                string background = SetBackgroundColor(r, g, b);
+                                string foreground = SetForegroundColor(or, og, ob);
+                                Console.Write(background + foreground + GetSpeciesIcon(overlayData[pos.x, pos.y]) + ResetColor());
+                            }
+                            else
+                            {
+                                Console.Write(SetBackgroundColor(r, g, b) + "  " + ResetColor());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Update previous shadow positions, excluding positions under clouds
+            previousShadowPositions = new HashSet<(int x, int y)>(
+                currentShadowPositions.Keys.Where(pos => !isCloudsRendering || !IsTileUnderCloud(pos.x, pos.y))
+            );
+        }
     }
     private (int r, int g, int b) GetShadowColor(int x, int y)
     {
@@ -4911,7 +4943,7 @@ public class Map
     {
         season = weather.Season;
     }
-    private static void UpdateCloudShadows()
+    private void UpdateCloudShadows()
     {
         // Calculate base shadow offset based on time of day
         double angle = ((timeOfDay - 6.0) / 24.0) * 2 * Math.PI; // Shift timeOfDay by 6 hours
@@ -5504,7 +5536,7 @@ public class Map
     {
         if (timeOfDay == 0.0)
         {
-            CurrentGradientDirection = GradientDirection.TL_BR;
+            CurrentGradientDirection = GradientDirection.BR_TL;
         }
         else if (timeOfDay == 12.0)
         {
@@ -6079,7 +6111,6 @@ public class Map
         };
         int humZone = humidityData[x, y];
         int tempZone = temperatureData[x, y];
-
         int r, g, b;
         if (tile is '@')
         {
@@ -6118,52 +6149,58 @@ public class Map
         int bAdjustment = 0;
 
         // Adjust based on temperature zone
-        switch (tempZone)
+        if (conf.EnableTempatureBiomeChanges)
         {
-            case 1: // Very Cold 
-                bAdjustment -= 20;
-                rAdjustment -= 20;
-                break;
-            case 2: // Cold 
-                bAdjustment -= 15;
-                gAdjustment -= 5;
-                break;
-            case 3: // Cool 
-                gAdjustment += 5;
-                bAdjustment += 10;
-                break;
-            case 4: // Temperate 
-                gAdjustment += 10;
-                rAdjustment += 5;
-                break;
-            case 5: // Warm
-                rAdjustment += 10;
-                gAdjustment += 15;
-                break;
-        }
+            switch (tempZone)
+            {
+                case 1: // Very Cold 
+                    bAdjustment -= 20;
+                    rAdjustment -= 20;
+                    break;
+                case 2: // Cold 
+                    bAdjustment -= 15;
+                    gAdjustment -= 5;
+                    break;
+                case 3: // Cool 
+                    gAdjustment += 5;
+                    bAdjustment += 10;
+                    break;
+                case 4: // Temperate 
+                    gAdjustment += 10;
+                    rAdjustment += 5;
+                    break;
+                case 5: // Warm
+                    rAdjustment += 10;
+                    gAdjustment += 15;
+                    break;
+            }
 
+        }
         // Adjust based on humidity zone
-        switch (humZone)
+        if (conf.EnableHumidityBiomeChanges)
         {
-            case 1: // Very Dry
-                gAdjustment -= 15;
-                bAdjustment -= 5;
-                break;
-            case 2: // Dry 
-                gAdjustment -= 10;
-                break;
-            case 3: // Moderate 
-                break;
-            case 4: // Humid 
-                gAdjustment += 15;
-                bAdjustment += 10;
-                break;
-            case 5: // Very Humid 
-                gAdjustment += 20;
-                bAdjustment += 5;
-                break;
-        }
+            switch (humZone)
+            {
+                case 1: // Very Dry
+                    gAdjustment -= 15;
+                    bAdjustment -= 5;
+                    break;
+                case 2: // Dry 
+                    gAdjustment -= 10;
+                    break;
+                case 3: // Moderate 
+                    break;
+                case 4: // Humid 
+                    gAdjustment += 15;
+                    bAdjustment += 10;
+                    break;
+                case 5: // Very Humid 
+                    gAdjustment += 20;
+                    bAdjustment += 5;
+                    break;
+            }
 
+        }
         // Apply adjustments to base color
         r = Math.Clamp(baseColor.r + rAdjustment, 0, 255);
         g = Math.Clamp(baseColor.g + gAdjustment, 0, 255);
@@ -6303,8 +6340,8 @@ public class Map
         int bottomMargin = bottomPadding;
 
         // Calculate content area dimensions
-        int contentWidth = consoleWidth - leftMargin - rightMargin;
-        int contentHeight = consoleHeight - topMargin - bottomMargin;
+        _ = consoleWidth - leftMargin - rightMargin;
+        _ = consoleHeight - topMargin - bottomMargin;
 
         if (consoleWidth >= config.MinConsoleWidth && consoleHeight >= config.MinConsoleHeight)
         {
@@ -6712,7 +6749,7 @@ public class Map
         int cursorY = startY + 1;
 
         int maxLines = outputHeight - 5;
-        int linesToDisplay = Math.Min(actualOutputBuffer.Count, maxLines);
+        _ = Math.Min(actualOutputBuffer.Count, maxLines);
 
         // Define keyword-color mapping using ColorSpectrum
         Dictionary<string, (int r, int g, int b)> keywordColors = new Dictionary<string, (int r, int g, int b)>(StringComparer.OrdinalIgnoreCase)
@@ -6803,7 +6840,7 @@ public class Map
         int cursorY = startY + 1;
 
         int maxLines = outputHeight - 5;
-        int linesToDisplay = Math.Min(actualOutputBuffer.Count, maxLines);
+        _ = Math.Min(actualOutputBuffer.Count, maxLines);
 
         // Define keyword-color mapping using ColorSpectrum
         Dictionary<string, (int r, int g, int b)> keywordColors = new Dictionary<string, (int r, int g, int b)>(StringComparer.OrdinalIgnoreCase)
@@ -6969,7 +7006,7 @@ public class Map
         // Draw bottom border with double lines
         Console.SetCursorPosition(x, y + height - 1);
         if (!isLinux) Console.Write(bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight);
-        else Console.Write(corner + new string(horizontal[0], width - 2) + horizontal);
+        else Console.Write(corner + new string(horizontal[0], width - 2) + corner);
 
         // Write the decorated title in the middle of the top of the box if not empty or whitespace
         if (!string.IsNullOrWhiteSpace(title))
@@ -7047,7 +7084,7 @@ public class Map
         if (!isLinux)
             Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight + Map.ResetColor());
         else
-            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + horizontal + Map.ResetColor());
+            Console.Write(Map.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + Map.ResetColor());
 
         // Write the decorated title in the middle of the top of the box if not empty or whitespace
         if (!string.IsNullOrWhiteSpace(title))
@@ -7079,13 +7116,13 @@ public class Map
         }
         else 
         {
-            Console.SetCursorPosition(x, y);
+            Console.SetCursorPosition(x, y); // top left
             Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
-            Console.SetCursorPosition(x + width - 1, y);
+            Console.SetCursorPosition(x + width - 1, y); // top right
             Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
-            Console.SetCursorPosition(x, y + height - 1);
+            Console.SetCursorPosition(x, y + height - 1); // bottom left
             Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
-            Console.SetCursorPosition(x + width - 1, y + height - 1);
+            Console.SetCursorPosition(x + width + 1, y + height - 1); // bottom right
             Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
         }
     }
@@ -7110,7 +7147,14 @@ public class Map
     public bool GetConfig()
     {
         DisplayMapConfig();
-        Console.ReadKey(true);
+        Console.SetCursorPosition(terminalCentre.x - saveWidth / 2 + saveWidth / 2 - 2 , terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset + bottomHeight + 1);
+        Console.Write(
+            Map.SetBackgroundColor(selectColor.r, selectColor.g, selectColor.b) +
+            Map.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b) +
+            $"SAVE{Map.ResetColor()}"
+        );
+        ManageParamNavigation();
+        numberOfWaves = conf.NumberOfWaves;
         Console.Clear();
         return false;
     }
@@ -7120,19 +7164,673 @@ public class Map
 / /_ / ` // o // \,' // o \ / _/ /  ,' _\ `. 
 |__//_n_//_n_//_/ /_//___,'/___//_/`_\/___,' 
 ";
+    public enum SettingType
+    {
+        MapConfig,
+        Gamerules,
+        Structures,
+        Economy,
+        Animals,
+        Disasters,
+        Visuals,
+        Events
+    } 
+    public enum ParamType
+    {
+        Int,
+        Double,
+        Bool,
+        String
+    }
+    public class ParamCoordinate
+    {
+        public string PropertyName { get; set; }
+        public SettingType SettingType { get; set; }
+        public ParamType ParamType { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+
+        public ParamCoordinate(string propertyName, SettingType settingType, ParamType type, int x, int y)
+        {
+            PropertyName = propertyName;
+            SettingType = settingType;
+            ParamType = type;
+            X = x;
+            Y = y;
+        }
+    }
+    static List<ParamCoordinate> mapConfigParams = new List<ParamCoordinate>
+    {
+        new ParamCoordinate("Seed", SettingType.MapConfig, ParamType.String, 0, 0),
+        new ParamCoordinate("NoiseScale", SettingType.MapConfig, ParamType.Double, 0, 0),
+        new ParamCoordinate("ErosionFactor", SettingType.MapConfig, ParamType.Double, 0, 0),
+        new ParamCoordinate("MinBiomeSize", SettingType.MapConfig, ParamType.Int, 0, 0),
+        new ParamCoordinate("MinLakeSize", SettingType.MapConfig, ParamType.Int, 0, 0),
+        new ParamCoordinate("MinRiverWidth", SettingType.MapConfig, ParamType.Int, 0, 0),
+        new ParamCoordinate("MaxRiverWidth", SettingType.MapConfig, ParamType.Int, 0, 0),
+        new ParamCoordinate("MinMountainWidth", SettingType.MapConfig, ParamType.Int, 0, 0),
+        new ParamCoordinate("MaxMountainWidth", SettingType.MapConfig, ParamType.Int, 0, 0),
+        new ParamCoordinate("RiverFlowChance", SettingType.MapConfig, ParamType.Double, 0, 0),
+        new ParamCoordinate("PlainsHeightThreshold", SettingType.MapConfig, ParamType.Double, 0, 0),
+        new ParamCoordinate("ForestHeightThreshold", SettingType.MapConfig, ParamType.Double, 0, 0),
+        new ParamCoordinate("MountainHeightThreshold", SettingType.MapConfig, ParamType.Double, 0, 0),
+        new ParamCoordinate("EnableRivers", SettingType.MapConfig, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableLakes", SettingType.MapConfig, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableMountainRanges", SettingType.MapConfig, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableTempatureBiomeChanges", SettingType.MapConfig, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableHumidityBiomeChanges", SettingType.MapConfig, ParamType.Bool, 0, 0),
+        new ParamCoordinate("BiomeBlend", SettingType.MapConfig, ParamType.Int, 0, 0)
+    };
+    static List<ParamCoordinate> gameruleParams = new List<ParamCoordinate>
+    {
+        new ParamCoordinate("EnableWildfires", SettingType.Gamerules, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableSecrets", SettingType.Gamerules, ParamType.Bool, 0, 0),
+        new ParamCoordinate("DoTimeCycle", SettingType.Gamerules, ParamType.Bool, 0, 0),
+        new ParamCoordinate("DoWeatherCycle", SettingType.Gamerules, ParamType.Bool, 0, 0)
+    };
+    static List<ParamCoordinate> structureParams = new List<ParamCoordinate>
+    {
+        new ParamCoordinate("GenerateStructrs", SettingType.Structures, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableVillages", SettingType.Structures, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableCities", SettingType.Structures, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableDungeons", SettingType.Structures, ParamType.Bool, 0, 0)
+    };
+    static List<ParamCoordinate> economyParams = new List<ParamCoordinate>
+    {
+        new ParamCoordinate("EnableTrades", SettingType.Economy, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableTrades", SettingType.Economy, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableCurrency", SettingType.Economy, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableTaxes", SettingType.Economy, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableBanks", SettingType.Economy, ParamType.Bool, 0, 0)
+    };
+    static List<ParamCoordinate> animalParams = new List<ParamCoordinate>
+    {
+        new ParamCoordinate("GenerateAnimals", SettingType.Animals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnablePredators", SettingType.Animals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableAnimalMovement", SettingType.Animals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableAnimalBreeding", SettingType.Animals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableAnimalDeath", SettingType.Animals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableAnimalExtinction", SettingType.Animals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableAnimalMigration", SettingType.Animals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableAnimalHunting", SettingType.Animals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableAnimalDomestication", SettingType.Animals, ParamType.Bool, 0, 0)
+    };
+    static List<ParamCoordinate> disasterParams = new List<ParamCoordinate>
+    {
+        new ParamCoordinate("EnableTornadoes", SettingType.Disasters, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableEarthquakes", SettingType.Disasters, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableVolcanoes", SettingType.Disasters, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableFloods", SettingType.Disasters, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableMeteors", SettingType.Disasters, ParamType.Bool, 0, 0)
+    };
+    static List<ParamCoordinate> eventParams = new List<ParamCoordinate>
+    {
+        new ParamCoordinate("EnableRobberies", SettingType.Events, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableMurders", SettingType.Events, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableRiots", SettingType.Events, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnablePlagues", SettingType.Events, ParamType.Bool, 0, 0),
+        new ParamCoordinate("EnableWars", SettingType.Events, ParamType.Bool, 0, 0)
+    };
+    static List<ParamCoordinate> visualParams = new List<ParamCoordinate>
+    {
+        new ParamCoordinate("DisplayShadows", SettingType.Visuals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("DisplayWaves", SettingType.Visuals, ParamType.Bool, 0, 0),
+        new ParamCoordinate("NumberOfWaves", SettingType.Visuals, ParamType.Int, 0, 0)
+    };
+    static List<ParamCoordinate> nullParams = new List<ParamCoordinate>();
+    static List<ParamCoordinate>[,] allParams = new List<ParamCoordinate>[4, 3]
+    {
+        { gameruleParams, mapConfigParams, nullParams },
+        { structureParams, eventParams, nullParams },
+        { economyParams, animalParams, disasterParams },
+        { nullParams, nullParams, visualParams }
+    };
+    private int GetConfWindowWidth(List<ParamCoordinate> paramList)
+    {
+        switch (paramList)
+        {
+            case List<ParamCoordinate> _ when paramList == mapConfigParams:
+                return configWidth - mapConfigOffset;
+            case List<ParamCoordinate> _ when paramList == gameruleParams:
+                return mapConfigOffset - 1;
+            case List<ParamCoordinate> _ when paramList == structureParams:
+                return mapConfigOffset - 1;
+            case List<ParamCoordinate> _ when paramList == economyParams:
+                return mapConfigOffset - 1;
+            case List<ParamCoordinate> _ when paramList == animalParams:
+                return (configWidth - mapConfigOffset) / 2 - 1;
+            case List<ParamCoordinate> _ when paramList == disasterParams:
+                return (configWidth - mapConfigOffset) / 2;
+            case List<ParamCoordinate> _ when paramList == visualParams:
+                return (configWidth - mapConfigOffset) / 2;
+            case List<ParamCoordinate> _ when paramList == eventParams:
+                return configWidth - mapConfigOffset;
+            default:
+                return 20;
+        }
+    }
+    public static int currentParamX, currentParamY;
+    static int configWidth = 95;
+    static int configHeight = 62;
+    static int mapConfigOffset = 25;
+    static int mapConfigHeight = configHeight / 2 - 10;
+    static int gamerulesHeight = configHeight / 2 - 20;
+    static int structuresHeight = 15;
+    static int bottomHeight = configHeight / 2 - 16;
+    static int saveWidth = 10;
+    static int heightOffset = (Console.WindowHeight - (10 + gamerulesHeight + structuresHeight + bottomHeight)) / 6;
+    (int r, int g, int b) selectColor = ColorSpectrum.SILVER;
+    static (int x, int y) terminalCentre = (Console.WindowWidth / 2, Console.WindowHeight / 2);
+    private void CalculateParamCoordinates()
+    {
+        int centerX = Console.WindowWidth / 2;
+        int startY =  terminalCentre.y - configHeight / 2 + heightOffset;
+    
+        // Calculate the starting X position based on configWidth to center the window
+        int startX = centerX - (configWidth / 2);
+    
+        startY += 11;
+        // Assign coordinates for Gamerules
+        foreach (var param in gameruleParams)
+        {
+            param.X = startX + 2;
+            param.Y = startY++;
+        }
+    
+        startY += gamerulesHeight - gameruleParams.Count(); // Add spacing between sections
+    
+        // Assign coordinates for Structures
+        foreach (var param in structureParams)
+        {
+            param.X = startX + 2;
+            param.Y = startY++;
+        }
+    
+        startY -= structureParams.Count() + 11; // Add spacing between sections
+    
+        // Assign coordinates for Map Config
+        foreach (var param in mapConfigParams)
+        {
+            param.X = startX + mapConfigOffset + 2;
+            param.Y = startY++;
+        }
+    
+        startY += structuresHeight - structureParams.Count() * 2; // Add spacing between sections
+    
+        // Assign coordinates for Economy
+        foreach (var param in economyParams)
+        {
+            param.X = startX + 2;
+            param.Y = startY++;
+        }
+    
+        startY -= economyParams.Count(); // Add spacing between sections
+    
+        // Assign coordinates for Animals
+        foreach (var param in animalParams)
+        {
+            param.X = startX + mapConfigOffset + 2;
+            param.Y = startY++;
+        }
+    
+        startY -= animalParams.Count(); // Add spacing between sections
+    
+        // Assign coordinates for Disasters
+        foreach (var param in disasterParams)
+        {
+            param.X = startX + mapConfigOffset + ((configWidth - mapConfigOffset) / 2) + 2;
+            param.Y = startY++;
+        }
+    
+        startY += 2; // Add spacing between sections
+    
+        // Assign coordinates for Visuals
+        foreach (var param in visualParams)
+        {
+            param.X = startX + mapConfigOffset + ((configWidth - mapConfigOffset) / 2) + 2;
+            param.Y = startY++;
+        }
+    
+        startY -= animalParams.Count() * 2 - 3; // Add spacing between sections
+    
+        // Assign coordinates for Events
+        for (int i = 0; i < eventParams.Count(); i++)
+        {
+            if (i < gamerulesHeight + structuresHeight - mapConfigHeight - 2)
+            {
+                eventParams[i].X = startX + mapConfigOffset + 2;
+                eventParams[i].Y = startY++;
+            }
+            else
+            {
+                eventParams[i].X = startX + configWidth - eventParams[i].PropertyName.Length - 6;
+                eventParams[i].Y = startY++ - gamerulesHeight - structuresHeight + mapConfigHeight + 2;
+            }
+        }
+    
+        // Ensure all parameters have valid coordinates
+        foreach (var list in new List<List<ParamCoordinate>> 
+        { 
+            mapConfigParams, 
+            gameruleParams, 
+            structureParams, 
+            economyParams, 
+            animalParams, 
+            disasterParams, 
+            visualParams, 
+            eventParams 
+        })
+        {
+            foreach (var param in list)
+            {
+                // Clamp X and Y to console boundaries
+                param.X = Math.Clamp(param.X, 0, Console.WindowWidth - 1);
+                param.Y = Math.Clamp(param.Y, 0, Console.WindowHeight - 1);
+            }
+        }
+    }
+    private void DrawAllParams()
+    {
+        foreach (var param in mapConfigParams)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
+        }
+        foreach (var param in gameruleParams)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
+        }
+        foreach (var param in structureParams)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
+        }
+        foreach (var param in economyParams)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
+        }
+        foreach (var param in animalParams)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
+        }
+        foreach (var param in disasterParams)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
+        }
+        foreach (var param in visualParams)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
+        }
+        foreach (var param in eventParams)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
+        }
+    }
+    private string GetParamValue(ParamCoordinate param)
+    {
+        switch (param.ParamType)
+        {
+            case ParamType.Bool:
+                return GetParamBool(param);
+            case ParamType.Int:
+                return GetParamInt(param).ToString();
+            case ParamType.Double:
+                return GetParamDouble(param).ToString();
+            case ParamType.String:
+                return GetParamString(param);
+            default:
+                return "";
+        }
+    }
+    private string GetParamBool(ParamCoordinate param)
+    {
+        // Get the property value from conf using reflection
+        bool value = conf.GetType().GetProperty(param.PropertyName)?.GetValue(conf) as bool? ?? false;
+        // Choose the display character based on the value
+        string displayChar = value ? "✔" : "✖";
+
+        // Return the display character instead of writing to console
+        return displayChar;
+    }
+    private int GetParamInt(ParamCoordinate param)
+    {
+        // Get the property value from conf using reflection
+        int value = conf.GetType().GetProperty(param.PropertyName)?.GetValue(conf) as int? ?? 0;
+
+        // Return the value instead of writing to console
+        return value;
+    }
+    private double GetParamDouble(ParamCoordinate param)
+    {
+        // Get the property value from conf using reflection
+        double value = conf.GetType().GetProperty(param.PropertyName)?.GetValue(conf) as double? ?? 0.0f;
+
+        // Return the value instead of writing to console
+        return value;
+    }
+    private string GetParamString(ParamCoordinate param)
+    {
+        // Get the property value from conf using reflection
+        string value = conf.GetType().GetProperty(param.PropertyName)?.GetValue(conf) as string ?? "";
+
+        // Return the value instead of writing to console
+        return value;
+    }
+    public void ManageParamNavigation()
+    {
+        void DrawParam(ParamCoordinate param, int redrawDistance, bool isSelected, string? tempStringValue = null)
+        {
+            Console.SetCursorPosition(param.X, param.Y);
+            // Base value from config
+            string value = param.ParamType switch
+            {
+                ParamType.Bool => GetParamBool(param),
+                ParamType.Int => GetParamInt(param).ToString(),
+                ParamType.Double => GetParamDouble(param).ToString("0.##"),
+                ParamType.String => GetParamString(param),
+                _ => ""
+            };
+            // If we're editing a string, show the temporary string instead
+            if (param.ParamType == ParamType.String && tempStringValue != null)
+            {
+                value = tempStringValue;
+            }
+
+            Console.SetCursorPosition(param.X, param.Y);
+            if (isSelected)
+            {
+                if (param.ParamType != ParamType.Bool)
+                {
+                    Console.Write(
+                        Map.SetBackgroundColor(selectColor.r, selectColor.g, selectColor.b) +
+                        Map.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b) +
+                        $"{param.PropertyName} - {value}{Map.ResetColor()}{new string(' ', Math.Max(redrawDistance, 0))}"
+                    );
+                }
+                else
+                {
+                    Console.Write(
+                        Map.SetBackgroundColor(selectColor.r, selectColor.g, selectColor.b) +
+                        Map.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b) +
+                        $"{param.PropertyName} - {value}{Map.ResetColor()}"
+                    );
+                }
+            }
+            else
+            {
+                if (param.ParamType != ParamType.Bool)
+                    Console.Write($"{param.PropertyName} - {value}{new string(' ', redrawDistance)}");
+                else
+                    Console.Write($"{param.PropertyName} - {value}");
+            }
+        }
+
+        currentParamX = 2;
+        currentParamY = 1;
+        List<ParamCoordinate> currentList = allParams[currentParamX, currentParamY];
+        int listParamIndex = currentList.Count - 1;
+        int redrawDistance = listParamIndex >= 0
+            ? GetRedrawDistance(currentList, currentList[listParamIndex]) : 0;
+        
+        bool typingString = false;
+        string tempStringValue = "";
+        bool isSave = true;
+        bool selecting = true;
+        while (selecting)
+        {
+            ConsoleKeyInfo key = Console.ReadKey(true);
+            if (!typingString)
+            {
+                int oldIndex = listParamIndex;
+                int oldX = currentParamX;
+                int oldY = currentParamY;
+                ParamCoordinate ?oldParam = oldIndex >= 0 ? currentList[oldIndex] : null;
+                int oldRedrawDistance = oldParam != null
+                    ? GetRedrawDistance(currentList, oldParam, true) : 0;
+                switch (key.Key)
+                {
+                    case ConsoleKey.UpArrow:
+                    case ConsoleKey.W:
+                        if (listParamIndex > 0 && !isSave)
+                            listParamIndex--;
+                        else if (!isSave)
+                        {
+                            if (currentParamX > 0
+                                && allParams[currentParamX - 1, currentParamY] != null
+                                && allParams[currentParamX - 1, currentParamY].Count > 0)
+                            {
+                                currentParamX--;
+                                currentList = allParams[currentParamX, currentParamY];
+                                listParamIndex = currentList.Count - 1;
+                            }
+                        }
+                        else isSave = false;
+                        break;
+
+                    case ConsoleKey.DownArrow:
+                    case ConsoleKey.S:
+                        if (listParamIndex == currentList.Count - 1 && currentParamY == 1 && currentParamX == 2 && !isSave)
+                        {
+                            isSave = true;
+                            DrawParam(currentList[listParamIndex], redrawDistance, false);
+                        }
+                        else if (listParamIndex < currentList.Count - 1 && listParamIndex >= 0 && !isSave)
+                            listParamIndex++;
+                        else if (!isSave)
+                        {
+                            if (currentParamX < allParams.GetLength(0) - 1
+                                && allParams[currentParamX + 1, currentParamY] != null
+                                && allParams[currentParamX + 1, currentParamY].Count > 0)
+                            {
+                                currentParamX++;
+                                currentList = allParams[currentParamX, currentParamY];
+                                listParamIndex = 0;
+                            }
+                        }
+                        break;
+
+                    case ConsoleKey.LeftArrow:
+                    case ConsoleKey.A:
+                        if (currentParamY > 0
+                            && allParams[currentParamX, currentParamY - 1] != null
+                            && allParams[currentParamX, currentParamY - 1].Count > 0
+                            && !isSave)
+                        {
+                            currentParamY--;
+                            currentList = allParams[currentParamX, currentParamY];
+                            listParamIndex = 0;
+                        }
+                        break;
+
+                    case ConsoleKey.RightArrow:
+                    case ConsoleKey.D:
+                        if (currentParamY < allParams.GetLength(1) - 1
+                            && allParams[currentParamX, currentParamY + 1] != null
+                            && allParams[currentParamX, currentParamY + 1].Count > 0
+                            && !isSave)
+                        {
+                            currentParamY++;
+                            currentList = allParams[currentParamX, currentParamY];
+                            listParamIndex = 0;
+                        }
+                        break;
+
+                    case ConsoleKey.PageUp:
+                    case ConsoleKey.Q:
+                    case ConsoleKey.OemComma:
+                        if (listParamIndex >= 0 && !isSave)
+                        {
+                            ModifyParamValue(currentList[listParamIndex], true);
+                            redrawDistance = GetRedrawDistance(currentList, currentList[listParamIndex]);
+                            DrawParam(currentList[listParamIndex], redrawDistance, true);
+                        }
+                        break;
+
+                    case ConsoleKey.PageDown:
+                    case ConsoleKey.E:
+                    case ConsoleKey.OemPeriod:
+                        if (listParamIndex >= 0 &&isSave)
+                        {
+                            ModifyParamValue(currentList[listParamIndex], false);
+                            redrawDistance = GetRedrawDistance(currentList, currentList[listParamIndex]);
+                            DrawParam(currentList[listParamIndex], redrawDistance, true);
+                        }
+                        break;
+                    
+                    case ConsoleKey.Spacebar:
+                    case ConsoleKey.Enter:
+                        if (listParamIndex >= 0 && !isSave)
+                        {
+                            var p = currentList[listParamIndex];
+                            if (p.ParamType == ParamType.Bool)
+                            {
+                                ToggleBoolParam(p);
+                                DrawParam(p, redrawDistance, true);
+                            }
+                            else if (p.ParamType == ParamType.String)
+                            {
+                                typingString = true;
+                                tempStringValue = GetParamString(p);
+                                DrawParam(p, redrawDistance, true, tempStringValue);
+                            }
+                        }
+                        else selecting = false;
+                        break;
+                }
+
+                if (oldIndex >= 0 && oldParam != null && oldIndex < (allParams[oldX, oldY] ?? new()).Count && !isSave)
+                {
+                    DrawParam(allParams[oldX, oldY][oldIndex], oldRedrawDistance, false);
+                }
+                if (listParamIndex >= 0 && listParamIndex < currentList.Count && !isSave)
+                {
+                    redrawDistance = GetRedrawDistance(currentList, currentList[listParamIndex]);
+                    DrawParam(currentList[listParamIndex], redrawDistance, true);
+                }
+                else if (isSave)
+                {
+                    Console.SetCursorPosition(terminalCentre.x - saveWidth / 2 + saveWidth / 2 - 2 , terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset + bottomHeight + 1);
+                    Console.Write(
+                        Map.SetBackgroundColor(selectColor.r, selectColor.g, selectColor.b) +
+                        Map.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b) +
+                        $"SAVE{Map.ResetColor()}"
+                    );
+                }
+                if (!isSave)
+                {
+                    Console.SetCursorPosition(terminalCentre.x - saveWidth / 2 + saveWidth / 2 - 2 , terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset + bottomHeight + 1);
+                    Console.Write("SAVE");
+                }
+            }
+            else
+            {
+                if (key.Key == ConsoleKey.Backspace)
+                {
+                    if (tempStringValue.Length > 0)
+                    {
+                        tempStringValue = tempStringValue[..^1];
+                        DrawParam(currentList[listParamIndex], redrawDistance, true, tempStringValue);
+                    }
+                }
+                else if (key.Key == ConsoleKey.Enter)
+                {
+                    typingString = false;
+                    if (listParamIndex >= 0)
+                    {
+                        SetParamValue(currentList[listParamIndex], tempStringValue, conf);
+                        DrawParam(currentList[listParamIndex], redrawDistance, true);
+                    }
+                }
+                else if (key.Key == ConsoleKey.Escape)
+                {
+                    typingString = false;
+                    if (listParamIndex >= 0)
+                    {
+                        tempStringValue = GetParamString(currentList[listParamIndex]);
+                        DrawParam(currentList[listParamIndex], redrawDistance, true);
+                    }
+                }
+                else if (!char.IsControl(key.KeyChar))
+                {
+                    if (tempStringValue.Length < 20)
+                    {
+                        tempStringValue += key.KeyChar;
+                        DrawParam(currentList[listParamIndex], redrawDistance, true, tempStringValue);
+                    }
+                }
+            }
+            // Console.SetCursorPosition(0, 0);
+            // Console.Write(isSave);
+        }
+    }
+    private int GetRedrawDistance(List<ParamCoordinate> paramList, ParamCoordinate param, bool old = false)
+    {
+        return !old ? Math.Max(GetConfWindowWidth(paramList) - 2 - param.PropertyName.Length - 6 - GetParamValue(param).Length, 0) :
+        Math.Max(GetConfWindowWidth(paramList) - 2 - param.PropertyName.Length - 6 - GetParamValue(param).Length, 0);
+    }
+    private void ModifyParamValue(ParamCoordinate param, bool increase)
+    {
+        if (param.ParamType == ParamType.Int)
+        {
+            int val = GetParamInt(param);
+            val += increase ? 1 : -1;
+            SetParamValue(param, val, conf);
+        }
+        else if (param.ParamType == ParamType.Double)
+        {
+            double val = GetParamDouble(param);
+            val += increase ? 0.1 : -0.1;
+            SetParamValue(param, Math.Round(val, 2), conf);
+        }
+    }
+    private void ToggleBoolParam(ParamCoordinate param)
+    {
+        bool current = GetParamBool(param) == "✔";
+        SetParamValue(param, !current, conf);
+    }
+    private static void SetParamValue(ParamCoordinate param, object newValue, Config config)
+    {
+        var prop = config.GetType().GetProperty(param.PropertyName);
+        if (prop != null && prop.CanWrite)
+        {
+            try
+            {
+                var convertedValue = Convert.ChangeType(newValue, prop.PropertyType);
+                prop.SetValue(config, convertedValue);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error setting property {param.PropertyName}: {ex.Message}");
+            }
+        }
+    }
+    public void SelectParam(ParamCoordinate param)
+    {
+        string value = param.ParamType switch
+        {
+            ParamType.Bool => GetParamBool(param),
+            ParamType.Int => GetParamInt(param).ToString(),
+            ParamType.Double => GetParamDouble(param).ToString(),
+            ParamType.String => GetParamString(param),
+            _ => ""
+        };
+        Console.SetCursorPosition(param.X, param.Y);
+        Console.Write(
+            $"{Map.SetBackgroundColor(selectColor.r, selectColor.g, selectColor.g)}" +
+            $"{Map.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b)}" +
+            $"{param.PropertyName} - {value}{Map.ResetColor()}"
+        );
+    }
     public void DisplayMapConfig()
     {
-        int configWidth = 95;
-        int configHeight = Console.WindowHeight;
-        int mapConfigOffset = 25;
-        int mapConfigHeight = configHeight / 2 - 10;
-        int gamerulesHeight = configHeight / 2 - 20;
-        int structuresHeight = 15;
-        int bottomHeight = configHeight / 2 - 18;
-        int heightOffset = (Console.WindowHeight - (10 + gamerulesHeight + structuresHeight + bottomHeight)) / 2;
-
+        Console.Clear();
         (int r, int g, int b) tColor = ColorSpectrum.CYAN;
-        (int x, int y) terminalCentre = (Console.WindowWidth / 2, Console.WindowHeight / 2);
         DrawColoredBox(terminalCentre.x - configWidth / 2, terminalCentre.y - configHeight / 2 + heightOffset, configWidth, 10, "", ColorSpectrum.LIGHT_CYAN); // Title
         DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset, terminalCentre.y - configHeight / 2 + 10 + heightOffset, configWidth - mapConfigOffset, mapConfigHeight, "Map Config", ColorSpectrum.BURNT_ORANGE); // Map Config
         DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset, terminalCentre.y - configHeight / 2 + 10 + configHeight / 2 - 10 + heightOffset, configWidth - mapConfigOffset, gamerulesHeight + structuresHeight - mapConfigHeight, "Events", ColorSpectrum.YELLOW); // Events
@@ -7142,8 +7840,12 @@ public class Map
         DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset, terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset, (configWidth - mapConfigOffset) / 2 - 1, bottomHeight, "Animals", ColorSpectrum.PALE_TURQUOISE); // Animals
         DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset + (configWidth - mapConfigOffset) / 2, terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset, (configWidth - mapConfigOffset) / 2, bottomHeight / 2, "Disasters", ColorSpectrum.INDIAN_RED); // Disasters
         DrawColoredBox(terminalCentre.x - configWidth / 2 + mapConfigOffset + (configWidth - mapConfigOffset) / 2, terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + bottomHeight / 2 + heightOffset, (configWidth - mapConfigOffset) / 2, bottomHeight % 2 == 0 ? bottomHeight / 2 : bottomHeight / 2 + 1, "Visuals", ColorSpectrum.LIGHT_STEEL_BLUE);  // Visuals
-
+        DrawColoredBox(terminalCentre.x - saveWidth / 2, terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset + bottomHeight, saveWidth, 3, "", ColorSpectrum.LIGHT_CYAN); // Bottom
         DisplayCenteredTextAtCords(title, terminalCentre.x, terminalCentre.y - configHeight / 2 + heightOffset + 5, tColor);
+        Console.SetCursorPosition(terminalCentre.x - saveWidth / 2 + saveWidth / 2 - 2 , terminalCentre.y + gamerulesHeight + structuresHeight - mapConfigHeight + heightOffset + bottomHeight + 1);
+        Console.Write("SAVE");
+        CalculateParamCoordinates();
+        DrawAllParams();
     }
     #endregion
     #region update functions
@@ -7227,7 +7929,7 @@ public class Map
                 try
                 {
                     (int x, int y) = GetRandomPointInAllowedTiles(allowedTiles);
-                    Crab crab = new Crab(x, y, conf.Width, conf.Height, mapData, seed);
+                    Crab crab = new Crab(x, y, conf.Width, conf.Height, mapData, rng.Next());
                     crabs.Add(crab);
                     overlayData[x, y] = 'c'; // Represent Crab with 'C'
                 }
@@ -7246,7 +7948,7 @@ public class Map
                 try
                 {
                     (int x, int y) = GetRandomPointInAllowedTiles(allowedTiles);
-                    Turtle turtle = new Turtle(x, y, conf.Width, conf.Height, mapData, overlayData, conf.Height, conf.Width, seed);
+                    Turtle turtle = new Turtle(x, y, conf.Width, conf.Height, mapData, overlayData, conf.Height, conf.Width, rng.Next());
                     turtles.Add(turtle);
                     overlayData[x, y] = 'T'; // Represent Turtle with 'T'
                 }
@@ -7297,7 +7999,7 @@ public class Map
                         (x, y) = GetRandomPointInRange(startX, startY, 1, 3);
                         if (mapData[x, y] == 'P')
                         {
-                            Cow cow = new Cow(x, y, mapData, overlayData, seed);
+                            Cow cow = new Cow(x, y, mapData, overlayData, rng.Next());
                             cows.Add(cow);
                             overlayData[x, y] = 'C'; // Represent Cow with 'C'
                             placedCows = true;
@@ -7357,7 +8059,7 @@ public class Map
                         (x, y) = GetRandomPointInRange(startX, startY, 1, 3);
                         if (mapData[x, y] == 'P')
                         {
-                            Sheep sheep = new Sheep(x, y, mapData, overlayData, seed);
+                            Sheep sheep = new Sheep(x, y, mapData, overlayData, rng.Next());
                             sheeps.Add(sheep);
                             overlayData[x, y] = 'S'; // Represent Sheep with 'S'
                             placedCows = true;
@@ -7553,9 +8255,12 @@ public class Map
         UpdateWeather();
         UpdateGradientDirection(weather.TimeOfDay);
         UpdateCloudProperties();
-        UpdateCrabs();
-        UpdateTurtles();
-        UpdateCows();
-        UpdateSheeps();
+        if (conf.EnableAnimalMovement) 
+        {
+            UpdateCrabs();
+            UpdateTurtles();
+            UpdateCows();
+            UpdateSheeps();
+        }
     }
 }

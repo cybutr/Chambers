@@ -18,29 +18,30 @@ public class Config
     public double PlainsHeightThreshold { get; set; }
     public double ForestHeightThreshold { get; set; }
     public double MountainHeightThreshold { get; set; }
-    public bool EnableRivers { get; set; }
-    public bool EnableLakes { get; set; }
-    public bool EnableMountainRanges { get; set; }
-    public bool EnableTempatureBiomeChanges { get; set; }
-    public bool EnableHumidityBiomeChanges { get; set; }
-    public int BiomeBlend { get; set; }
+    public bool EnableRivers { get; set; } = true;
+    public bool EnableLakes { get; set; } = true;
+    public bool EnableMountainRanges { get; set; } = true;
+    public bool EnableTempatureBiomeChanges { get; set; } = true;
+    public bool EnableHumidityBiomeChanges { get; set; } = true;
+    public int BiomeBlend { get; set; } = 5;
 
     // Gamerules
     public bool EnableWildfires { get; set; }
-    public bool EnableSecrets { get; set; }
-    public bool DoTimeCycle { get; set; }
-    public bool DoWeatherCycle { get; set; }
+    public bool EnableSecrets { get; set; } = false;
+    public bool DoTimeCycle { get; set; } = true;
+    public bool DoWeatherCycle { get; set; } = true;
 
     // Structures
-    public bool GenerateStructures { get; set; }
+    public bool GenerateStructrs { get; set; }
     public bool EnableVillages { get; set; }
     public bool EnableCities { get; set; }
     public bool EnableDungeons { get; set; }
     
     // Animals
-    public bool GenerateAnimals { get; set; }
-    public bool EnableAnimalMovement { get; set; }
-    public bool EnableAnimalBreeding { get; set; }
+    public bool GenerateAnimals { get; set; } = true;
+    public bool EnablePredators { get; set; } = true;
+    public bool EnableAnimalMovement { get; set; } = true;
+    public bool EnableAnimalBreeding { get; set; } 
     public bool EnableAnimalDeath { get; set; }
     public bool EnableAnimalExtinction { get; set; }
     public bool EnableAnimalMigration { get; set; }
@@ -56,26 +57,26 @@ public class Config
 
     // Events
     public bool EnableRobberies { get; set; }
-    public bool EnableKidnappings { get; set; }
+//    public bool EnableKidnappings { get; set; }
     public bool EnableMurders { get; set; }
     public bool EnableRiots { get; set; }
     public bool EnablePlagues { get; set; }
-    public bool EnableInvasions { get; set; }
+//    public bool EnableInvasions { get; set; }
     public bool EnableWars { get; set; }
 
     // Economy
     public bool EnableTrade { get; set; }
-    public bool EnableBartering { get; set; }
+//    public bool EnableBartering { get; set; }
     public bool EnableCurrency { get; set; }
     public bool EnableTaxes { get; set; }
     public bool EnableBanks { get; set; }
 
     // Visuals
-    public bool DisplayShadows { get; set; }
-    public bool DisplayWaves { get; set; }
-    public int NumberOfWaves { get; set; }
+    public bool DisplayShadows { get; set; } = true;
+    public bool DisplayWaves { get; set; } = true;
+    public int NumberOfWaves { get; set; } = 8;
 
-    public int Seed { get; set; }
+    public string Seed { get; set; }
 
     public Config(int mapWidth, int mapHeight, double noiseScale, double erosionFactor, int minBiomeSize, int minLakeSize, int minRiverWidth, int maxRiverWidth, double riverFlowChance, double plainsHeightThreshold, double forestHeightThreshold, double mountainHeightThreshold, string seed)
     {
@@ -91,7 +92,7 @@ public class Config
         PlainsHeightThreshold = plainsHeightThreshold;
         ForestHeightThreshold = forestHeightThreshold;
         MountainHeightThreshold = mountainHeightThreshold;
-        Seed = Program.ConvertStringToNumbers(seed);
+        Seed = seed;
     }
 }
 public class GUIConfig

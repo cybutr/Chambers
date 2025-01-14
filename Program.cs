@@ -25,7 +25,7 @@ namespace Internal
     {
         #region map
         //public static int seed = DateTime.Now.Millisecond;
-        public static string seedString = "marekgirly";
+        public static string seedString = Math.Round(new Random().Next() * ((new Random().NextDouble() - 0.5) * 2)).ToString();
         public static int seed = ConvertStringToNumbers(seedString);
         public Random rng = new Random(seed);
         public static List<Map> chambers = new List<Map>();
@@ -45,6 +45,18 @@ namespace Internal
         public static List<string> eventBuffer = new List<string>();
         public static Config config = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding, 
         10.0, 0.2, 12, 16, 7, 10, 0.4, 0.7, 0.4, 1.0, seedString);
+        // Loading screen
+        public static string asciiArt = @"
+                        _,.---._        ,---.                       .=-.-.  .-._               _,---.                     
+        _.-.       ,-.' , -  `.    .--.'  \       _,..---._     /==/_ / /==/ \  .-._    _.='.'-,  \                       
+        .-,.'|      /==/_,  ,  - \   \==\-/\ \    /==/,   -  \   |==|, |  |==|, \/ /, /  /==.'-     /                     
+        |==|, |     |==|   .=.     |  /==/-|_\ |   |==|   _   _\  |==|  |  |==|-  \|  |  /==/ -   .-'                     
+        |==|- |     |==|_ : ;=:  - |  \==\,   - \  |==|  .=.   |  |==|- |  |==| ,  | -|  |==|_   /_,-.                    
+        |==|, |     |==| , '='     |  /==/ -   ,|  |==|,|   | -|  |==| ,|  |==| -   _ |  |==|  , \_.' )                   
+        |==|- `-._   \==\ -    ,_ /  /==/-  /\ - \ |==|  '='   /  |==|- |  |==|  /\ , |  \==\-  ,    (   .=.   .=.   .=.  
+        /==/ - , ,/   '.='. -   .'   \==\ _.\=\.-' |==|-,   _`/   /==/. /  /==/, | |- |   /==/ _  ,  /  :=; : :=; : :=; : 
+        `--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=` ";
+
         public static void Main(string[] args)
         {
             EnableVirtualTerminalProcessing();
@@ -54,18 +66,6 @@ namespace Internal
 
             eventBuffer.Add("None");
             Console.CursorVisible = false;
-
-            // Loading screen
-            string asciiArt = @"
-                            _,.---._        ,---.                       .=-.-.  .-._               _,---.                     
-            _.-.       ,-.' , -  `.    .--.'  \       _,..---._     /==/_ / /==/ \  .-._    _.='.'-,  \                       
-            .-,.'|      /==/_,  ,  - \   \==\-/\ \    /==/,   -  \   |==|, |  |==|, \/ /, /  /==.'-     /                     
-            |==|, |     |==|   .=.     |  /==/-|_\ |   |==|   _   _\  |==|  |  |==|-  \|  |  /==/ -   .-'                     
-            |==|- |     |==|_ : ;=:  - |  \==\,   - \  |==|  .=.   |  |==|- |  |==| ,  | -|  |==|_   /_,-.                    
-            |==|, |     |==| , '='     |  /==/ -   ,|  |==|,|   | -|  |==| ,|  |==| -   _ |  |==|  , \_.' )                   
-            |==|- `-._   \==\ -    ,_ /  /==/-  /\ - \ |==|  '='   /  |==|- |  |==|  /\ , |  \==\-  ,    (   .=.   .=.   .=.  
-            /==/ - , ,/   '.='. -   .'   \==\ _.\=\.-' |==|-,   _`/   /==/. /  /==/, | |- |   /==/ _  ,  /  :=; : :=; : :=; : 
-            `--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=` ";
 
             if (Console.WindowHeight < 60 || Console.WindowWidth < 100)
             {
@@ -80,7 +80,7 @@ namespace Internal
                 int.TryParse(args[0], out seed);
             }
             Random globalRandom = new Random(seed);
-            Map chamber1 = new Map(config);
+            Map chamber1 = new Map();
             Console.Clear();
             isConfiguring = chamber1.GetConfig();
             DisplayCenteredText(asciiArt);
@@ -104,49 +104,50 @@ namespace Internal
             // Start the GUI update thread
             Thread guiThread = new Thread(() => programInstance.UpdateGUI());
             guiThread.Start();
-
-            while (continueSimulating && !isConfiguring)
+            while (continueSimulating)
             {
-                if (isCommandInputMode)
+                while (!isConfiguring)
                 {
-                    Console.ResetColor(); // Reset color before reading commands
-                    Console.SetCursorPosition(0, chamber1.height + GUIConfig.TopPadding + 2);
-                    Console.Write(">> "); // Prompt for input
-                    string? command = ReadCommandWithAutocomplete(); // Read input
-                    if (command != null)
+                    if (isCommandInputMode)
                     {
-                        if (command.ToLower() == "exit")
+                        Console.ResetColor(); // Reset color before reading commands
+                        Console.SetCursorPosition(0, chamber1.height + GUIConfig.TopPadding + 2);
+                        Console.Write(">> "); // Prompt for input
+                        string? command = ReadCommandWithAutocomplete(); // Read input
+                        if (command != null)
                         {
-                            continueSimulating = false;
-                        }
-                        else if (command.ToLower().StartsWith("chamber "))
-                        {
-                            int chamberIndex;
-                            if (int.TryParse(command.Split(' ')[1], out chamberIndex) && chamberIndex >= 0 && chamberIndex < chambers.Count)
+                            if (command.ToLower() == "exit")
                             {
-                                currentChamberIndex = chamberIndex;
+                                continueSimulating = false;
+                            }
+                            else if (command.ToLower().StartsWith("chamber "))
+                            {
+                                int chamberIndex;
+                                if (int.TryParse(command.Split(' ')[1], out chamberIndex) && chamberIndex >= 0 && chamberIndex < chambers.Count)
+                                {
+                                    currentChamberIndex = chamberIndex;
+                                    DisplayCurrentChamber();
+                                }
+                            }
+                            else
+                            {
+                                for (int i = 0; i < GUIConfig.BottomPadding; i++)
+                                {
+                                    Console.SetCursorPosition(0, Console.BufferHeight - i - 1);
+                                    Console.Write(new string(' ', Console.BufferWidth));
+                                }
+                                continueSimulating = programInstance.ProcessCommand(command);
                                 DisplayCurrentChamber();
                             }
                         }
-                        else
-                        {
-                            for (int i = 0; i < GUIConfig.BottomPadding; i++)
-                            {
-                                Console.SetCursorPosition(0, Console.BufferHeight - i - 1);
-                                Console.Write(new string(' ', Console.BufferWidth));
-                            }
-                            continueSimulating = programInstance.ProcessCommand(command);
-                            DisplayCurrentChamber();
-                        }
+                        isCommandInputMode = false; // Exit command input mode after processing the command
                     }
-                    isCommandInputMode = false; // Exit command input mode after processing the command
-                }
-                else
-                {
-                    Thread.Sleep(100); // Adjust the sleep time as needed
+                    else
+                    {
+                        Thread.Sleep(100); // Adjust the sleep time as needed
+                    }
                 }
             }
-
             // Ensure the update thread stops when the simulation ends
             updateThread.Join();
             keyListenerThread.Join();
@@ -222,226 +223,237 @@ namespace Internal
         public int minSleepTime = 10;
         private void ListenForKeyPress()
         {
-            while (continueSimulating && !isConfiguring)
+            while (continueSimulating)
             {
-                if (Console.KeyAvailable)
+                while (!isConfiguring)
                 {
-                    var key = Console.ReadKey(true).Key;
-                    if ((key == ConsoleKey.P || key == ConsoleKey.Spacebar) && !isCommandInputMode)
+                    if (Console.KeyAvailable)
                     {
-                        IsHumidityRendering = false;
-                        IsTemperatureRendering = false;
-                        isUpdating = !isUpdating;
-                    }
-                    else if (key == ConsoleKey.C && !isUpdating)
-                    {
-                        isCommandInputMode = !isCommandInputMode;
-                    }
-                    else if (key == ConsoleKey.R)
-                    {
-                        chambers[currentChamberIndex].Generate();
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.Q) && !isUpdating)
-                    {
-                        isCloudsRendering = !isCloudsRendering;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if (key == ConsoleKey.LeftArrow && chambers.Count > 1 && currentChamberIndex > 0 && !isUpdating)
-                    {
-                        currentChamberIndex--;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if (key == ConsoleKey.RightArrow && chambers.Count > 1 && currentChamberIndex < chambers.Count - 1 && !isUpdating)
-                    {
-                        currentChamberIndex++;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if (key == ConsoleKey.DownArrow && chambers.Count > 1 && currentChamberIndex != 0 && !isUpdating)
-                    {
-                        currentChamberIndex = 0;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if (key == ConsoleKey.UpArrow && chambers.Count > 1 && currentChamberIndex != chambers.Count - 1 && !isUpdating)
-                    {
-                        currentChamberIndex = chambers.Count - 1;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D1 || key == ConsoleKey.NumPad1) && chambers.Count > 0 && currentChamberIndex != 0 && !isUpdating)
-                    {
-                        currentChamberIndex = 0;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D2 || key == ConsoleKey.NumPad2) && chambers.Count > 1 && currentChamberIndex != 1 && !isUpdating)
-                    {
-                        currentChamberIndex = 1;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D3 || key == ConsoleKey.NumPad3) && chambers.Count > 2 && currentChamberIndex != 2 && !isUpdating)
-                    {
-                        currentChamberIndex = 2;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D4 || key == ConsoleKey.NumPad4) && chambers.Count > 3 && currentChamberIndex != 3 && !isUpdating)
-                    {
-                        currentChamberIndex = 3;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D5 || key == ConsoleKey.NumPad5) && chambers.Count > 4 && currentChamberIndex != 4 && !isUpdating)
-                    {
-                        currentChamberIndex = 4;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D6 || key == ConsoleKey.NumPad6) && chambers.Count > 5 && currentChamberIndex != 5 && !isUpdating)
-                    {
-                        currentChamberIndex = 5;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D7 || key == ConsoleKey.NumPad7) && chambers.Count > 6 && currentChamberIndex != 6 && !isUpdating)
-                    {
-                        currentChamberIndex = 6;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D8 || key == ConsoleKey.NumPad8) && chambers.Count > 7 && currentChamberIndex != 7 && !isUpdating)
-                    {
-                        currentChamberIndex = 7;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D9 || key == ConsoleKey.NumPad9) && chambers.Count > 8 && currentChamberIndex != 8 && !isUpdating)
-                    {
-                        currentChamberIndex = 8;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if ((key == ConsoleKey.D0 || key == ConsoleKey.NumPad0) && chambers.Count > 9 && currentChamberIndex != 9 && !isUpdating)
-                    {
-                        currentChamberIndex = 9;
-                        UpdateChamberStats();
-                        DisplayCurrentChamber();
-                    }
-                    else if (key == ConsoleKey.PageDown)
-                    {
-                        if (sleepTime < maxSleepTime)
+                        var key = Console.ReadKey(true).Key;
+                        if ((key == ConsoleKey.P || key == ConsoleKey.Spacebar) && !isCommandInputMode)
                         {
-                            sleepTime += 10;
+                            IsHumidityRendering = false;
+                            IsTemperatureRendering = false;
+                            isUpdating = !isUpdating;
+                        }
+                        else if (key == ConsoleKey.C && !isUpdating)
+                        {
+                            isCommandInputMode = !isCommandInputMode;
+                        }
+                        else if (key == ConsoleKey.R)
+                        {
+                            chambers[currentChamberIndex].Generate();
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.Q) && !isUpdating)
+                        {
+                            isCloudsRendering = !isCloudsRendering;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if (key == ConsoleKey.LeftArrow && chambers.Count > 1 && currentChamberIndex > 0 && !isUpdating)
+                        {
+                            currentChamberIndex--;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if (key == ConsoleKey.RightArrow && chambers.Count > 1 && currentChamberIndex < chambers.Count - 1 && !isUpdating)
+                        {
+                            currentChamberIndex++;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if (key == ConsoleKey.DownArrow && chambers.Count > 1 && currentChamberIndex != 0 && !isUpdating)
+                        {
+                            currentChamberIndex = 0;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if (key == ConsoleKey.UpArrow && chambers.Count > 1 && currentChamberIndex != chambers.Count - 1 && !isUpdating)
+                        {
+                            currentChamberIndex = chambers.Count - 1;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D1 || key == ConsoleKey.NumPad1) && chambers.Count > 0 && currentChamberIndex != 0 && !isUpdating)
+                        {
+                            currentChamberIndex = 0;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D2 || key == ConsoleKey.NumPad2) && chambers.Count > 1 && currentChamberIndex != 1 && !isUpdating)
+                        {
+                            currentChamberIndex = 1;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D3 || key == ConsoleKey.NumPad3) && chambers.Count > 2 && currentChamberIndex != 2 && !isUpdating)
+                        {
+                            currentChamberIndex = 2;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D4 || key == ConsoleKey.NumPad4) && chambers.Count > 3 && currentChamberIndex != 3 && !isUpdating)
+                        {
+                            currentChamberIndex = 3;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D5 || key == ConsoleKey.NumPad5) && chambers.Count > 4 && currentChamberIndex != 4 && !isUpdating)
+                        {
+                            currentChamberIndex = 4;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D6 || key == ConsoleKey.NumPad6) && chambers.Count > 5 && currentChamberIndex != 5 && !isUpdating)
+                        {
+                            currentChamberIndex = 5;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D7 || key == ConsoleKey.NumPad7) && chambers.Count > 6 && currentChamberIndex != 6 && !isUpdating)
+                        {
+                            currentChamberIndex = 6;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D8 || key == ConsoleKey.NumPad8) && chambers.Count > 7 && currentChamberIndex != 7 && !isUpdating)
+                        {
+                            currentChamberIndex = 7;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D9 || key == ConsoleKey.NumPad9) && chambers.Count > 8 && currentChamberIndex != 8 && !isUpdating)
+                        {
+                            currentChamberIndex = 8;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if ((key == ConsoleKey.D0 || key == ConsoleKey.NumPad0) && chambers.Count > 9 && currentChamberIndex != 9 && !isUpdating)
+                        {
+                            currentChamberIndex = 9;
+                            UpdateChamberStats();
+                            DisplayCurrentChamber();
+                        }
+                        else if (key == ConsoleKey.PageDown)
+                        {
+                            if (sleepTime < maxSleepTime)
+                            {
+                                sleepTime += 10;
+                            }
+                        }
+                        else if (key == ConsoleKey.PageUp)
+                        {
+                            if (sleepTime > minSleepTime)
+                            {
+                                sleepTime -= 10;
+                            }
+                        }
+                        else if (key == ConsoleKey.T && !isUpdating && !IsHumidityRendering)
+                        {
+                            if (IsTemperatureRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
+                            IsHumidityRendering = false;
+                            if (!IsTemperatureRendering) chambers[currentChamberIndex].RenderTemperatureNoise();
+                            else chambers[currentChamberIndex].DisplayMap();
+                            IsTemperatureRendering = !IsTemperatureRendering;
+                        }
+                        else if (key == ConsoleKey.H && !isUpdating && !IsTemperatureRendering)
+                        {
+                            if (!IsHumidityRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
+                            IsTemperatureRendering = false;
+                            if (!IsHumidityRendering) chambers[currentChamberIndex].RenderHumidityNoise();
+                            else chambers[currentChamberIndex].DisplayMap();
+                            IsHumidityRendering = !IsHumidityRendering;
                         }
                     }
-                    else if (key == ConsoleKey.PageUp)
-                    {
-                        if (sleepTime > minSleepTime)
-                        {
-                            sleepTime -= 10;
-                        }
-                    }
-                    else if (key == ConsoleKey.T && !isUpdating && !IsHumidityRendering)
-                    {
-                        if (IsTemperatureRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
-                        IsHumidityRendering = false;
-                        if (!IsTemperatureRendering) chambers[currentChamberIndex].RenderTemperatureNoise();
-                        else chambers[currentChamberIndex].DisplayMap();
-                        IsTemperatureRendering = !IsTemperatureRendering;
-                    }
-                    else if (key == ConsoleKey.H && !isUpdating && !IsTemperatureRendering)
-                    {
-                        if (!IsHumidityRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
-                        IsTemperatureRendering = false;
-                        if (!IsHumidityRendering) chambers[currentChamberIndex].RenderHumidityNoise();
-                        else chambers[currentChamberIndex].DisplayMap();
-                        IsHumidityRendering = !IsHumidityRendering;
-                    }
+                    Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                 }
-                Thread.Sleep(sleepTime); // Adjust the sleep time as needed
             }
         }
         private void UpdateMaps()
         {
-            while (continueSimulating && !isConfiguring)
+            while (continueSimulating)
             {
-                lock (mapLock)
+                while (!isConfiguring)
                 {
-                    UpdateChamberStats();
-                    if (isUpdating)
+                    lock (mapLock)
                     {
-                        foreach (var chamber in chambers)
+                        UpdateChamberStats();
+                        if (isUpdating)
                         {
-                            chamber.Update(); // Call the Update function to modify mapData and overlayData if needed
-                            for (int y = 0; y < chambers[currentChamberIndex].height; y++)
+                            foreach (var chamber in chambers)
                             {
-                                for (int x = 0; x < chambers[currentChamberIndex].width; x++)
+                                chamber.Update(); // Call the Update function to modify mapData and overlayData if needed
+                                for (int y = 0; y < chambers[currentChamberIndex].height; y++)
                                 {
-                                    if (chambers[currentChamberIndex].HasTileChanged(x, y))
+                                    for (int x = 0; x < chambers[currentChamberIndex].width; x++)
                                     {
-                                        chambers[currentChamberIndex].UpdateTile(x, y);
-                                    }
-                                    if (chambers[currentChamberIndex].HasOverlayTileChanged(x, y))
-                                    {
-                                        chambers[currentChamberIndex].UpdateOverlayTile(x, y);
+                                        if (chambers[currentChamberIndex].HasTileChanged(x, y))
+                                        {
+                                            chambers[currentChamberIndex].UpdateTile(x, y);
+                                        }
+                                        if (chambers[currentChamberIndex].HasOverlayTileChanged(x, y))
+                                        {
+                                            chambers[currentChamberIndex].UpdateOverlayTile(x, y);
+                                        }
                                     }
                                 }
+                                chamber.UpdatePreviousMapData();
+                                chamber.UpdatePreviousOverlayData();
+                                Console.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
                             }
-                            chamber.UpdatePreviousMapData();
-                            chamber.UpdatePreviousOverlayData();
-                            Console.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
+                            UpdateChamberStats();
                         }
-                        UpdateChamberStats();
+                        Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                     }
-                    Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                 }
             }
         }
         private void UpdateWeather()
         {
-            while (continueSimulating && !isConfiguring)
+            while (continueSimulating)
             {
-                lock (mapLock)
-                {  
-                    if (isUpdating)
-                    {
-                        var currentMap = chambers[currentChamberIndex];
-                        currentMap.AnimateWater();
-                        if (currentMap.isCloudsShadowsRendering) 
-                            currentMap.DisplayCloudShadows();
-                        currentMap.DisplayDayNightTransition();
-                        foreach (var chamber in chambers)
+                while (!isConfiguring)
+                {
+                    lock (mapLock)
+                    {  
+                        if (isUpdating)
                         {
-                            chamber.UpdateClouds();
+                            var currentMap = chambers[currentChamberIndex];
+                            currentMap.AnimateWater();
+                            currentMap.DisplayDayNightTransition();
+                            foreach (var chamber in chambers)
+                            {
+                                chamber.UpdateClouds();
+                            }
+                            if (currentMap.isCloudsRendering)
+                            {
+                                currentMap.RenderClouds(); // Ensure this is called correctly
+                            }
+                            if (currentMap.isCloudsShadowsRendering) 
+                                currentMap.DisplayCloudShadows();
                         }
-                        if (currentMap.isCloudsRendering)
-                        {
-                            currentMap.RenderClouds(); // Ensure this is called correctly
-                        }
-                        // ...rest of update code...
+                        Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                     }
-                    Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                 }
             }
         }
         private void UpdateGUI()
         {
-            while (continueSimulating && !isConfiguring)
+            while (continueSimulating)
             {
-                lock (mapLock)
+                while (!isConfiguring)
                 {
-                    if (isUpdating)
+                    lock (mapLock)
                     {
-                        chambers[currentChamberIndex].UpdateGUIValues();
-                        Console.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
+                        if (isUpdating)
+                        {
+                            chambers[currentChamberIndex].UpdateGUIValues();
+                            Console.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
+                        }
+                        Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                     }
-                    Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                 }
             }
         }
@@ -521,10 +533,19 @@ namespace Internal
                 case "addchamber":
                     if (tokens.Length > 1)
                     {
-                        for (int i = 0; i < int.Parse(tokens[1]); i++)
+                        int numberOfChambers;
+                        if (!int.TryParse(tokens[1], out numberOfChambers))
                         {
+                            numberOfChambers = 1;
+                        }
+
+                        for (int i = 0; i < numberOfChambers; i++)
+                        {
+                            isConfiguring = true;
                             seed = rng.Next();
-                            Map newChamber = new Map(config);
+                            Map newChamber = new Map();
+                            isConfiguring = newChamber.GetConfig();
+                            DisplayCenteredText(asciiArt);
                             newChamber.Generate();
                             chambers.Add(newChamber);
                             outputBuffer.Add("Added a new chamber.");
@@ -532,8 +553,11 @@ namespace Internal
                     }
                     else
                     {
+                        isConfiguring = true;
                         seed = rng.Next();
-                        Map newChamber = new Map(config);
+                        Map newChamber = new Map();
+                        isConfiguring = newChamber.GetConfig();
+                        DisplayCenteredText(asciiArt);
                         newChamber.Generate();
                         chambers.Add(newChamber);
                         outputBuffer.Add("Added a new chamber.");

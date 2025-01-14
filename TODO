@@ -1,5 +1,6 @@
 // TODO: Weather System - Almost Done
 // TODO: Villages
+// TODO: Dungeons
 // TODO: Map GUI - Weather Radar, Population
 // TODO: Flowers
 // TODO: Wildfires
@@ -8,7 +9,7 @@
 // TODO: Seasons
 // TODO: Day/Night cycle - Done
 // TODO: Events
-// TODO: Meteors
+// TODO: Disasters
 // TODO: Volcanoes
 // TODO: More Biomes
 // TODO: Animal Stats
@@ -16,4 +17,5 @@
 // TODO: Secrets
 // TODO: Sound Effects
 // TODO: Time Manipulation - Done
-// TODO: Map Configuration
+// TODO: Map Configuration - Done
+// TODO: More Commands
