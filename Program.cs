@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography.X509Certificates;
 using System.Reflection.Emit;
@@ -17,6 +18,8 @@ using System.Reflection;
 using System.Diagnostics;
 using Microsoft.VisualBasic;
 using System.Security.Authentication;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 #nullable enable
 namespace Internal
@@ -29,6 +32,7 @@ namespace Internal
         public static int seed = ConvertStringToNumbers(seedString);
         public Random rng = new Random(seed);
         public static List<Map> chambers = new List<Map>();
+        public static List<Map> allChambers = new List<Map>();
         public static int currentChamberIndex;
         public static bool continueSimulating = true;
         public static bool isUpdating = false;
@@ -37,14 +41,15 @@ namespace Internal
         public static bool isCloudsShadowsRendering = true;
         public static bool IsHumidityRendering = false;
         public static bool IsTemperatureRendering = false;
-        public static bool isConfiguring = true;
+        public static bool isConfiguring = false;
         #endregion
         private static bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
         private static readonly object mapLock = new object();
         public static List<string> outputBuffer = new List<string>();
         public static List<string> eventBuffer = new List<string>();
+        public static List<(Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty)> slots = new List<(Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty)>();
         public static Config config = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding, 
-        10.0, 0.2, 12, 16, 7, 10, 0.4, 0.7, 0.4, 1.0, seedString);
+        10.0, seedString);
         // Loading screen
         public static string asciiArt = @"
                         _,.---._        ,---.                       .=-.-.  .-._               _,---.                     
@@ -63,6 +68,7 @@ namespace Internal
             currentChamberIndex = 0;
             Console.ResetColor();
             Console.Clear();
+            LoadAllMapsFromFolder(Path.Combine(Environment.CurrentDirectory, "Saves"));
 
             eventBuffer.Add("None");
             Console.CursorVisible = false;
@@ -73,6 +79,19 @@ namespace Internal
                 return;
             }
 
+            for (int i = 0; i < numberOfRows; i++)
+            {
+                // Use existing chamber from allChambers if available, otherwise mark as empty
+                if (i < allChambers.Count)
+                {
+                    var chamber = allChambers[i];
+                    slots.Add((chamber, chamber.conf.Name, false, false, false));
+                }
+                else
+                {
+                    slots.Add((new Map(), null, false, false, true));
+                }
+            }
             // Main Loop
             Program programInstance = new Program();
             if (args.Length > 0)
@@ -82,10 +101,8 @@ namespace Internal
             Random globalRandom = new Random(seed);
             Map chamber1 = new Map();
             Console.Clear();
-            isConfiguring = chamber1.GetConfig();
-            DisplayCenteredText(asciiArt);
-            chamber1.Generate();
-            chambers.Add(chamber1);
+            DrawSaveSelectionGUI();
+            Console.Clear();
             DisplayCurrentChamber();
             Console.ResetColor();
 
@@ -119,6 +136,14 @@ namespace Internal
                             if (command.ToLower() == "exit")
                             {
                                 continueSimulating = false;
+                                isConfiguring = true;
+                                for (int i = 0; i < GUIConfig.BottomPadding; i++)
+                                {
+                                    Console.SetCursorPosition(0, Console.BufferHeight - i - 1);
+                                    Console.Write(new string(' ', Console.BufferWidth));
+                                }
+                                Console.CursorVisible = true;
+                                break;
                             }
                             else if (command.ToLower().StartsWith("chamber "))
                             {
@@ -127,6 +152,11 @@ namespace Internal
                                 {
                                     currentChamberIndex = chamberIndex;
                                     DisplayCurrentChamber();
+                                    for (int i = 0; i < GUIConfig.BottomPadding; i++)
+                                    {
+                                        Console.SetCursorPosition(0, Console.BufferHeight - i - 1);
+                                        Console.Write(new string(' ', Console.BufferWidth));
+                                    }
                                 }
                             }
                             else
@@ -144,16 +174,385 @@ namespace Internal
                     }
                     else
                     {
-                        Thread.Sleep(100); // Adjust the sleep time as needed
+                        Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                     }
                 }
             }
+            foreach (var chamber in chambers)
+            {
+                SaveMap(chamber);
+            }
+            Console.Clear();
             // Ensure the update thread stops when the simulation ends
             updateThread.Join();
             keyListenerThread.Join();
             weatherThread.Join();
             guiThread.Join();
         }
+        #region map saving
+        // Compress JSON string to GZip
+        private static byte[] CompressString(string json)
+        {
+            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+            using var outputStream = new MemoryStream();
+            using (var gzip = new GZipStream(outputStream, CompressionLevel.Optimal))
+            {
+                inputStream.CopyTo(gzip);
+            }
+            return outputStream.ToArray();
+        }
+
+        // Decompress GZip back to JSON string
+        private static string DecompressToString(byte[] compressed)
+        {
+            using var inputStream = new MemoryStream(compressed);
+            using var gzip = new GZipStream(inputStream, CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip, Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+        public class Char2DArrayJsonConverter : JsonConverter<char[,]>
+        {
+            public override char[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+            var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
+            if (lines.Count == 0) return new char[0, 0];
+
+            int height = lines.Count;
+            int width = lines[0].Length;
+            var result = new char[width, height];
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                result[x, y] = lines[y][x];
+                }
+            }
+            return result;
+            }
+            public override void Write(Utf8JsonWriter writer, char[,] value, JsonSerializerOptions options)
+            {
+            int width = value.GetLength(0);
+            int height = value.GetLength(1);
+            var lines = new List<string>(height);
+
+            for (int y = 0; y < height; y++)
+            {
+                var row = new char[width];
+                for (int x = 0; x < width; x++)
+                {
+                row[x] = value[x, y];
+                }
+                lines.Add(new string(row));
+            }
+            JsonSerializer.Serialize(writer, lines, new JsonSerializerOptions(options)
+            {
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+            }
+        }
+        public class Bool2DArrayJsonConverter : JsonConverter<bool[,]>
+        {
+            public override bool[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+            var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
+            if (lines.Count == 0) return new bool[0, 0];
+
+            int height = lines.Count;
+            int width = lines[0].Length;
+            var result = new bool[width, height];
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                result[x, y] = (lines[y][x] == '1');
+                }
+            }
+            return result;
+            }
+            public override void Write(Utf8JsonWriter writer, bool[,] value, JsonSerializerOptions options)
+            {
+            int width = value.GetLength(0);
+            int height = value.GetLength(1);
+            var lines = new List<string>(height);
+
+            for (int y = 0; y < height; y++)
+            {
+                var row = new char[width];
+                for (int x = 0; x < width; x++)
+                {
+                row[x] = value[x, y] ? '1' : '0';
+                }
+                lines.Add(new string(row));
+            }
+            JsonSerializer.Serialize(writer, lines, options);
+            }
+        }
+        public class Int2DArrayJsonConverter : JsonConverter<int[,]>
+        {
+            public override int[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+            var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
+            if (lines.Count == 0) return new int[0, 0];
+
+            int height = lines.Count;
+            var splittedLines = new List<List<int>>();
+            foreach (var line in lines)
+            {
+                var rowData = new List<int>();
+                var parts = line.Split(new[] { '(', ')' }, StringSplitOptions.RemoveEmptyEntries);
+                parts = parts.Select(p => p.Trim())
+                            .Where(p => !string.IsNullOrWhiteSpace(p))
+                            .ToArray();
+                foreach (var chunk in parts)
+                {
+                    rowData.Add(int.Parse(chunk));
+                }
+                splittedLines.Add(rowData);
+            }
+
+            int width = splittedLines.Max(r => r.Count);
+            var result = new int[height, width];
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < splittedLines[y].Count; x++)
+                {
+                    result[y, x] = splittedLines[y][x];
+                }
+            }
+            return result;
+            }
+            public override void Write(Utf8JsonWriter writer, int[,] value, JsonSerializerOptions options)
+            {
+            int height = value.GetLength(0);
+            int width = value.GetLength(1);
+            var lines = new List<string>(height);
+
+            for (int y = 0; y < height; y++)
+            {
+                var row = new StringBuilder();
+                for (int x = 0; x < width; x++)
+                {
+                row.Append($"({value[y, x]})");
+                }
+                lines.Add(row.ToString());
+            }
+            JsonSerializer.Serialize(writer, lines, new JsonSerializerOptions(options)
+            {
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+            }
+        }
+        public class BoolJsonConverter : JsonConverter<bool>
+        {
+            public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+            if (reader.TokenType == JsonTokenType.Number) return reader.GetInt32() != 0;
+            throw new JsonException("Expected 0 or 1");
+            }
+            public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options)
+            {
+            writer.WriteNumberValue(value ? 1 : 0);
+            }
+        }
+        public class ValueTupleIntKeyConverter<TValue> : JsonConverter<Dictionary<(int, int), TValue>>
+        {
+            public override Dictionary<(int, int), TValue> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+            var dict = new Dictionary<(int, int), TValue>();
+            var intermediate = JsonSerializer.Deserialize<Dictionary<string, TValue>>(ref reader, options);
+            if (intermediate != null)
+            {
+                foreach (var kvp in intermediate)
+                {
+                var parts = kvp.Key.Split('|');
+                var key = (int.Parse(parts[0]), int.Parse(parts[1]));
+                dict[key] = kvp.Value;
+                }
+            }
+            return dict;
+            }
+            public override void Write(Utf8JsonWriter writer, Dictionary<(int, int), TValue> value, JsonSerializerOptions options)
+            {
+            var intermediate = value.ToDictionary(k => $"{k.Key.Item1}|{k.Key.Item2}", v => v.Value);
+            JsonSerializer.Serialize(writer, intermediate, options);
+            }
+        }
+        public class ValueTupleIntDoubleKeyConverter : JsonConverter<Dictionary<(int, int), double>>
+        {
+            public override Dictionary<(int, int), double> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var dict = new Dictionary<(int, int), double>();
+                var intermediate = JsonSerializer.Deserialize<Dictionary<string, double>>(ref reader, options);
+                if (intermediate != null)
+                {
+                    foreach (var kvp in intermediate) { var parts = kvp.Key.Split('|'); var key = (int.Parse(parts[0]), int.Parse(parts[1])); dict[key] = kvp.Value; }
+                }
+                return dict;
+            }
+            public override void Write(Utf8JsonWriter writer, Dictionary<(int, int), double> value, JsonSerializerOptions options)
+            {
+                var intermediate = value.ToDictionary(k => $"{k.Key.Item1}|{k.Key.Item2}", v => v.Value);
+                JsonSerializer.Serialize(writer, intermediate, options);
+            }
+        }
+        public class Double2DArrayJsonConverter : JsonConverter<double[,]>
+        {
+            public override double[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
+                if (lines.Count == 0) return new double[0, 0];
+
+                int height = lines.Count;
+                var splittedLines = new List<List<double>>();
+                foreach (var line in lines)
+                {
+                    var rowData = new List<double>();
+                    var parts = line.Split(new[] { '(', ')' }, StringSplitOptions.RemoveEmptyEntries);
+                    parts = parts.Select(p => p.Trim())
+                                .Where(p => !string.IsNullOrWhiteSpace(p))
+                                .ToArray();
+                    foreach (var chunk in parts)
+                    {
+                        rowData.Add(double.Parse(chunk, CultureInfo.InvariantCulture));
+                    }
+                    splittedLines.Add(rowData);
+                }
+
+                int width = splittedLines.Max(r => r.Count);
+                var result = new double[height, width];
+
+                for (int y = 0; y < height; y++)
+                {
+                    for (int x = 0; x < splittedLines[y].Count; x++)
+                    {
+                        result[y, x] = splittedLines[y][x];
+                    }
+                }
+                return result;
+            }
+            public override void Write(Utf8JsonWriter writer, double[,] value, JsonSerializerOptions options)
+            {
+            int height = value.GetLength(0);
+            int width = value.GetLength(1);
+            var lines = new List<string>(height);
+
+            for (int y = 0; y < height; y++)
+            {
+                var row = new StringBuilder();
+                for (int x = 0; x < width; x++)
+                {
+                row.Append($"({value[y, x].ToString(CultureInfo.InvariantCulture)})");
+                }
+                lines.Add(row.ToString());
+            }
+            JsonSerializer.Serialize(writer, lines, new JsonSerializerOptions(options)
+            {
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+            }
+        }
+
+        // Saving without compression
+        public static void SaveMap(Map map)
+        {
+            var folderPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            Directory.CreateDirectory(folderPath);
+
+            string fileName = $"{map.conf.Name}.json";
+            string fullPath = Path.Combine(folderPath, fileName);
+
+            var options = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true };
+            options.Converters.Add(new Char2DArrayJsonConverter());
+            options.Converters.Add(new Bool2DArrayJsonConverter());
+            options.Converters.Add(new BoolJsonConverter());
+            options.Converters.Add(new Int2DArrayJsonConverter());
+            options.Converters.Add(new Double2DArrayJsonConverter());
+            options.Converters.Add(new ValueTupleIntKeyConverter<int>());
+            options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
+
+            string json = JsonSerializer.Serialize(map, options);
+            File.WriteAllText(fullPath, json);
+        }
+        public static Map? LoadMap(string filePath)
+        {
+            var options = new JsonSerializerOptions { IncludeFields = true };
+            options.Converters.Add(new Char2DArrayJsonConverter());
+            options.Converters.Add(new Bool2DArrayJsonConverter());
+            options.Converters.Add(new BoolJsonConverter());
+            options.Converters.Add(new Int2DArrayJsonConverter());
+            options.Converters.Add(new Double2DArrayJsonConverter());
+            options.Converters.Add(new ValueTupleIntKeyConverter<int>());
+            options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
+
+            string json = File.ReadAllText(filePath);
+            return JsonSerializer.Deserialize<Map>(json, options);
+        }
+
+        // Saving with compression
+/*         public static void SaveMap(Map map)
+        {
+            var savePath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            Directory.CreateDirectory(savePath);
+            var fileName = $"{map.conf.Name}.json.gz";
+            var fullPath = Path.Combine(savePath, fileName);
+
+            var options = new JsonSerializerOptions { IncludeFields = true };
+            options.Converters.Add(new Char2DArrayJsonConverter());
+            options.Converters.Add(new Bool2DArrayJsonConverter());
+            options.Converters.Add(new BoolJsonConverter());
+            options.Converters.Add(new Int2DArrayJsonConverter());
+            options.Converters.Add(new Double2DArrayJsonConverter());
+            options.Converters.Add(new ValueTupleIntKeyConverter<int>());
+            options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
+
+            var json = JsonSerializer.Serialize(map, options);
+            using var fileStream = File.Create(fullPath);
+            using var gzip = new GZipStream(fileStream, CompressionMode.Compress);
+            using var writer = new StreamWriter(gzip);
+            writer.Write(json);
+        }
+        public static Map? LoadMap(string filePath)
+        {
+            var options = new JsonSerializerOptions { IncludeFields = true };
+            options.Converters.Add(new Char2DArrayJsonConverter());
+            options.Converters.Add(new Bool2DArrayJsonConverter());
+            options.Converters.Add(new BoolJsonConverter());
+            options.Converters.Add(new Int2DArrayJsonConverter());
+            options.Converters.Add(new Double2DArrayJsonConverter());
+            options.Converters.Add(new ValueTupleIntKeyConverter<int>());
+            options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
+
+            using var fileStream = File.OpenRead(filePath);
+            using var gzip = new GZipStream(fileStream, CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip);
+            var json = reader.ReadToEnd();
+            return JsonSerializer.Deserialize<Map>(json, options);
+        }
+ */
+        public static void DeleteMap(string filePath)
+        {
+            File.Delete(filePath);
+        }
+        public static void LoadAllMapsFromFolder(string folderPath)
+        {
+            // Ensure folder exists
+            if (!Directory.Exists(folderPath))
+                return;
+
+            // Find all .json map files
+            foreach (var file in Directory.GetFiles(folderPath, "*.json"))
+            {
+                Map? loadedMap = LoadMap(file);
+                if (loadedMap != null)
+                {
+                    allChambers.Add(loadedMap);
+                }
+            }
+        }
+        #endregion
         public static int ConvertStringToNumbers(string input)
         {
             if (string.IsNullOrEmpty(input))
@@ -215,8 +614,10 @@ namespace Internal
                     "removechamber",
                     "regenerate",
                     "chamber",
-                    "run"
-
+                    "run",
+                    "seed",
+                    "avaragetemp",
+                    "avaragehum"
                 };
         public static int sleepTime = 100;
         public int maxSleepTime = 3000;
@@ -379,7 +780,6 @@ namespace Internal
                 {
                     lock (mapLock)
                     {
-                        UpdateChamberStats();
                         if (isUpdating)
                         {
                             foreach (var chamber in chambers)
@@ -403,7 +803,6 @@ namespace Internal
                                 chamber.UpdatePreviousOverlayData();
                                 Console.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
                             }
-                            UpdateChamberStats();
                         }
                         Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                     }
@@ -427,12 +826,12 @@ namespace Internal
                             {
                                 chamber.UpdateClouds();
                             }
+                            if (currentMap.isCloudsShadowsRendering) 
+                                currentMap.DisplayCloudShadows();
                             if (currentMap.isCloudsRendering)
                             {
                                 currentMap.RenderClouds(); // Ensure this is called correctly
                             }
-                            if (currentMap.isCloudsShadowsRendering) 
-                                currentMap.DisplayCloudShadows();
                         }
                         Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                     }
@@ -510,166 +909,168 @@ namespace Internal
             string[] tokens = command.Split(' ');
             switch (tokens[0])
             {
-                case "chamber":
-                    if (tokens.Length > 1)
+            case "chamber":
+                if (tokens.Length > 1 && int.TryParse(tokens[1], out int chamberIndex))
+                {
+                chamberIndex--; // Adjust for 1-based index
+                if (chamberIndex >= 0 && chamberIndex < chambers.Count)
+                {
+                    Program.currentChamberIndex = chamberIndex;
+                }
+                else
+                {
+                    outputBuffer.Add("Invalid chamber index");
+                }
+                }
+                else
+                {
+                outputBuffer.Add("Please specify the chamber index");
+                }
+                break;
+            case "exit":
+                return false;
+            case "addchamber":
+                if (tokens.Length > 1 && int.TryParse(tokens[1], out int numberOfChambers))
+                {
+                for (int i = 0; i < numberOfChambers; i++)
+                {
+                    isConfiguring = true;
+                    seed = rng.Next();
+                    Map newChamber = new Map();
+                    isConfiguring = newChamber.GetConfig();
+                    DisplayCenteredText(asciiArt);
+                    newChamber.Generate();
+                    chambers.Add(newChamber);
+                    outputBuffer.Add("Added a new chamber");
+                }
+                }
+                else
+                {
+                isConfiguring = true;
+                seed = rng.Next();
+                Map newChamber = new Map();
+                isConfiguring = newChamber.GetConfig();
+                DisplayCenteredText(asciiArt);
+                newChamber.Generate();
+                chambers.Add(newChamber);
+                outputBuffer.Add("Added a new chamber");
+                }
+                break;
+            case "removechamber":
+                if (tokens.Length > 1 && int.TryParse(tokens[1], out chamberIndex))
+                {
+                chamberIndex--; // Adjust for 1-based index
+                if (chamberIndex >= 0 && chamberIndex < chambers.Count)
+                {
+                    chambers.RemoveAt(chamberIndex);
+                    outputBuffer.Add($"Removed chamber {chamberIndex + 1}");
+                    if (chamberIndex == currentChamberIndex)
                     {
-                        int chamberIndex = int.Parse(tokens[1]) - 1; // Subtract 1 to adjust for 1-based index
-                        if (chamberIndex >= 0 && chamberIndex < chambers.Count)
-                        {
-                            Program.currentChamberIndex = chamberIndex;
-                        }
-                        else
-                        {
-                            outputBuffer.Add("Invalid chamber index.");
-                        }
+                    currentChamberIndex = Math.Max(0, chamberIndex - 1);
+                    }
+                    else if (chamberIndex < currentChamberIndex)
+                    {
+                    currentChamberIndex--;
+                    }
+                }
+                else
+                {
+                    outputBuffer.Add("Invalid chamber index");
+                }
+                }
+                else
+                {
+                outputBuffer.Add("Please specify the chamber index to remove");
+                }
+                break;
+            case "regenerate":
+                if (tokens.Length > 1 && int.TryParse(tokens[1], out chamberIndex))
+                {
+                chamberIndex--; // Adjust for 1-based index
+                if (chamberIndex >= 0 && chamberIndex < chambers.Count)
+                {
+                    chambers[chamberIndex].Generate();
+                    outputBuffer.Add($"Regenerated chamber {chamberIndex + 1}");
+                }
+                else
+                {
+                    outputBuffer.Add("Invalid chamber index");
+                }
+                }
+                else
+                {
+                outputBuffer.Add("Please specify the chamber index to regenerate");
+                }
+                break;
+            case "run":
+                if (tokens.Length > 1)
+                {
+                // Extract method name and parameters
+                string fullCommand = string.Join(" ", tokens.Skip(1));
+                int methodStart = fullCommand.IndexOf('(');
+                string methodName = methodStart == -1 ? fullCommand : fullCommand.Substring(0, methodStart).Trim();
+
+                // Parse parameters if they exist
+                object[] parameters = new object[0];
+                if (methodStart != -1)
+                {
+                    int methodEnd = fullCommand.LastIndexOf(')');
+                    if (methodEnd != -1)
+                    {
+                    string paramString = fullCommand.Substring(methodStart + 1, methodEnd - methodStart - 1);
+                    parameters = paramString.Split(',')
+                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                        .Select(p => Convert.ChangeType(p.Trim(), typeof(int)))
+                        .ToArray();
+                    }
+                }
+
+                try
+                {
+                    // Get method info with exact parameter count match
+                    var method = typeof(Program).GetMethod(methodName,
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic |
+                    BindingFlags.Instance,
+                    null,
+                    CallingConventions.Any,
+                    parameters.Select(p => p.GetType()).ToArray(),
+                    null);
+
+                    if (method != null)
+                    {
+                    method.Invoke(this, parameters);
                     }
                     else
                     {
-                        outputBuffer.Add("Please specify the chamber index.");
+                    outputBuffer.Add($"Method '{methodName}' not found");
                     }
-                    break;
-                case "exit":
-                    return false;
-                case "addchamber":
-                    if (tokens.Length > 1)
-                    {
-                        int numberOfChambers;
-                        if (!int.TryParse(tokens[1], out numberOfChambers))
-                        {
-                            numberOfChambers = 1;
-                        }
-
-                        for (int i = 0; i < numberOfChambers; i++)
-                        {
-                            isConfiguring = true;
-                            seed = rng.Next();
-                            Map newChamber = new Map();
-                            isConfiguring = newChamber.GetConfig();
-                            DisplayCenteredText(asciiArt);
-                            newChamber.Generate();
-                            chambers.Add(newChamber);
-                            outputBuffer.Add("Added a new chamber.");
-                        }
-                    }
-                    else
-                    {
-                        isConfiguring = true;
-                        seed = rng.Next();
-                        Map newChamber = new Map();
-                        isConfiguring = newChamber.GetConfig();
-                        DisplayCenteredText(asciiArt);
-                        newChamber.Generate();
-                        chambers.Add(newChamber);
-                        outputBuffer.Add("Added a new chamber.");
-                    }
-
-                    break;
-                case "removechamber":
-                    if (tokens.Length > 1)
-                    {
-                        int chamberIndex = int.Parse(tokens[1]) - 1; // Subtract 1 to adjust for 1-based index
-                        if (chamberIndex >= 0 && chamberIndex < chambers.Count)
-                        {
-                            chambers.RemoveAt(chamberIndex);
-                            outputBuffer.Add($"Removed chamber {chamberIndex + 1}.");
-                            if (chamberIndex == currentChamberIndex)
-                            {
-                                currentChamberIndex = Math.Max(0, chamberIndex - 1);
-                            }
-                            else if (chamberIndex < currentChamberIndex)
-                            {
-                                currentChamberIndex--;
-                            }
-                        }
-                        else
-                        {
-                            outputBuffer.Add("Invalid chamber index.");
-                        }
-                    }
-                    else
-                    {
-                        outputBuffer.Add("Please specify the chamber index to remove.");
-                    }
-                    break;
-                case "regenerate":
-                    if (tokens.Length > 1)
-                    {
-                        int chamberIndex = int.Parse(tokens[1]) - 1; // Subtract 1 to adjust for 1-based index
-                        if (chamberIndex >= 0 && chamberIndex < chambers.Count)
-                        {
-                            chambers[chamberIndex].Generate();
-                            outputBuffer.Add($"Regenerated chamber {chamberIndex}.");
-                        }
-                        else
-                        {
-                            outputBuffer.Add("Invalid chamber index.");
-                        }
-                    }
-                    else
-                    {
-                        outputBuffer.Add("Please specify the chamber index to regenerate.");
-                    }
-                    break;
-                case "run":
-                    if (tokens.Length > 1)
-                    {
-                        // Extract method name and parameters
-                        string fullCommand = string.Join(" ", tokens.Skip(1));
-                        int methodStart = fullCommand.IndexOf('(');
-                        string methodName = methodStart == -1 ? fullCommand : fullCommand.Substring(0, methodStart).Trim();
-
-                        // Parse parameters if they exist
-                        object[] parameters = new object[0];
-                        if (methodStart != -1)
-                        {
-                            int methodEnd = fullCommand.LastIndexOf(')');
-                            if (methodEnd != -1)
-                            {
-                                string paramString = fullCommand.Substring(methodStart + 1, methodEnd - methodStart - 1);
-                                parameters = paramString.Split(',')
-                                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                                    .Select(p => Convert.ChangeType(p.Trim(), typeof(int)))
-                                    .ToArray();
-                            }
-                        }
-
-                        try
-                        {
-                            // Get method info with exact parameter count match
-                            var method = typeof(Program).GetMethod(methodName,
-                                BindingFlags.Public |
-                                BindingFlags.NonPublic |
-                                BindingFlags.Instance,
-                                null,
-                                CallingConventions.Any,
-                                parameters.Select(p => p.GetType()).ToArray(),
-                                null);
-
-                            if (method != null)
-                            {
-                                method.Invoke(this, parameters);
-                            }
-                            else
-                            {
-                                outputBuffer.Add($"Method '{methodName}' not found.");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            outputBuffer.Add($"Error executing method '{methodName}': {ex.Message}");
-                        }
-                    }
-                    else
-                    {
-                        outputBuffer.Add("Please specify the method to run.");
-                    }
-                    break;
-                default:
-                    outputBuffer.Add("Invalid command. Seek help on the right side of the screen.");
-                    break;
+                }
+                catch (Exception ex)
+                {
+                    outputBuffer.Add($"Error executing method '{methodName}': {ex.Message}");
+                }
+                }
+                else
+                {
+                outputBuffer.Add("Please specify the method to run");
+                }
+                break;
+            case "seed":
+                outputBuffer.Add($"Current seed: {chambers[currentChamberIndex].conf.Seed}");
+                break;
+            case "avaragetemp":
+                outputBuffer.Add($"Average temperature: {Math.Round(chambers[currentChamberIndex].avarageTempature, 2)}");
+                break;
+            case "avaragehum":
+                outputBuffer.Add($"Average humidity: {Math.Round(chambers[currentChamberIndex].avarageHumidity, 2)}");
+                break;
+            default:
+                outputBuffer.Add("Invalid command");
+                break;
             }
+            chambers[currentChamberIndex].DisplayMap();
             return true;
-
         }
         public static string GetCommand()
         {
@@ -687,9 +1088,9 @@ namespace Internal
         {
             chambers[currentChamberIndex].isCloudsRendering = isCloudsRendering;
             chambers[currentChamberIndex].isCloudsShadowsRendering = isCloudsShadowsRendering;
-            continueSimulating = chambers[currentChamberIndex].shouldSimulationContinue;
             Map.outputBuffer.AddRange(outputBuffer);
             outputBuffer.Clear();
+            continueSimulating = chambers[currentChamberIndex].shouldSimulationContinue;
             chambers[currentChamberIndex].actualOutputBuffer = Map.outputBuffer;
         }
         #region run functions
@@ -711,6 +1112,581 @@ namespace Internal
             int hehe = int.Parse("hehe");
             outputBuffer.Add("Malware executed.");
             continueSimulating = false;
+        }
+        #endregion
+        #region save selection GUI
+        static (int x, int y) terminalCentre = (Console.WindowWidth / 2, Console.WindowHeight / 2);
+        static int menuWidth = 95;
+        static int menuHeight = 50;
+        static int numberOfRows = 5;
+        static int heightOffset = (Console.WindowHeight - 10 - 5 * numberOfRows) / 6;
+        static string delete = @"
+.__@@__.
+ \##$$/ 
+ /@$$$\ ";
+        static string select = @"
+ $%\
+ ##$%}
+ $%/";
+        static List<(int r, int g, int b)> colors = new List<(int r, int g, int b)>
+        {
+            ColorSpectrum.ANTIQUE_WHITE,
+            ColorSpectrum.BEIGE
+        };
+        public static void DrawSaveSelectionGUI()
+        {
+            Console.Clear();
+            var folderPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            Directory.CreateDirectory(folderPath);
+            Map.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
+            Map.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
+            string[] files = Directory.GetFiles(Path.Combine(Environment.CurrentDirectory, "Saves"), "*.json")
+                .Select(f => Path.GetFileName(f))
+                .ToArray();
+            
+            for (int i = 0; i < numberOfRows; i++)
+            {
+                int index = colors.Count > i ? i : i % colors.Count;
+                DrawSaveFileBox(i, colors[index], false, i == 0 ? 1 : 4);
+            }
+            // Load button
+            Map.DrawColoredBox(terminalCentre.x - 5, terminalCentre.y + heightOffset + 10, 10, 3, "", ColorSpectrum.LIGHT_GREEN);
+            Console.SetCursorPosition(terminalCentre.x - 2, terminalCentre.y + heightOffset + 11);
+            Console.ResetColor();
+            Console.Write("LOAD");
+            ManageSaveSlots();
+        }
+        public static void DrawSaveFileBox(int index, (int r, int g, int b) color, bool isSelected, int currentSelection)
+        {
+            int x = terminalCentre.x - menuWidth / 2;
+            int y = terminalCentre.y - menuHeight / 2 + heightOffset + 9 + index * 5 + 1;
+
+            bool isBox0Selected = currentSelection == 1 || isSelected;
+            bool isBox1Selected = currentSelection == 0 || isSelected;
+            bool isBox2Selected = currentSelection == 2 || isSelected;
+            if (currentSelection == 4)
+            {
+                isBox0Selected = false;
+                isBox1Selected = false;
+                isBox2Selected = false;
+            }
+
+            DrawSelectableBox(x + 11, y, menuWidth - 22, 5, isBox0Selected, isSelected, color);
+            DrawSelectableBox(x, y, 10, 5, isBox1Selected, isSelected, ColorSpectrum.YELLOW);
+            DrawSelectableBox(x + menuWidth - 10, y, 10, 5, isBox2Selected, isSelected, ColorSpectrum.LIGHT_GREEN);
+            Console.ResetColor();
+
+            // Draw the delete ASCII in the first small box
+            var deleteLines = delete.Split('\n');
+            for (int i = 0; i < deleteLines.Length; i++)
+            {
+            Console.SetCursorPosition(x + 1, y + i);
+            Console.Write(Map.SetForegroundColor(ColorSpectrum.YELLOW.r, ColorSpectrum.YELLOW.g, ColorSpectrum.YELLOW.b) + deleteLines[i] + Map.ResetColor());
+            }
+
+            // Draw the select ASCII in the second small box
+            var selectLines = select.Split('\n');
+            for (int i = 0; i < selectLines.Length; i++)
+            {
+            Console.SetCursorPosition(x + menuWidth - 8, y + i);
+            Console.Write(Map.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b) + selectLines[i] + Map.ResetColor());
+            }
+            if ((currentSelection == 4 || currentSelection != 5) && slots[index].name != null)
+            {
+                DisplayCustomLetters(index, ConvertStringToList(slots[index].name ?? ""));
+            }
+            if (currentSelection == 5)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    Console.SetCursorPosition(x + 11, y++ + i);
+                    Console.Write(new string(' ', menuWidth - 24));
+                }
+            }
+
+        }
+        private static List<string> ConvertStringToList(string str)
+        {
+            List<string> list = new List<string>();
+            foreach (char c in str)
+            {
+                if (c == ' ')
+                {
+                    list.Add("Spacebar");
+                }
+                else
+                {
+                    list.Add(char.ToUpper(c).ToString());
+                }
+            }
+            return list;
+        }
+        public static void ManageSaveSlots()
+        {
+            int currentIndex = 0; // Index of the currently selected slot
+            int currentSection = 1; // 0=delete, 1=main, 2=select
+            bool shouldSaveName = false;
+            bool isTyping = false;
+            bool isLoad = false;
+            bool shouldMenu = true;
+            bool shouldSave = false;
+            bool shouldNameReset = false;
+
+            void RedrawSaveUI(bool isSelected, int currentSelection)
+            {
+                int index = colors.Count > currentIndex ? currentIndex : currentIndex % colors.Count;
+                if (!isLoad) DrawSaveFileBox(currentIndex, colors[index], isSelected, currentSelection);
+                else DrawSaveFileBox(currentIndex, colors[index], isSelected, 4);
+            }
+
+            while (shouldMenu)
+            {
+                while (!isConfiguring)
+                {
+                    var key = Console.ReadKey(true).Key;
+                    string previousBuffer = slots[currentIndex].chamber.conf.Name ?? "";
+                    if (isTyping)
+                    {
+
+                        if (!shouldSaveName)
+                        {
+                            shouldSaveName = true;
+                            typedLettersBuffer = ConvertStringToList(slots[currentIndex].name ?? "");
+                        }
+
+                        switch (key)
+                        {
+                            case ConsoleKey.Escape:
+                                shouldSaveName = false;
+                                isTyping = false;
+                                shouldNameReset = true;
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                                break;
+                            case ConsoleKey.Enter:
+                                shouldSaveName = true;
+                                shouldSave = true;
+                                isTyping = false;
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                                break;
+                            default:
+                                if (key == ConsoleKey.Backspace && typedLettersBuffer.Count > 0)
+                                {
+                                    typedLettersBuffer.RemoveAt(typedLettersBuffer.Count - 1);
+                                    RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                                    int x = terminalCentre.x - menuWidth / 2;
+                                    int y = terminalCentre.y - menuHeight / 2 + heightOffset + 9 + currentIndex * 5 + 2;
+                                    DisplayCustomLetters(currentIndex, typedLettersBuffer);
+                                }
+                                else if ((char.IsLetter(key.ToString()[0]) || key == ConsoleKey.Spacebar) && typedLettersBuffer.Count + key.ToString().Length < maxNameLength - 1)
+                                {
+                                    typedLettersBuffer.Add(key.ToString());
+                                    DisplayCustomLetters(currentIndex, typedLettersBuffer);
+                                }
+                                break;
+                        }
+                        if (shouldSaveName)
+                        {
+                            string name = "";
+                            foreach (var letter in typedLettersBuffer)
+                            {
+                                switch (letter)
+                                {
+                                    case "Spacebar":
+                                        name += " ";
+                                        break;
+                                    default:
+                                        name += letter;
+                                        break;
+                                }
+                            }
+                            slots[currentIndex] = (slots[currentIndex].chamber, name, false, false, true);
+                            typedLettersBuffer = new List<string>();
+                            shouldSaveName = false;
+                            if (shouldSave)
+                            {
+                                var slot = slots[currentIndex];
+                                slot.name = previousBuffer;
+                                slot.chamber.conf.Name = previousBuffer;
+                                slots[currentIndex] = slot;
+                                shouldSave = false;
+                            }
+                            else
+                            {
+                                var slot = slots[currentIndex];
+                                slot.name = name;
+                                slot.chamber.conf.Name = name;
+                                slots[currentIndex] = slot;
+                            }
+                            if (shouldNameReset)
+                            {
+                                shouldNameReset = false;
+                                slots[currentIndex] = (slots[currentIndex].chamber, previousBuffer, false, false, true);
+                                name = previousBuffer;
+                            }
+                            if (name != previousBuffer)
+                            {
+                                DeleteMap(Path.Combine(Environment.CurrentDirectory, "Saves", previousBuffer + ".json"));
+                                SaveMap(slots[currentIndex].chamber);
+                            }
+                            RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                        }
+                        else
+                        {
+                            typedLettersBuffer = new List<string>();
+                            shouldSaveName = false;
+                            RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                        }
+                        continue;
+                    }
+
+                    switch (key)
+                    {
+                        case ConsoleKey.UpArrow:
+                        case ConsoleKey.W:
+                            if (slots[currentIndex].isSelected)
+                            {
+                                currentSection = 1;
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                            }
+                            if (currentIndex > 0 && !isLoad)
+                            {
+                                RedrawSaveUI(slots[currentIndex].isSelected, 4);
+                                currentIndex--;
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                            }
+                            if (isLoad)
+                            {
+                                isLoad = false;
+                                currentSection = 1;
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                                DrawLoadButton(isLoad);
+                            }
+                            break;
+                        case ConsoleKey.DownArrow:
+                        case ConsoleKey.S:
+                            if (slots[currentIndex].isSelected && !isLoad)
+                            {
+                                currentSection = 1;
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                            }
+                            if (currentIndex < slots.Count - 1 && !isLoad)
+                            {
+                                RedrawSaveUI(slots[currentIndex].isSelected, 4);
+                                currentIndex++;
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                            }
+                            else if (!isLoad && currentSection == 1)
+                            {
+                                isLoad = true;
+                                RedrawSaveUI(slots[currentIndex].isSelected, 4);
+                                DrawLoadButton(isLoad);
+                            }
+                            break;
+                        case ConsoleKey.LeftArrow:
+                        case ConsoleKey.A:
+                            if (!isLoad)
+                            {
+                                if (currentSection > 0)
+                                {
+                                    RedrawSaveUI(slots[currentIndex].isSelected, 4);
+                                    currentSection--;
+                                }
+                                else
+                                {
+                                    RedrawSaveUI(slots[currentIndex].isSelected, 4);
+                                    currentSection = 1; // Move to Delete if possible
+                                }
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                            }
+                            break;
+                        case ConsoleKey.RightArrow:
+                        case ConsoleKey.D:
+                            if (!isLoad)
+                            {
+                                if (currentSection < 2)
+                                {
+                                    RedrawSaveUI(slots[currentIndex].isSelected, 4);
+                                    currentSection++;
+                                }
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                            }
+                            break;
+                        case ConsoleKey.Enter:
+                            bool canLoadAnything = false;
+                            foreach (var slot in slots)
+                            {
+                                if (slot.isSelected)
+                                {
+                                    canLoadAnything = true;
+                                    break;
+                                }
+                            }
+                            if (isLoad && canLoadAnything)
+                            {
+                                LoadSelectedSlots();
+                                shouldMenu = false;
+                                return;
+                            }
+                            else if (slots[currentIndex].isSelected)
+                            {
+                                var slot = slots[currentIndex];
+                                slot.isSelected = false;
+                                slots[currentIndex] = slot;
+                            }
+                            else if (currentSection == 1)
+                            {
+                                previousBuffer = slots[currentIndex].name ?? "";
+                                isTyping = true;
+                                shouldSaveName = false;
+                            }
+                            else if (currentSection == 0)
+                            {
+                                if (!slots[currentIndex].isEmpty || slots[currentIndex].name != null)
+                                {
+                                    slots[currentIndex] = (new Map(), null, false, false, true);
+                                    DeleteMap(Path.Combine(Environment.CurrentDirectory, "Saves", previousBuffer + ".json"));
+                                    RedrawSaveUI(slots[currentIndex].isSelected, 1);
+                                    RedrawSaveUI(slots[currentIndex].isSelected, 2);
+                                }
+                            }
+                            else if (currentSection == 2)
+                            {
+                                if (slots[currentIndex].chamber.seed == 0)
+                                {
+                                    slots[currentIndex] = AddNewChamber(slots[currentIndex]);
+                                }
+                                else
+                                {
+                                    var slot = slots[currentIndex];
+                                    slot.isSelected = !slot.isSelected;
+                                    slots[currentIndex] = slot;
+                                    RedrawSaveUI(slots[currentIndex].isSelected, 2);
+                                }
+                            }
+                            RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                            break;
+                    }
+                    foreach (var slot in slots)
+                    {
+                        if (slot.isSelected)
+                        {
+                            int index = colors.Count > currentIndex ? currentIndex : currentIndex % colors.Count;
+                            DrawSaveFileBox(slots.IndexOf(slot), colors[index], true, currentSection);
+                        }
+                    }
+                }
+            }
+        }
+        private static List<string> typedLettersBuffer = new List<string>();
+        private static int maxNameLength = 16;
+        public static void DisplayCustomLetters(int currentIndex, List<string> buffer)
+        {
+            int x = terminalCentre.x - menuWidth / 2 + 12;
+            int y = terminalCentre.y - menuHeight / 2 + heightOffset + 9 + currentIndex * 5 + 1;
+
+            int currentX = x;
+
+            foreach (var letter in buffer)
+            {
+                if (letter == "Spacebar" || letter == " ")
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        Console.SetCursorPosition(currentX, y + 1 + i);
+                        Console.Write(new string(' ', 5));
+                    }
+                    currentX += 6; // 5 spaces plus 1 for spacing between letters
+                    continue;
+                }
+
+                string letterString = GetLetter(letter);
+                var lines = letterString.Split('\n');
+
+                int letterWidth = lines.Max(line => line.Length);
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    Console.SetCursorPosition(currentX, y + i);
+                    Console.Write(lines[i]);
+                }
+
+                currentX += letterWidth + 1; // Add 1 for spacing between letters
+            }
+        }
+        public static string GetLetter(string letter)
+        {
+            switch (letter)
+            {
+                case "A":
+                    return Characters.A;
+                case "B":
+                    return Characters.B;
+                case "C":
+                    return Characters.C;
+                case "D":
+                    return Characters.D;
+                case "E":
+                    return Characters.E;
+                case "F":
+                    return Characters.F;
+                case "G":
+                    return Characters.G;
+                case "H":
+                    return Characters.H;
+                case "I":
+                    return Characters.I;
+                case "J":
+                    return Characters.J;
+                case "K":
+                    return Characters.K;
+                case "L":
+                    return Characters.L;
+                case "M":
+                    return Characters.M;
+                case "N":
+                    return Characters.N;
+                case "O":
+                    return Characters.O;
+                case "P":
+                    return Characters.P;
+                case "Q":
+                    return Characters.Q;
+                case "R":
+                    return Characters.R;
+                case "S":
+                    return Characters.S;
+                case "T":
+                    return Characters.T;
+                case "U":
+                    return Characters.U;
+                case "V":
+                    return Characters.V;
+                case "W":
+                    return Characters.W;
+                case "X":
+                    return Characters.X;
+                case "Y":
+                    return Characters.Y;
+                case "Z":
+                    return Characters.Z;
+                default:
+                    return Characters.Unknown;
+            }
+        }
+        public static void DrawLoadButton(bool isLoad)
+        {
+            DrawSelectableBox(terminalCentre.x - 5, terminalCentre.y + heightOffset + 10, 10, 3, false, false, ColorSpectrum.LIGHT_GREEN);
+            Console.SetCursorPosition(terminalCentre.x - 2, terminalCentre.y + heightOffset + 11);
+            Console.ResetColor();
+            string foreground = isLoad ? Map.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b) : "";
+            string background = isLoad ? Map.SetBackgroundColor(ColorSpectrum.SILVER.r, ColorSpectrum.SILVER.g, ColorSpectrum.SILVER.b) : "";
+            Console.Write(background + foreground + "LOAD" + Map.ResetColor());
+        }
+        public static void DrawSelectableBox(int x, int y, int width, int height, bool isSelected, bool isFullySelected, (int r, int g, int b) color)
+        {
+            // Define box drawing characters
+            string topLeft = "╔";
+            string topRight = "╗";
+            string bottomLeft = "╚";
+            string bottomRight = "╝";
+            string doubleHorizontal = "═";
+            string doubleVertical = "║";
+            string horizontal = "-";
+            string vertical = "|";
+            string corner = "+";
+
+            // Define selection colors
+            (int r, int g, int b) normalSelectionColor = ColorSpectrum.SILVER;
+            (int r, int g, int b) selectedColor = ColorSpectrum.YELLOW;
+
+            // Set background color based on selection
+            string background;
+            if (isFullySelected) background = Map.SetBackgroundColor(selectedColor.r, selectedColor.g, selectedColor.b);
+            else if (isSelected) background = Map.SetBackgroundColor(normalSelectionColor.r, normalSelectionColor.g, normalSelectionColor.b);
+            else background = "";
+
+            // Draw top border with double lines
+            Console.SetCursorPosition(x, y);
+            if (!isLinux)
+                Console.Write(background + Map.SetForegroundColor(color.r, color.g, color.b) + topLeft + new string(doubleHorizontal[0], width - 2) + topRight + Map.ResetColor());
+            else
+                Console.Write(background + Map.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + Map.ResetColor());
+
+            // Draw sides and content area
+            for (int i = 1; i < height - 1; i++)
+            {
+                Console.SetCursorPosition(x, y + i);
+                if (!isLinux)
+                {
+                    Console.Write(
+                        background +
+                        Map.SetForegroundColor(color.r, color.g, color.b) + doubleVertical + Map.ResetColor() +
+                        new string(' ', width - 2) +
+                        background +
+                        Map.SetForegroundColor(color.r, color.g, color.b) + doubleVertical + Map.ResetColor()
+                    );
+                }
+                else
+                {
+                    Console.Write(
+                        background +
+                        Map.SetForegroundColor(color.r, color.g, color.b) + vertical + Map.ResetColor() +
+                        new string(' ', width - 2) +
+                        background +
+                        Map.SetForegroundColor(color.r, color.g, color.b) + vertical + Map.ResetColor()
+                    );
+                }
+            }
+
+            // Draw bottom border with double lines
+            Console.SetCursorPosition(x, y + height - 1);
+            if (!isLinux)
+                Console.Write(background + Map.SetForegroundColor(color.r, color.g, color.b) + bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight + Map.ResetColor());
+            else
+                Console.Write(background + Map.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + Map.ResetColor());
+
+            // Reset background color
+            if (isSelected)
+                Console.Write(Map.ResetColor());
+        }
+        public static (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) AddNewChamber((Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) chamber)
+        {
+            isConfiguring = true;
+            Map newChamber = new Map();
+            isConfiguring = newChamber.GetConfig();
+            DisplayCenteredText(asciiArt);
+            newChamber.conf.Name = chamber.name ?? "NEW CHAMBER";
+            if (chamber.name == "" || chamber.name == " ")
+            {
+                newChamber.conf.Name = "NEW CHAMBER";
+            }
+            newChamber.Generate();
+            SaveMap(newChamber);
+            Console.Clear();
+            Map.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
+            Map.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
+            for (int i = 0; i < numberOfRows; i++)
+            {
+                int index = colors.Count > i ? i : i % colors.Count;
+                DrawSaveFileBox(i, colors[index], false, i == 0 ? 1 : 4);
+            }
+            DrawLoadButton(false);
+            (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) newSlot = (newChamber, chamber.name, chamber.isSelected, chamber.isTyping, false);
+            return newSlot;
+        }
+        public static void LoadSelectedSlots()
+        {
+            isConfiguring = false;
+            foreach (var slot in slots)
+            {
+                if (slot.isSelected)
+                {
+                    if (!slot.isEmpty)
+                    {
+                        chambers.Add(slot.chamber);
+                    }
+                }
+            }
         }
         #endregion
     }

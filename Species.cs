@@ -4,8 +4,7 @@ public abstract class Species
 {
     public string Name { get; set; }
     public string Habitat { get; set; }
-    private Random rng;
-
+    private Random rng { get; set; }
     protected Species(string name, string habitat, int seedOffset)
     {
         Name = name;
@@ -49,37 +48,40 @@ public class Boids
 #region beach species
 public class Crab : Species
 {
-    private Random random;
+    public int SeedOffset { get; set; }
+    public Random Random { get; set; }
     public int X { get; set; }
     public int Y { get; set; }
-    private int beachWidth;
-    private int beachHeight;
-    private bool isAggressive;
-    private bool predatorNearby;
-    private bool isHunted;
-    private char[,] mapData;
-    private int predatorX;
-    private int predatorY;
-    private List<char> allowedTiles = new List<char> { 'B', 'b' }; // Add your selected tiles here
-    public Crab(int initialX, int initialY, int beachWidth, int beachHeight, char[,] mapData, int seedOffset)
-        : base("Crab", "Beach", seedOffset)
+    public int BeachWidth { get; set; }
+    public int BeachHeight { get; set; }
+    public bool IsAggressive { get; set; }
+    public bool PredatorNearby { get; set; }
+    public bool IsHunted { get; set; }
+    public char[,] MapData { get; set; }
+    public int PredatorX { get; set; }
+    public int PredatorY { get; set; }
+    public List<char> AllowedTiles { get; set; } = new List<char> { 'B', 'b' }; // Add your selected tiles here
+
+    public Crab(int X, int Y, int BeachWidth, int BeachHeight, char[,] MapData, int SeedOffset)
+        : base("Crab", "Beach", SeedOffset)
     {
-        random = new Random(seedOffset);
-        X = initialX;
-        Y = initialY;
-        this.beachWidth = beachWidth;
-        this.beachHeight = beachHeight;
-        this.mapData = mapData;
-        isAggressive = random.NextDouble() > 0.005;
+        Random = new Random(SeedOffset);
+        this.SeedOffset = SeedOffset;
+        this.X = X;
+        this.Y = Y;
+        this.BeachWidth = BeachWidth;
+        this.BeachHeight = BeachHeight;
+        this.MapData = MapData;
+        IsAggressive = Random.NextDouble() > 0.005;
     }
     public override void Behave()
     {
-        if (random.NextDouble() > 0.7 && !isHunted)
+        if (Random.NextDouble() > 0.7 && !IsHunted)
         {
             MoveRandomly();
         }
         SearchForFood();
-        if (isAggressive)
+        if (IsAggressive)
         {
             Attack();
         }
@@ -89,7 +91,7 @@ public class Crab : Species
     private void Attack()
     {
         // Simulate attacking with a 10% chance
-        bool attack = random.NextDouble() > 0.9;
+        bool attack = Random.NextDouble() > 0.9;
         if (attack)
         {
             // Logic to attack nearby species
@@ -101,14 +103,14 @@ public class Crab : Species
         List<int> possibleDirections = new List<int>();
 
         // Check each direction and add to possibleDirections if the tile is allowed
-        if (Y > 0 && allowedTiles.Contains(mapData[X, Y - 1])) possibleDirections.Add(0); // Up
-        if (Y < beachHeight - 1 && allowedTiles.Contains(mapData[X, Y + 1])) possibleDirections.Add(1); // Down
-        if (X > 0 && allowedTiles.Contains(mapData[X - 1, Y])) possibleDirections.Add(2); // Left
-        if (X < beachWidth - 1 && allowedTiles.Contains(mapData[X + 1, Y])) possibleDirections.Add(3); // Right
+        if (Y > 0 && AllowedTiles.Contains(MapData[X, Y - 1])) possibleDirections.Add(0); // Up
+        if (Y < BeachHeight - 1 && AllowedTiles.Contains(MapData[X, Y + 1])) possibleDirections.Add(1); // Down
+        if (X > 0 && AllowedTiles.Contains(MapData[X - 1, Y])) possibleDirections.Add(2); // Left
+        if (X < BeachWidth - 1 && AllowedTiles.Contains(MapData[X + 1, Y])) possibleDirections.Add(3); // Right
 
         if (possibleDirections.Count > 0)
         {
-            int direction = possibleDirections[random.Next(possibleDirections.Count)];
+            int direction = possibleDirections[Random.Next(possibleDirections.Count)];
             switch (direction)
             {
                 case 0:
@@ -129,8 +131,8 @@ public class Crab : Species
     private void SearchForFood()
     {
         // Simulate searching for food with a 30% chance
-        bool foundFood = random.NextDouble() > 0.7;
-        if (foundFood)
+        bool foundFood = Random.NextDouble() > 0.7;
+                if (foundFood)
         {
             // Logic to consume food at (X, Y)
             // e.g., Map.ConsumeFood(X, Y);
@@ -139,14 +141,14 @@ public class Crab : Species
     private void AvoidPredators()
     {
         // Simulate predator detection with a 20% chance
-        if (predatorNearby)
+        if (PredatorNearby)
         {
-            isHunted = true;
+            IsHunted = true;
             // Move away from predator
 
-            // Assuming predatorX and predatorY are the predator's coordinates
-            int deltaX = X - predatorX;
-            int deltaY = Y - predatorY;
+            // Assuming PredatorX and PredatorY are the predator's coordinates
+            int deltaX = X - PredatorX;
+            int deltaY = Y - PredatorY;
 
             // Determine move direction
             int moveX = deltaX > 0 ? 1 : deltaX < 0 ? -1 : 0;
@@ -166,7 +168,7 @@ public class Crab : Species
             {
                 int newX = X + dir.Item1;
                 int newY = Y + dir.Item2;
-                if (newX >= 0 && newX < beachWidth && newY >= 0 && newY < beachHeight && allowedTiles.Contains(mapData[newX, newY]))
+                if (newX >= 0 && newX < BeachWidth && newY >= 0 && newY < BeachHeight && AllowedTiles.Contains(MapData[newX, newY]))
                 {
                     X = newX;
                     Y = newY;
@@ -184,7 +186,7 @@ public class Crab : Species
             MoveRandomly();
         }
         // Return to beach and restore normal behavior
-        isHunted = false;
+        IsHunted = false;
         MoveToBeach();
     }
     private void CheckForPredatorsInRange()
@@ -198,19 +200,19 @@ public class Crab : Species
                 int checkY = Y + dy;
 
                 // Ensure coordinates are within map bounds
-                if (checkX >= 0 && checkX < beachWidth && checkY >= 0 && checkY < beachHeight)
+                if (checkX >= 0 && checkX < BeachWidth && checkY >= 0 && checkY < BeachHeight)
                 {
                     // Check if there's a wolf ('W') at this position
-                    if (mapData[checkX, checkY] == 'W')
+                    if (MapData[checkX, checkY] == 'W')
                     {
-                        predatorNearby = true;
-                        predatorX = checkX;
-                        predatorY = checkY;
+                        PredatorNearby = true;
+                        PredatorX = checkX;
+                        PredatorY = checkY;
                         return;
                     }
                     else
                     {
-                        predatorNearby = false;
+                        PredatorNearby = false;
                     }
                 }
             }
@@ -232,11 +234,11 @@ public class Crab : Species
         int nearestY = -1;
         double nearestDistance = double.MaxValue;
 
-        for (int x = 0; x < beachWidth; x++)
+        for (int x = 0; x < BeachWidth; x++)
         {
-            for (int y = 0; y < beachHeight; y++)
+            for (int y = 0; y < BeachHeight; y++)
             {
-                if (allowedTiles.Contains(mapData[x, y]))
+                if (AllowedTiles.Contains(MapData[x, y]))
                 {
                     double distance = GetDistance(X, Y, x, y);
                     if (distance < nearestDistance)
@@ -258,28 +260,30 @@ public class Crab : Species
 }
 public class Turtle : Species
 {
-    private Random random;
+    public int seedOffset { get; set; }
+    public Random random { get; set; }
     public int X { get; set; }
     public int Y { get; set; }
-    private int beachWidth;
-    private int beachHeight;
-    private bool isAggressive;
-    private bool predatorNearby;
-    private bool isHunted;
-    private char[,] mapData;
-    private int mapWidth;
-    private int mapHeight;
-    private char[,] overlayData;
-    private int predatorX;
-    private int predatorY;
-    private List<char> allowedTiles = new List<char> { 'B', 'b' }; // Add your selected tiles here
+    public int beachWidth { get; set; }
+    public int beachHeight { get; set; }
+    public bool isAggressive { get; set; }
+    public bool predatorNearby { get; set; }
+    public bool isHunted { get; set; }
+    public char[,] mapData { get; set; }
+    public int mapWidth { get; set; }
+    public int mapHeight { get; set; }
+    public char[,] overlayData { get; set; }
+    public int predatorX { get; set; }
+    public int predatorY { get; set; }
+    public List<char> allowedTiles { get; set; } = new List<char> { 'B', 'b' }; // Add your selected tiles here
 
-    public Turtle(int initialX, int initialY, int beachWidth, int beachHeight, char[,] mapData, char[,] overlayData, int mapWidth, int mapHeight, int seedOffset)
+    public Turtle(int X, int Y, int beachWidth, int beachHeight, char[,] mapData, char[,] overlayData, int mapWidth, int mapHeight, int seedOffset)
         : base("Turtle", "Beach", seedOffset)
     {
+        this.seedOffset = seedOffset;
         random = new Random(seedOffset);
-        X = initialX;
-        Y = initialY;
+        this.X = X;
+        this.Y = Y;
         this.beachWidth = beachWidth;
         this.beachHeight = beachHeight;
         this.mapData = mapData;
@@ -572,29 +576,31 @@ public class Turtle : Species
 #region plains species
 public class Sheep : Species
 {
-    private Random random;
+    public int seedOffset { get; set; }
+    public Random random { get; set; }
     public int X { get; set; }
     public int Y { get; set; }
-    private bool isAggressive;
-    private bool predatorNearby;
-    private bool isHunted;
-    private char[,] mapData;
-    private char[,] overlayData;
-    private int predatorX;
-    private int predatorY;
-    private bool isNight;
-    private double time;
-    private double sunriseTime;
-    private double sunsetTime;
-    private int mapWidth;
-    private int mapHeight;
-    private List<char> allowedTiles = new List<char> {'P'}; // Add your selected tiles here
-    public Sheep(int initialX, int initialY, char[,] mapData, char[,] overlayData, int seedOffset)
+    public bool isAggressive { get; set; }
+    public bool predatorNearby { get; set; }
+    public bool isHunted { get; set; }
+    public char[,] mapData { get; set; }
+    public char[,] overlayData { get; set; }
+    public int predatorX { get; set; }
+    public int predatorY { get; set; }
+    public bool isNight { get; set; }
+    public double time { get; set; }
+    public double sunriseTime { get; set; }
+    public double sunsetTime { get; set; }
+    public int mapWidth { get; set; }
+    public int mapHeight { get; set; }
+    private List<char> allowedTiles { get; set; } = new List<char> { 'P' }; // Add your selected tiles here
+    public Sheep(int X, int Y, char[,] mapData, char[,] overlayData, int seedOffset)
         : base("Sheep", "Plains", seedOffset)
     {
+        this.seedOffset = seedOffset;
         random = new Random(seedOffset);
-        X = initialX;
-        Y = initialY;
+        this.X = X;
+        this.Y = Y;
         this.mapData = mapData;
         this.overlayData = overlayData;
         this.mapWidth = mapData.GetLength(0);
@@ -904,29 +910,31 @@ public class Sheep : Species
 }
 public class Cow : Species
 {
-    private Random random;
+    public int seedOffset { get; set; }
+    public Random random { get; set; }
     public int X { get; set; }
     public int Y { get; set; }
-    private bool isAggressive;
-    private bool predatorNearby;
-    private bool isHunted;
-    private char[,] mapData;
-    private char[,] overlayData;
-    private int predatorX;
-    private int predatorY;
-    private bool isNight;
-    private double time;
-    private double sunriseTime;
-    private double sunsetTime;
-    private int mapWidth;
-    private int mapHeight;
-    private List<char> allowedTiles = new List<char> {'P'}; // Add your selected tiles here
-    public Cow(int initialX, int initialY, char[,] mapData, char[,] overlayData, int seedOffset)
+    public bool isAggressive { get; set; }
+    public bool predatorNearby { get; set; }
+    public bool isHunted { get; set; }
+    public char[,] mapData { get; set; }
+    public char[,] overlayData { get; set; }
+    public int predatorX { get; set; }
+    public int predatorY { get; set; }
+    public bool isNight { get; set; }
+    public double time { get; set; }
+    public double sunriseTime { get; set; }
+    public double sunsetTime { get; set; }
+    public int mapWidth { get; set; }
+    public int mapHeight { get; set; }
+    private List<char> allowedTiles { get; set; } = new List<char> { 'P' }; // Add your selected tiles here
+    public Cow(int X, int Y, char[,] mapData, char[,] overlayData, int seedOffset)
         : base("Cow", "Plains", seedOffset)
     {
+        this.seedOffset = seedOffset;
         random = new Random(seedOffset);
-        X = initialX;
-        Y = initialY;
+        this.X = X;
+        this.Y = Y;
         this.mapData = mapData;
         this.overlayData = overlayData;
         this.mapWidth = mapData.GetLength(0);

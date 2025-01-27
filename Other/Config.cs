@@ -3,21 +3,22 @@ using System.Collections.Generic;
 using Internal;
 public class Config
 {
+    public string Name { get; set; } = new Random().Next(0, 1000000).ToString();
     // Map Configuration
     public int Width { get; set; }
     public int Height { get; set; }
     public double NoiseScale { get; set; }
-    public double ErosionFactor { get; set; }
-    public int MinBiomeSize { get; set; }
-    public int MinLakeSize { get; set; }
-    public int MinRiverWidth { get; set; }
-    public int MaxRiverWidth { get; set; }
+    public double ErosionFactor { get; set; } = 0.2;
+    public int MinBiomeSize { get; set; } = 12;
+    public int MinLakeSize { get; set; } = 16;
+    public int MinRiverWidth { get; set; } = 7;
+    public int MaxRiverWidth { get; set; } = 10;
     public int MinMountainWidth {get; set; } = 3;
     public int MaxMountainWidth {get; set; } = 6;
-    public double RiverFlowChance { get; set; }
-    public double PlainsHeightThreshold { get; set; }
-    public double ForestHeightThreshold { get; set; }
-    public double MountainHeightThreshold { get; set; }
+    public double RiverFlowChance { get; set; } = 0.4;
+    public double PlainsHeightThreshold { get; set; } = 0.7;
+    public double ForestHeightThreshold { get; set; } = 0.4;
+    public double MountainHeightThreshold { get; set; } = 1.0;
     public bool EnableRivers { get; set; } = true;
     public bool EnableLakes { get; set; } = true;
     public bool EnableMountainRanges { get; set; } = true;
@@ -74,25 +75,16 @@ public class Config
     // Visuals
     public bool DisplayShadows { get; set; } = true;
     public bool DisplayWaves { get; set; } = true;
-    public int NumberOfWaves { get; set; } = 8;
+    public int NumberOfWaves { get; set; } = 13;
 
     public string Seed { get; set; }
 
-    public Config(int mapWidth, int mapHeight, double noiseScale, double erosionFactor, int minBiomeSize, int minLakeSize, int minRiverWidth, int maxRiverWidth, double riverFlowChance, double plainsHeightThreshold, double forestHeightThreshold, double mountainHeightThreshold, string seed)
+    public Config(int Width, int Height, double NoiseScale, string Seed)
     {
-        Width = mapWidth;
-        Height = mapHeight;
-        NoiseScale = noiseScale;
-        ErosionFactor = erosionFactor;
-        MinBiomeSize = minBiomeSize;
-        MinLakeSize = minLakeSize;
-        MinRiverWidth = minRiverWidth;
-        MaxRiverWidth = maxRiverWidth;
-        RiverFlowChance = riverFlowChance;
-        PlainsHeightThreshold = plainsHeightThreshold;
-        ForestHeightThreshold = forestHeightThreshold;
-        MountainHeightThreshold = mountainHeightThreshold;
-        Seed = seed;
+        this.Width = Width;
+        this.Height = Height;
+        this.NoiseScale = NoiseScale;
+        this.Seed = Seed;
     }
 }
 public class GUIConfig
@@ -179,5 +171,66 @@ public class GUIConfig
             OutputWidth = 0;
         }
         OutputHeight = TopPadding + 1;
+    }
+}
+public enum Habitat
+{
+    Plains,
+    Forest,
+    Mountain,
+    Desert,
+    Tundra,
+    Ocean,
+    River,
+    Lake,
+    Swamp,
+    Jungle,
+    Taiga,
+    Savanna,
+    Grassland,
+    Wetland,
+    Marsh,
+    Reef,
+    Coral,
+    Volcano,
+    Glacier,
+    Iceberg,
+    Island,
+    Archipelago,
+    Peninsula,
+    Canyon,
+    Oasis,
+    Delta,
+    Estuary,
+    Fjord,
+    Bay,
+    Lagoon,
+    Atoll,
+    Cavern,
+    Cave,
+    Grotto,
+    Ruins,
+    Temple,
+    Pyramid,
+    Castle,
+    Fortress,
+    Dungeon,
+    Village,
+    Town,
+    City,
+    Capital
+}
+public class Biome
+{
+    public Habitat Habitat { get; set; }
+    public double HeightThreshold { get; set; }
+    public double TempatureThreshold { get; set; }
+    public double HumidityThreshold { get; set; }
+    public Biome(Habitat Habitat, double HeightThreshold, double TempatureThreshold, double HumidityThreshold)
+    {
+        this.Habitat = Habitat;
+        this.HeightThreshold = HeightThreshold;
+        this.TempatureThreshold = TempatureThreshold;
+        this.HumidityThreshold = HumidityThreshold;
     }
 }

@@ -5,54 +5,54 @@ using System.Runtime.InteropServices;
 using Internal;
 public class Map
 {
-    private static bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-    public static List<string> outputBuffer = new List<string>();
-    public List<string> actualOutputBuffer = new List<string>();
-    public static List<string> eventBuffer = new List<string>();
-    public int cloudShadowOffsetX;
-    public int cloudShadowOffsetY;            
-    private double sunriseTime;
-    private double sunsetTime;
-    public double time;
-    public bool isCloudsRendering, isCloudsShadowsRendering;
-    public bool shouldSimulationContinue = true;
+    private static bool isLinux { get; set; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+    public static List<string> outputBuffer { get; set; } = new List<string>();
+    public List<string> actualOutputBuffer { get; set; } = new List<string>();
+    public static List<string> eventBuffer { get; set; } = new List<string>();
+    public int cloudShadowOffsetX { get; set; }
+    public int cloudShadowOffsetY { get; set; }            
+    private double sunriseTime { get; set; }
+    private double sunsetTime { get; set; }
+    public double time { get; set; }
+    public bool isCloudsRendering { get; set; }
+    public bool isCloudsShadowsRendering { get; set; }
+    public bool shouldSimulationContinue { get; set; } = true;
     #region map parameters
-    public int width;
-    public int height;
-    private int cloudDataWidth;
-    private int cloudDataHeight;
-    private int cloudDataOffsetX;
-    private int cloudDataOffsetY;
-    public char[,] mapData;
-    public char[,] overlayData;
-    public char[,] previousOverlayData;
-    public char[,] previousMapData;
-    private char[,] cloudData;
-    private char[,] previousCloudData;
-    private int[,] cloudDepthData;
-    private double[,] precipitationData;
-    private double[,] previousPrecipitationData;
-    private Random rngMap;
-    public Random rng;
-    private const double waterAnimationSpeed = 0.1;
-    private double[,] noise;
-    private double[,] tempatureNoise;
-    private double[,] humidityNoise;
-    private int[,] temperatureData;
-    private int[,] humidityData;
-    private double avarageTempature, avarageHumidity;
-    private int topPadding;
-    private int bottomPadding;
-    private int leftPadding;
-    private int rightPadding;
-    private int seed;
-    public Config conf;
-    private static int numberOfWaves;
-
+    public int width { get; set; }
+    public int height { get; set; }
+    public int cloudDataWidth { get; set; }
+    public int cloudDataHeight { get; set; }
+    public int cloudDataOffsetX { get; set; }
+    public int cloudDataOffsetY { get; set; }
+    public char[,] mapData { get; set; }
+    public char[,] overlayData { get; set; }
+    public char[,] previousOverlayData { get; set; }
+    public char[,] previousMapData { get; set; }
+    public char[,] cloudData { get; set; }
+    public char[,] previousCloudData { get; set; }
+    public int[,] cloudDepthData { get; set; }
+    public double[,] precipitationData { get; set; }
+    public double[,] previousPrecipitationData { get; set; }
+    public Random rng { get; set; }
+    public double[,] noise { get; set; }
+    public double[,] tempatureNoise { get; set; }
+    public double[,] humidityNoise { get; set; }
+    public int[,] temperatureData { get; set; }
+    public int[,] humidityData { get; set; }
+    public double avarageTempature { get; set; }
+    public double avarageHumidity { get; set; }
+    public int topPadding { get; set; }
+    public int bottomPadding { get; set; }
+    public int leftPadding { get; set; }
+    public int rightPadding { get; set; }
+    public int seed { get; set; } = 0;
+    public Config conf { get; set; }
+    private static int numberOfWaves { get; set; }
+    bool debug { get; set; } = false;
     public Map()
     {
         conf = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding, 
-        10.0, 0.2, 12, 16, 7, 10, 0.4, 0.7, 0.4, 1.0, Math.Round(new Random().Next() * ((new Random().NextDouble() - 0.5) * 2)).ToString());
+        10.0, Math.Round(new Random().Next() * ((new Random().NextDouble() - 0.5) * 2)).ToString());
         rng = new Random(seed);
         topPadding = GUIConfig.TopPadding;
         bottomPadding = GUIConfig.BottomPadding;
@@ -75,7 +75,6 @@ public class Map
         previousPrecipitationData = new double[cloudDataWidth, cloudDataHeight];
         temperatureData = new int[width, height];
         humidityData = new int[width, height];
-        rngMap = new Random(seed); // Initialize with a seed
         cloudIsNight = new bool[width, height];
         cloudIsDarkening = new bool[width, height];
         noise = new double[width, height];
@@ -83,7 +82,6 @@ public class Map
         humidityNoise = new double[width, height];
     }
     #endregion
-    bool debug = false;
     public void Generate()
     {
         isCloudsShadowsRendering = conf.DisplayShadows;
@@ -231,7 +229,8 @@ public class Map
             queue.Enqueue((x, y - 1));
         }
     }
-    double totalTemp, totalHum;
+    public double totalTemp { get; set; }
+    public double totalHum { get; set; }
     private void SetAvarageTempatureHumidity()
     {
         for (int x = 0; x < conf.Width; x++)
@@ -402,8 +401,8 @@ public class Map
     #region useful functions
     private (int, int) GetRandomPoint()
     {
-        int x = rngMap.Next(0, width);
-        int y = rngMap.Next(0, height);
+        int x = rng.Next(0, width);
+        int y = rng.Next(0, height);
         return (x, y);
     }
     private (int, int) GetRandomPointInRange(int startX, int startY, int minDistance, int maxDistance)
@@ -411,8 +410,8 @@ public class Map
         int endX, endY;
         do
         {
-            endX = rngMap.Next(startX - maxDistance, startX + maxDistance + 1);
-            endY = rngMap.Next(startY - maxDistance, startY + maxDistance + 1);
+            endX = rng.Next(startX - maxDistance, startX + maxDistance + 1);
+            endY = rng.Next(startY - maxDistance, startY + maxDistance + 1);
         } while (Math.Sqrt(Math.Pow(endX - startX, 2) + Math.Pow(endY - startY, 2)) < minDistance);
         return (endX, endY);
     }
@@ -436,7 +435,7 @@ public class Map
             outputBuffer.Add($"No points found in biome '{biome}'");
         }
 
-        int randomIndex = rngMap.Next(biomePoints.Count);
+        int randomIndex = rng.Next(biomePoints.Count);
         if (biomePoints.Count > 0)
         {
             return biomePoints[randomIndex];
@@ -1007,7 +1006,7 @@ public class Map
     #region mountain functions
     private void CreateMountains()
     {
-        if (rngMap.NextDouble() < 1)
+        if (rng.NextDouble() < 1)
         {
             GenerateMountainRanges();
             if (debug) Console.WriteLine("Generated mountain ranges");
@@ -1064,7 +1063,7 @@ public class Map
         int currentAttempts = 0;
         while (currentAttempts < maxAttempts)
         {
-            if (rngMap.NextDouble() < 0.5) // 50% chance to create an additional mountain range
+            if (rng.NextDouble() < 0.5) // 50% chance to create an additional mountain range
             {
                 int newStartX, newStartY;
                 do
@@ -1093,7 +1092,7 @@ public class Map
         // Define the mountain path
         while (steps < maxSteps)
         {
-            int mountainWidth = rngMap.Next(conf.MinMountainWidth, conf.MaxMountainWidth + 1); // Mountain width between minRiverWidth and maxRiverWidth
+            int mountainWidth = rng.Next(conf.MinMountainWidth, conf.MaxMountainWidth + 1); // Mountain width between minRiverWidth and maxRiverWidth
             for (int i = -mountainWidth / 2; i <= mountainWidth / 2; i++)
             {
                 if (x + i >= 0 && x + i < width)
@@ -1107,7 +1106,7 @@ public class Map
             }
 
             // Randomly choose the next direction, with a bias towards moving towards the end point
-            int direction = rngMap.Next(100);
+            int direction = rng.Next(100);
             if (direction < 30)
             {
                 if (Math.Abs(endX - x) > Math.Abs(endY - y))
@@ -1123,23 +1122,23 @@ public class Map
             {
                 if (Math.Abs(endX - x) > Math.Abs(endY - y))
                 {
-                    y += rngMap.Next(2) == 0 ? 1 : -1; // Move up or down
+                    y += rng.Next(2) == 0 ? 1 : -1; // Move up or down
                 }
                 else
                 {
-                    x += rngMap.Next(2) == 0 ? 1 : -1; // Move left or right
+                    x += rng.Next(2) == 0 ? 1 : -1; // Move left or right
                 }
             }
             else
             {
                 // Add some winding effect
-                if (rngMap.Next(2) == 0)
+                if (rng.Next(2) == 0)
                 {
-                    x += rngMap.Next(2) == 0 ? 1 : -1;
+                    x += rng.Next(2) == 0 ? 1 : -1;
                 }
                 else
                 {
-                    y += rngMap.Next(2) == 0 ? 1 : -1;
+                    y += rng.Next(2) == 0 ? 1 : -1;
                 }
             }
 
@@ -1174,7 +1173,7 @@ public class Map
         int maxAttempts = 500; // Limit the number of attempts to avoid infinite loop
         for (int i = 0; i < 42 && attempts < maxAttempts; i++)
         {
-            if (rngMap.NextDouble() < 0.6) // Chance to execute each iteration
+            if (rng.NextDouble() < 0.6) // Chance to execute each iteration
             {
                 (int, int) randomPoint = GetRandomPointInBiome('m');
                 if (randomPoint != (0, 0)) // Ensure the point is valid
@@ -1339,7 +1338,7 @@ public class Map
             {
                 if ((mapData[x, y] == 'm' || mapData[x, y] == 'S') && CountSurroundingBiomes(x, y, 'm') + CountSurroundingBiomes(x, y, 'S') >= 7 && !visited[x, y])
                 {
-                    if (rngMap.NextDouble() < snowPeakChance)
+                    if (rng.NextDouble() < snowPeakChance)
                     {
                         SpreadSnowPeaks(x, y, visited);
                     }
@@ -1376,7 +1375,7 @@ public class Map
             {
                 if (nx >= 0 && nx < width && ny >= 0 && ny < height && mapData[nx, ny] == 'M' && !visited[nx, ny])
                 {
-                    if (CountSurroundingBiomes(nx, ny, 'M') >= 8 && rngMap.NextDouble() < 0.8) // 80% chance to spread
+                    if (CountSurroundingBiomes(nx, ny, 'M') >= 8 && rng.NextDouble() < 0.8) // 80% chance to spread
                     {
                         queue.Enqueue((nx, ny));
                         visited[nx, ny] = true;
@@ -1395,11 +1394,11 @@ public class Map
             // Choose a random starting point on any edge, ensuring it's at least 10 tiles away from corners
             int startX, startY;
             int startEdge; // 0 = top, 1 = bottom, 2 = left, 3 = right
-            switch (rngMap.Next(2))
+            switch (rng.Next(2))
             {
                 case 0:
-                    startX = rngMap.Next(10, width - 10);
-                    if (rngMap.Next(2) == 0)
+                    startX = rng.Next(10, width - 10);
+                    if (rng.Next(2) == 0)
                     {
                         startY = 0; // Top edge
                         startEdge = 0;
@@ -1411,8 +1410,8 @@ public class Map
                     }
                     break;
                 default:
-                    startY = rngMap.Next(10, Math.Max(11, height - 10));
-                    if (rngMap.Next(2) == 0)
+                    startY = rng.Next(10, Math.Max(11, height - 10));
+                    if (rng.Next(2) == 0)
                     {
                         startX = 0; // Left edge
                         startEdge = 2;
@@ -1431,7 +1430,7 @@ public class Map
             // Define the river path
             while (true)
             {
-                int riverWidth = rngMap.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
+                int riverWidth = rng.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
                 for (int i = -riverWidth / 2; i <= riverWidth / 2; i++)
                 {
                     if (x + i >= 0 && x + i < width)
@@ -1445,16 +1444,16 @@ public class Map
                 }
 
                 // Randomly choose the next direction, with a bias towards moving forward
-                int direction = rngMap.Next(100);
+                int direction = rng.Next(100);
                 if (direction < 30)
                 {
                     if (startEdge == 2 || startEdge == 3)
                     {
-                        y += rngMap.Next(2) == 0 ? 1 : -1; // Move up or down
+                        y += rng.Next(2) == 0 ? 1 : -1; // Move up or down
                     }
                     else
                     {
-                        x += rngMap.Next(2) == 0 ? 1 : -1; // Move left or right
+                        x += rng.Next(2) == 0 ? 1 : -1; // Move left or right
                     }
                 }
                 else if (direction < 60)
@@ -1473,11 +1472,11 @@ public class Map
                     // Add some winding effect
                     if (startEdge == 2 || startEdge == 3)
                     {
-                        y += rngMap.Next(2) == 0 ? 1 : -1;
+                        y += rng.Next(2) == 0 ? 1 : -1;
                     }
                     else
                     {
-                        x += rngMap.Next(2) == 0 ? 1 : -1;
+                        x += rng.Next(2) == 0 ? 1 : -1;
                     }
                 }
 
@@ -1500,7 +1499,7 @@ public class Map
             // Ensure the river reaches an edge
             while (true)
             {
-                int riverWidth = rngMap.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
+                int riverWidth = rng.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
                 for (int i = -riverWidth / 2; i <= riverWidth / 2; i++)
                 {
                     if (x + i >= 0 && x + i < width)
@@ -1945,7 +1944,7 @@ public class Map
         var path = new List<(int x, int y)>();
         double angle = Math.Atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x);
         double distance = GetDistance(startPoint.x, startPoint.y, endPoint.x, endPoint.y);
-        double angleOffset = (rngMap.NextDouble() - 0.5) * Math.PI / 4; // Random initial offset
+        double angleOffset = (rng.NextDouble() - 0.5) * Math.PI / 4; // Random initial offset
         double angleChange = 0.1; // Change in angle per step
 
         for (int i = 0; i < distance; i++)
@@ -1954,7 +1953,7 @@ public class Map
             double y = startPoint.y + i * Math.Sin(angle + angleOffset);
             (int px, int py) = ((int)x, (int)y);
             path.Add((px, py));
-            angleOffset += (rngMap.NextDouble() - 0.5) * angleChange; // Randomly adjust the angle
+            angleOffset += (rng.NextDouble() - 0.5) * angleChange; // Randomly adjust the angle
         }
 
         // Ensure each path point has 2 side neighbors
@@ -1995,7 +1994,7 @@ public class Map
         };
 
         // Shuffle the possible points to add randomness
-        possiblePoints = possiblePoints.OrderBy(p => rngMap.Next()).ToList();
+        possiblePoints = possiblePoints.OrderBy(p => rng.Next()).ToList();
 
         foreach ((int nx, int ny) in possiblePoints)
         {
@@ -2032,7 +2031,7 @@ public class Map
             {
             if (mapData[x, y] == 'O' && IsNextToLand(x, y) && !IsNextToMountain(x, y))
             {
-                if (rngMap.NextDouble() < beachChance)
+                if (rng.NextDouble() < beachChance)
                 {
                 CreateSmoothBeach(x, y, minBeachSize, maxBeachSize);
                 }
@@ -2078,7 +2077,7 @@ public class Map
     }
     private void CreateSmoothBeach(int startX, int startY, int minSize, int maxSize)
     {
-        int beachSize = rngMap.Next(minSize, maxSize + 1);
+        int beachSize = rng.Next(minSize, maxSize + 1);
         Queue<(int, int)> queue = new Queue<(int, int)>();
         queue.Enqueue((startX, startY));
         bool[,] visited = new bool[width, height];
@@ -2112,7 +2111,7 @@ public class Map
             {
                 if (mapData[x, y] == 'B')
                 {
-                    if (rngMap.NextDouble() < 0.1) // 10% chance to place a dark spot
+                    if (rng.NextDouble() < 0.1) // 10% chance to place a dark spot
                     {
                         mapData[x, y] = 'b'; // Assuming 'D' represents a dark spot
                         SpreadTile(x, y, 0.5, 1, 3); // Spread the dark spot with a max of 3 tiles
@@ -2208,7 +2207,7 @@ public class Map
         {
             for (int x = 0; x < width; x++)
             {
-                if (rngMap.NextDouble() > 0.1) // Imperfections
+                if (rng.NextDouble() > 0.1) // Imperfections
                 {
                     mapData[x, y] = '!'; // Replace tile with '!'
                 }
@@ -2265,7 +2264,7 @@ public class Map
     #endregion
     #region water system
     #region waves
-    private class Wave
+    public class Wave
     {
         public List<(double x, double y)> Points { get; set; } = new List<(double x, double y)>();
         public double Direction { get; set; }
@@ -2277,8 +2276,8 @@ public class Map
         public bool IsNight { get; set; }
         public bool IsDarkening { get; set; }
     }
-    private List<Wave> waves = new List<Wave>();
-    private const double WAVE_SPEED = 0.2;
+    public List<Wave> waves = new List<Wave>();
+    public const double WAVE_SPEED = 0.2;
     private void InitializeWaves()
     {
         waves.Clear();
@@ -2287,8 +2286,8 @@ public class Map
             AddNewWave();
         }
     }
-    private static readonly object consoleLock = new object();
-    private HashSet<(int x, int y)> wavePositions = new HashSet<(int x, int y)>();
+    public static object consoleLock {get; set;} = new object();
+    public HashSet<(int x, int y)> wavePositions {get; set;} = new HashSet<(int x, int y)>();
     public void AnimateWater()
     {
         // Clear the wavePositions at the start
@@ -2711,9 +2710,9 @@ public class Map
         public double Coverage { get; set; } // 0-1 cloud coverage
         public bool IsEnabled { get; set; }
     }
-    public  Weather weather = new Weather();
-    private List<Cloud> clouds = new List<Cloud>();
-    private double deltaTime = 0.5;
+    public Weather weather {get; set;} = new Weather();
+    public List<Cloud> clouds {get; set;} = new List<Cloud>();
+    public double deltaTime {get; set;} = 0.5;
     #endregion
     public void InitializeClouds()
     {
@@ -2767,8 +2766,8 @@ public class Map
         }
     }
     #region cloud updating
-    private static Dictionary<(int, int), (double, double)> cloudPositions = new();
-    int cloudFormations;
+    private static Dictionary<(int, int), (double, double)> cloudPositions {get; set;} = new();
+    public int cloudFormations {get; set;}
     public void UpdateClouds()
     {
         MoveClouds();
@@ -2857,7 +2856,7 @@ public class Map
         //FillCloudHoles();
         SmoothAndFluffClouds();
     }
-    Dictionary<(int x, int y), int> cloudSizes = new Dictionary<(int x, int y), int>();
+    public Dictionary<(int x, int y), int> cloudSizes {get; set;} = new Dictionary<(int x, int y), int>();
     private void SmoothAndFluffClouds()
     {
         char[,] tempCloudData = (char[,])cloudData.Clone();
@@ -3793,7 +3792,7 @@ public class Map
         double dy = y2 - y1;
         return Math.Sqrt(dx * dx + dy * dy);
     }
-    double timeSinceLastCloudSpawn = 0.0;
+    public double timeSinceLastCloudSpawn {get; set;} = 0.0;
     private double GetCloudCooldown()
     {
         double cloudCooldownMultiplier = 1;
@@ -3882,8 +3881,8 @@ public class Map
 
         return (startX, startY);
     }
-    private bool[,] cloudIsNight;
-    private bool[,] cloudIsDarkening;
+    public bool[,] cloudIsNight {get; set;}
+    public bool[,] cloudIsDarkening {get; set;}
     private (int r, int g, int b) GetCloudColor(int x, int y)
     {
         (int mapX, int mapY) = CloudDataCordsToMapData(x, y);
@@ -3930,7 +3929,7 @@ public class Map
     #region weather state
     public void InitializeWeather()
     {
-        int weatherRng = rngMap.Next(0, 2);
+        int weatherRng = rng.Next(0, 2);
         weather.CurrentWeather = weatherRng switch
         {
             0 => WeatherType.Clear,
@@ -3942,7 +3941,7 @@ public class Map
         weather.IntensityTarget = 0.0;
         weather.IntensityChangeSpeed = 0.1;
         weather.TimeOfDay = 12.0;
-        weather.Season = rngMap.NextDouble() * 4.0;
+        weather.Season = rng.NextDouble() * 4.0;
         weather.Temperature = GetTemperature(weather.Season, weather.TimeOfDay, weather.CurrentWeather, avarageTempature);
         weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, weather.TimeOfDay, weather.Season, avarageHumidity, seed);
         weather.Pressure = GetPressure();
@@ -4038,17 +4037,17 @@ public class Map
             sunsetTime = winterSolsticeSunset;
         }
     }
-    private double timeSinceLastWeatherChange = 0.0;
+    public double timeSinceLastWeatherChange {get; set;} = 0.0;
 
     // Average times for sunrise and sunset at equinoxes and solstices (in hours)
-    private static readonly double equinoxSunrise = 6.0;
-    private static readonly double equinoxSunset = 18.0;
-    private static readonly double summerSolsticeSunrise = 5.0;
-    private static readonly double summerSolsticeSunset = 21.0;
-    private static readonly double winterSolsticeSunrise = 7.0;
-    private static readonly double winterSolsticeSunset = 17.0;
-    private int dayCount;
-    double minTimeBetweenChanges;
+    public static readonly double equinoxSunrise = 6.0;
+    public static readonly double equinoxSunset = 18.0;
+    public static readonly double summerSolsticeSunrise = 5.0;
+    public static readonly double summerSolsticeSunset = 21.0;
+    public static readonly double winterSolsticeSunrise = 7.0;
+    public static readonly double winterSolsticeSunset = 17.0;
+    public int dayCount {get; set;}
+    public double minTimeBetweenChanges {get; set;}
     private WeatherType GetSeasonWeatherType()
     {
         double temperature = weather.Temperature;
@@ -4270,7 +4269,7 @@ public class Map
         object? value = values.GetValue(rng.Next(values.Length));
         return value != null ? (WeatherType)value : WeatherType.Clear;
     }
-    static double weatherFactor = 40;
+    public static double weatherFactor {get; set;} = 40;
     private static double GetHumidity(WeatherType weatherType, double tempature, double timeOfDay, double season, double avarageHumidity, int seed)
     {
         double seasonFactor = Math.Cos(season / 2.0 * Math.PI);
@@ -4573,11 +4572,11 @@ public class Map
                 return 0.0;
         }
     }
-    private double minWindChangeInterval = 30.0; // minimum interval in seconds
-    private double maxWindChangeInterval = 90.0; // maximum interval in seconds
-    private double windChangeTimer;
-    private double windTargetDirection;
-    private bool isTurning = false;
+    public double minWindChangeInterval {get; set;} = 30.0; // minimum interval in seconds
+    public double maxWindChangeInterval {get; set;} = 90.0; // maximum interval in seconds
+    public double windChangeTimer {get; set;}
+    public double windTargetDirection {get; set;}
+    public bool isTurning {get; set;} = false;
 
     // Helper method to calculate pressure gradient
     private double GetPressureGradient()
@@ -4747,10 +4746,10 @@ public class Map
         // Update previous cloud data
         Array.Copy(cloudData, previousCloudData, cloudData.Length);
     }
-    private HashSet<(int x, int y)> previousShadowPositions = new HashSet<(int x, int y)>();
-    private readonly Dictionary<(int x, int y), double> currentShadowPositions = new();
-    private readonly int shadowRadius = 3;
-    private static double shadowIntensityFactor;
+    public HashSet<(int x, int y)> previousShadowPositions {get; set;} = new HashSet<(int x, int y)>();
+    public readonly Dictionary<(int x, int y), double> currentShadowPositions = new();
+    public readonly int shadowRadius = 3;
+    public static double shadowIntensityFactor {get; set;}
     public void DisplayCloudShadows()
     {
         if (conf.DisplayShadows)
@@ -4933,8 +4932,8 @@ public class Map
     
         return (r, g, b);
     }
-    private static double timeOfDay;
-    private static double season;
+    public static double timeOfDay {get; set;}
+    public static double season {get; set;}
     private void UpdateTime()
     {
         timeOfDay = weather.TimeOfDay;
@@ -5120,7 +5119,7 @@ public class Map
 
         List<(int x, int y)> targetPoints = new List<(int x, int y)>();
 
-        int maxPoints = rngMap.Next(minMaxPoints, maxMaxPoints + 1);
+        int maxPoints = rng.Next(minMaxPoints, maxMaxPoints + 1);
         // Max attepmpts to find a valid target point
         int maxAttempts = 100;
         int attempts = 0;
@@ -5185,13 +5184,13 @@ public class Map
                 int y = startPoint.y + (int)(i * stepY);
                 DrawCircle(type, x, y, type switch
                 {
-                    CloudType.Cirrus => rngMap.Next(2, 4),
-                    CloudType.Altocumulus => rngMap.Next(3, 6),
-                    CloudType.Cumulus => rngMap.Next(4, 7),
-                    CloudType.Cumulonimbus => rngMap.Next(7, 11),
-                    CloudType.Nimbostratus => rngMap.Next(6, 9),
-                    CloudType.Stratus => rngMap.Next(2, 4),
-                    _ => rngMap.Next(3, 6)
+                    CloudType.Cirrus => rng.Next(2, 4),
+                    CloudType.Altocumulus => rng.Next(3, 6),
+                    CloudType.Cumulus => rng.Next(4, 7),
+                    CloudType.Cumulonimbus => rng.Next(7, 11),
+                    CloudType.Nimbostratus => rng.Next(6, 9),
+                    CloudType.Stratus => rng.Next(2, 4),
+                    _ => rng.Next(3, 6)
                 });
             }
         }
@@ -5219,7 +5218,7 @@ public class Map
 
                     if (cloudDensity < 4)
                     {
-                        if (rngMap.NextDouble() > 0.5)
+                        if (rng.NextDouble() > 0.5)
                         {
                             cloudData[x, y] = '\0';
                         }
@@ -5522,8 +5521,8 @@ public class Map
     }
     #endregion
     #region dayNight cycle
-    private HashSet<(int x, int y)> darkenedPositions = new HashSet<(int x, int y)>();
-    private Dictionary<(int x, int y), int> darkenedPositionsIntensities = new Dictionary<(int x, int y), int>();
+    public HashSet<(int x, int y)> darkenedPositions {get; set;} = new HashSet<(int x, int y)>();
+    public Dictionary<(int x, int y), int> darkenedPositionsIntensities {get; set;} = new Dictionary<(int x, int y), int>();
     public enum GradientDirection
     {
         TL_BR, // Top Left to Bottom Right
@@ -6976,7 +6975,7 @@ public class Map
             }
         }
     }
-    private void DrawBox(int x, int y, int width, int height, string title, string titleLeftDecor = "{", string titleRightDecor = "}")
+    public static void DrawBox(int x, int y, int width, int height, string title, string titleLeftDecor = "{", string titleRightDecor = "}")
     {
         
         // Define box drawing characters
@@ -7048,7 +7047,7 @@ public class Map
             Console.Write(corner);
         }
     }
-    private void DrawColoredBox(int x, int y, int width, int height, string title, (int r, int g, int b) color, string titleLeftDecor = "{", string titleRightDecor = "}")
+    public static void DrawColoredBox(int x, int y, int width, int height, string title, (int r, int g, int b) color, string titleLeftDecor = "{", string titleRightDecor = "}")
     {
         
         // Define box drawing characters
@@ -7126,7 +7125,7 @@ public class Map
             Console.Write(Map.SetForegroundColor(color.r, color.g, color.b), corner + Map.ResetColor());
         }
     }
-    private void DisplayCenteredTextAtCords(string text, int x, int y, (int r, int g, int b) color)
+    public static void DisplayCenteredTextAtCords(string text, int x, int y, (int r, int g, int b) color)
     {
         string[] lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
         int maxLineWidth = lines.Max(l => l.Length);
@@ -7158,7 +7157,7 @@ public class Map
         Console.Clear();
         return false;
     }
-    string title = @"
+    public static string title {get; set;} = @"
    __  _ __  _   _   __ ___   ___  ___    ___
  ,'_/ /// /.' \ / \,' // o.) / _/ / o | ,' _/
 / /_ / ` // o // \,' // o \ / _/ /  ,' _\ `. 
@@ -7199,7 +7198,7 @@ public class Map
             Y = y;
         }
     }
-    static List<ParamCoordinate> mapConfigParams = new List<ParamCoordinate>
+    public static List<ParamCoordinate> mapConfigParams {get; set;} = new List<ParamCoordinate>
     {
         new ParamCoordinate("Seed", SettingType.MapConfig, ParamType.String, 0, 0),
         new ParamCoordinate("NoiseScale", SettingType.MapConfig, ParamType.Double, 0, 0),
@@ -7221,21 +7220,21 @@ public class Map
         new ParamCoordinate("EnableHumidityBiomeChanges", SettingType.MapConfig, ParamType.Bool, 0, 0),
         new ParamCoordinate("BiomeBlend", SettingType.MapConfig, ParamType.Int, 0, 0)
     };
-    static List<ParamCoordinate> gameruleParams = new List<ParamCoordinate>
+    public static List<ParamCoordinate> gameruleParams {get; set;} = new List<ParamCoordinate>
     {
         new ParamCoordinate("EnableWildfires", SettingType.Gamerules, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableSecrets", SettingType.Gamerules, ParamType.Bool, 0, 0),
         new ParamCoordinate("DoTimeCycle", SettingType.Gamerules, ParamType.Bool, 0, 0),
         new ParamCoordinate("DoWeatherCycle", SettingType.Gamerules, ParamType.Bool, 0, 0)
     };
-    static List<ParamCoordinate> structureParams = new List<ParamCoordinate>
+    public static List<ParamCoordinate> structureParams {get; set;} = new List<ParamCoordinate>
     {
         new ParamCoordinate("GenerateStructrs", SettingType.Structures, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableVillages", SettingType.Structures, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableCities", SettingType.Structures, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableDungeons", SettingType.Structures, ParamType.Bool, 0, 0)
     };
-    static List<ParamCoordinate> economyParams = new List<ParamCoordinate>
+    public static List<ParamCoordinate> economyParams {get; set;} = new List<ParamCoordinate>
     {
         new ParamCoordinate("EnableTrades", SettingType.Economy, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableTrades", SettingType.Economy, ParamType.Bool, 0, 0),
@@ -7243,7 +7242,7 @@ public class Map
         new ParamCoordinate("EnableTaxes", SettingType.Economy, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableBanks", SettingType.Economy, ParamType.Bool, 0, 0)
     };
-    static List<ParamCoordinate> animalParams = new List<ParamCoordinate>
+    public static List<ParamCoordinate> animalParams {get; set;} = new List<ParamCoordinate>
     {
         new ParamCoordinate("GenerateAnimals", SettingType.Animals, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnablePredators", SettingType.Animals, ParamType.Bool, 0, 0),
@@ -7255,7 +7254,7 @@ public class Map
         new ParamCoordinate("EnableAnimalHunting", SettingType.Animals, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableAnimalDomestication", SettingType.Animals, ParamType.Bool, 0, 0)
     };
-    static List<ParamCoordinate> disasterParams = new List<ParamCoordinate>
+    public static List<ParamCoordinate> disasterParams {get; set;} = new List<ParamCoordinate>
     {
         new ParamCoordinate("EnableTornadoes", SettingType.Disasters, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableEarthquakes", SettingType.Disasters, ParamType.Bool, 0, 0),
@@ -7263,7 +7262,7 @@ public class Map
         new ParamCoordinate("EnableFloods", SettingType.Disasters, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableMeteors", SettingType.Disasters, ParamType.Bool, 0, 0)
     };
-    static List<ParamCoordinate> eventParams = new List<ParamCoordinate>
+    public static List<ParamCoordinate> eventParams {get; set;} = new List<ParamCoordinate>
     {
         new ParamCoordinate("EnableRobberies", SettingType.Events, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableMurders", SettingType.Events, ParamType.Bool, 0, 0),
@@ -7271,14 +7270,14 @@ public class Map
         new ParamCoordinate("EnablePlagues", SettingType.Events, ParamType.Bool, 0, 0),
         new ParamCoordinate("EnableWars", SettingType.Events, ParamType.Bool, 0, 0)
     };
-    static List<ParamCoordinate> visualParams = new List<ParamCoordinate>
+    public static List<ParamCoordinate> visualParams {get; set;} = new List<ParamCoordinate>
     {
         new ParamCoordinate("DisplayShadows", SettingType.Visuals, ParamType.Bool, 0, 0),
         new ParamCoordinate("DisplayWaves", SettingType.Visuals, ParamType.Bool, 0, 0),
         new ParamCoordinate("NumberOfWaves", SettingType.Visuals, ParamType.Int, 0, 0)
     };
-    static List<ParamCoordinate> nullParams = new List<ParamCoordinate>();
-    static List<ParamCoordinate>[,] allParams = new List<ParamCoordinate>[4, 3]
+    public static List<ParamCoordinate> nullParams {get; set;} = new List<ParamCoordinate>();
+    public static List<ParamCoordinate>[,] allParams {get; set;} = new List<ParamCoordinate>[4, 3]
     {
         { gameruleParams, mapConfigParams, nullParams },
         { structureParams, eventParams, nullParams },
@@ -7309,18 +7308,19 @@ public class Map
                 return 20;
         }
     }
-    public static int currentParamX, currentParamY;
-    static int configWidth = 95;
-    static int configHeight = 62;
-    static int mapConfigOffset = 25;
-    static int mapConfigHeight = configHeight / 2 - 10;
-    static int gamerulesHeight = configHeight / 2 - 20;
-    static int structuresHeight = 15;
-    static int bottomHeight = configHeight / 2 - 16;
-    static int saveWidth = 10;
-    static int heightOffset = (Console.WindowHeight - (10 + gamerulesHeight + structuresHeight + bottomHeight)) / 6;
-    (int r, int g, int b) selectColor = ColorSpectrum.SILVER;
-    static (int x, int y) terminalCentre = (Console.WindowWidth / 2, Console.WindowHeight / 2);
+    public static int currentParamX {get; set;}
+    public static int currentParamY {get; set;}
+    public static int configWidth {get; set;} = 95;
+    public static int configHeight {get; set;} = 62;
+    public static int mapConfigOffset {get; set;} = 25;
+    public static int mapConfigHeight {get; set;} = configHeight / 2 - 10;
+    public static int gamerulesHeight {get; set;} = configHeight / 2 - 20;
+    public static int structuresHeight {get; set;} = 15;
+    public static int bottomHeight {get; set;} = configHeight / 2 - 16;
+    public static int saveWidth {get; set;} = 10;
+    public static int heightOffset {get; set;} = (Console.WindowHeight - (10 + gamerulesHeight + structuresHeight + bottomHeight)) / 6;
+    public (int r, int g, int b) selectColor {get; set;} = ColorSpectrum.SILVER;
+    public static (int x, int y) terminalCentre {get; set;} = (Console.WindowWidth / 2, Console.WindowHeight / 2);
     private void CalculateParamCoordinates()
     {
         int centerX = Console.WindowWidth / 2;
@@ -7597,67 +7597,202 @@ public class Map
                 {
                     case ConsoleKey.UpArrow:
                     case ConsoleKey.W:
-                        if (listParamIndex > 0 && !isSave)
-                            listParamIndex--;
-                        else if (!isSave)
+                        // Special 2-column logic for x=1, y=1
+                        if (currentParamX == 1 && currentParamY == 1 && currentList.Count > 1)
                         {
-                            if (currentParamX > 0
-                                && allParams[currentParamX - 1, currentParamY] != null
-                                && allParams[currentParamX - 1, currentParamY].Count > 0)
+                            int halfCount = (int)Math.Ceiling(currentList.Count / 2.0);
+                            bool isLeftSide = listParamIndex < halfCount;
+                            if (isLeftSide)
                             {
-                                currentParamX--;
-                                currentList = allParams[currentParamX, currentParamY];
-                                listParamIndex = currentList.Count - 1;
+                                // If not at top, move up; else go x-1
+                                if (listParamIndex > 0)
+                                    listParamIndex--;
+                                else
+                                {
+                                    currentParamX--;
+                                    currentList = allParams[currentParamX, currentParamY];
+                                    listParamIndex = currentList.Count - 1;
+                                }
+                            }
+                            else
+                            {
+                                // If not at top of right, move up; else go x-1
+                                if (listParamIndex > halfCount)
+                                    listParamIndex--;
+                                else
+                                {
+                                    currentParamX--;
+                                    currentList = allParams[currentParamX, currentParamY];
+                                    listParamIndex = currentList.Count - 1;
+                                }
                             }
                         }
-                        else isSave = false;
+                        else
+                        {
+                            if (listParamIndex > 0 && !isSave)
+                                listParamIndex--;
+                            else if (currentParamX == 2 && currentParamY == 1 & !isSave)
+                            {
+                                currentParamX--;
+                                currentList = eventParams;
+                                listParamIndex = (int)Math.Ceiling(currentList.Count / 2.0) - 1;
+                            }
+                            else if (currentParamX == 2 && currentParamY == 2 && !isSave)
+                            {
+                                currentParamX--;
+                                currentParamY--;
+                                currentList = eventParams;
+                                listParamIndex = currentList.Count - 1;
+                            }
+                            else if (!isSave)
+                            {
+                                if (currentParamX > 0
+                                    && allParams[currentParamX - 1, currentParamY] != null
+                                    && allParams[currentParamX - 1, currentParamY].Count > 0)
+                                {
+                                    currentParamX--;
+                                    currentList = allParams[currentParamX, currentParamY];
+                                    listParamIndex = currentList.Count - 1;
+                                }
+                            }
+                            else isSave = false;
+                        }
                         break;
 
                     case ConsoleKey.DownArrow:
                     case ConsoleKey.S:
-                        if (listParamIndex == currentList.Count - 1 && currentParamY == 1 && currentParamX == 2 && !isSave)
+                        // Special 2-column logic for x=1, y=1
+                        if (currentParamX == 1 && currentParamY == 1 && currentList.Count > 1)
                         {
-                            isSave = true;
-                            DrawParam(currentList[listParamIndex], redrawDistance, false);
-                        }
-                        else if (listParamIndex < currentList.Count - 1 && listParamIndex >= 0 && !isSave)
-                            listParamIndex++;
-                        else if (!isSave)
-                        {
-                            if (currentParamX < allParams.GetLength(0) - 1
-                                && allParams[currentParamX + 1, currentParamY] != null
-                                && allParams[currentParamX + 1, currentParamY].Count > 0)
+                            int halfCount = (int)Math.Ceiling(currentList.Count / 2.0);
+                            bool isLeftSide = listParamIndex < halfCount;
+                            if (isLeftSide)
                             {
-                                currentParamX++;
-                                currentList = allParams[currentParamX, currentParamY];
-                                listParamIndex = 0;
+                                // Go down if not bottom; else x + 1
+                                if (listParamIndex < halfCount - 1)
+                                    listParamIndex++;
+                                else
+                                {
+                                    currentParamX++;
+                                    currentList = allParams[currentParamX, currentParamY];
+                                    listParamIndex = 0;
+                                }
+                            }
+                            else
+                            {
+                                // Go down if not bottom; else x+1
+                                if (listParamIndex < currentList.Count - 1)
+                                    listParamIndex++;
+                                else
+                                {
+                                    currentParamX++;
+                                    currentParamY++;
+                                    currentList = allParams[currentParamX, currentParamY];
+                                    listParamIndex = 0;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (listParamIndex == currentList.Count - 1 && currentParamY == 1 && currentParamX == 2 && !isSave)
+                            {
+                                isSave = true;
+                                DrawParam(currentList[listParamIndex], redrawDistance, false);
+                            }
+                            else if (listParamIndex < currentList.Count - 1 && listParamIndex >= 0 && !isSave)
+                                listParamIndex++;
+                            else if (!isSave)
+                            {
+                                if (currentParamX < allParams.GetLength(0) - 1
+                                    && allParams[currentParamX + 1, currentParamY] != null
+                                    && allParams[currentParamX + 1, currentParamY].Count > 0)
+                                {
+                                    currentParamX++;
+                                    currentList = allParams[currentParamX, currentParamY];
+                                    listParamIndex = 0;
+                                }
                             }
                         }
                         break;
 
                     case ConsoleKey.LeftArrow:
                     case ConsoleKey.A:
-                        if (currentParamY > 0
-                            && allParams[currentParamX, currentParamY - 1] != null
-                            && allParams[currentParamX, currentParamY - 1].Count > 0
-                            && !isSave)
+                        // Special 2-column logic for x=1, y=1
+                        if (currentParamX == 1 && currentParamY == 1 && currentList.Count > 1)
                         {
-                            currentParamY--;
-                            currentList = allParams[currentParamX, currentParamY];
-                            listParamIndex = 0;
+                            int halfCount = (int)Math.Ceiling(currentList.Count / 2.0);
+                            bool isLeftSide = listParamIndex < halfCount;
+                            if (!isLeftSide)
+                            {
+                                // Move to first item on left side
+                                listParamIndex = 0;
+                            }
+                            else
+                            {
+                                // Regular behavior if on left already
+                                if (currentParamY > 0
+                                    && allParams[currentParamX, currentParamY - 1] != null
+                                    && allParams[currentParamX, currentParamY - 1].Count > 0)
+                                {
+                                    currentParamY--;
+                                    currentList = allParams[currentParamX, currentParamY];
+                                    listParamIndex = 0;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (currentParamY == 2 && currentParamX == 3 && !isSave)
+                            {
+                                currentParamY--;
+                                currentParamX--;
+                                currentList = allParams[currentParamX, currentParamY];
+                                listParamIndex = currentList.Count - 1;
+                            }
+                            else if (currentParamY > 0
+                                && allParams[currentParamX, currentParamY - 1] != null
+                                && allParams[currentParamX, currentParamY - 1].Count > 0
+                                && !isSave)
+                            {
+                                currentParamY--;
+                                currentList = allParams[currentParamX, currentParamY];
+                                listParamIndex = 0;
+                            }
                         }
                         break;
 
                     case ConsoleKey.RightArrow:
                     case ConsoleKey.D:
-                        if (currentParamY < allParams.GetLength(1) - 1
-                            && allParams[currentParamX, currentParamY + 1] != null
-                            && allParams[currentParamX, currentParamY + 1].Count > 0
-                            && !isSave)
+                        // Special 2-column logic for x=1, y=1
+                        if (currentParamX == 1 && currentParamY == 1 && currentList.Count > 1)
                         {
-                            currentParamY++;
-                            currentList = allParams[currentParamX, currentParamY];
-                            listParamIndex = 0;
+                            int halfCount = (int)Math.Ceiling(currentList.Count / 2.0);
+                            bool isLeftSide = listParamIndex < halfCount;
+                            if (isLeftSide)
+                            {
+                                // Move to the right side at matching row
+                                listParamIndex = halfCount + listParamIndex;
+                                if (listParamIndex >= currentList.Count) listParamIndex = currentList.Count - 1;
+                            }
+                        }
+                        else
+                        {
+                            if (currentParamX == 2 && currentParamY == 1 && listParamIndex > (int)Math.Ceiling(currentList.Count / 2.0) - 1 && !isSave)
+                            {
+                                currentParamX++;
+                                currentParamY++;
+                                currentList = allParams[currentParamX, currentParamY];
+                                listParamIndex = 0;
+                            }
+                            else if (currentParamY < allParams.GetLength(1) - 1
+                                && allParams[currentParamX, currentParamY + 1] != null
+                                && allParams[currentParamX, currentParamY + 1].Count > 0
+                                && !isSave)
+                            {
+                                currentParamY++;
+                                currentList = allParams[currentParamX, currentParamY];
+                                listParamIndex = 0;
+                            }
                         }
                         break;
 
@@ -7849,10 +7984,10 @@ public class Map
     }
     #endregion
     #region update functions
-    private List<Crab> crabs = new List<Crab>();
-    private List<Turtle> turtles = new List<Turtle>();
-    public List<Cow> cows = new List<Cow>();
-    public List<Sheep> sheeps = new List<Sheep>();
+    public List<Crab> crabs {get; set;} = new List<Crab>();
+    public List<Turtle> turtles {get; set;} = new List<Turtle>();
+    public List<Cow> cows {get; set;} = new List<Cow>();
+    public List<Sheep> sheeps {get; set;} = new List<Sheep>();
     public void InitializeSpecies(int minSpecies, int maxSpecies, Species species)
     {
         List<char> allowedTiles = new List<char> { };
