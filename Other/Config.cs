@@ -78,6 +78,7 @@ public class Config
     public int NumberOfWaves { get; set; } = 13;
 
     public string Seed { get; set; }
+    public bool ShouldSave { get; set; } = true;
 
     public Config(int Width, int Height, double NoiseScale, string Seed)
     {

@@ -2264,18 +2264,6 @@ public class Map
     #endregion
     #region water system
     #region waves
-    public class Wave
-    {
-        public List<(double x, double y)> Points { get; set; } = new List<(double x, double y)>();
-        public double Direction { get; set; }
-        public double Speed { get; set; }
-        public double Curvature { get; set; }
-        public int Length { get; set; }
-        public double Intensity { get; set; } = 0.0;
-        public HashSet<(int x, int y)> PreviousPoints { get; set; } = new HashSet<(int x, int y)>();
-        public bool IsNight { get; set; }
-        public bool IsDarkening { get; set; }
-    }
     public List<Wave> waves = new List<Wave>();
     public const double WAVE_SPEED = 0.2;
     private void InitializeWaves()
@@ -2650,66 +2638,6 @@ public class Map
     #endregion
     #region weather system
     #region essentials
-    public enum WeatherType
-    {
-        Clear = 1,
-        Rain = 2,
-        Snow = 3,
-        Thunderstorm = 4,
-        Fog = 5,
-        Overcast = 6,
-        Hail = 7,
-        Sleet = 8,
-        Drizzle = 9,
-        BlowingSnow = 10,
-        Sandstorm = 11
-    }
-    public enum CloudType
-    {
-        Cumulus = 1,
-        Stratus = 2,
-        Cirrus = 3,
-        Cumulonimbus = 4,
-        Nimbostratus = 5,
-        Altocumulus = 6
-    }
-    public class Weather
-    {
-        public WeatherType CurrentWeather { get; set; }
-        public WeatherType NextWeather { get; set; }
-        public double Intensity { get; set; }
-        public double IntensityTarget { get; set; }
-        public double IntensityChangeSpeed { get; set; }
-        public double Temperature { get; set; }
-        public double Humidity { get; set; }
-        public double Pressure { get; set; }
-        public double WindSpeed { get; set; }
-        public double WindDirection { get; set; }
-        public double TimeOfDay { get; set; }
-        public double Season { get; set; }
-    }
-    public class Cloud
-    {
-        public int X { get; set; }
-        public int Y { get; set; }
-        public double Speed { get; set; }
-        public double Direction { get; set; }
-        public double Precipitation { get; set; }
-        public CloudType Type { get; set; }
-
-        public void Move()
-        {
-            X += (int)(Speed * Math.Cos(Direction));
-            Y += (int)(Speed * Math.Sin(Direction));
-        }
-    }
-    public class CloudLayer
-    {
-        public double BaseAltitude { get; set; }
-        public CloudType Type { get; set; }
-        public double Coverage { get; set; } // 0-1 cloud coverage
-        public bool IsEnabled { get; set; }
-    }
     public Weather weather {get; set;} = new Weather();
     public List<Cloud> clouds {get; set;} = new List<Cloud>();
     public double deltaTime {get; set;} = 0.5;
@@ -7157,12 +7085,7 @@ public class Map
         Console.Clear();
         return false;
     }
-    public static string title {get; set;} = @"
-   __  _ __  _   _   __ ___   ___  ___    ___
- ,'_/ /// /.' \ / \,' // o.) / _/ / o | ,' _/
-/ /_ / ` // o // \,' // o \ / _/ /  ,' _\ `. 
-|__//_n_//_n_//_/ /_//___,'/___//_/`_\/___,' 
-";
+    #region params
     public enum SettingType
     {
         MapConfig,
@@ -7284,6 +7207,13 @@ public class Map
         { economyParams, animalParams, disasterParams },
         { nullParams, nullParams, visualParams }
     };
+    #endregion
+    public static string title {get; set;} = @"
+   __  _ __  _   _   __ ___   ___  ___    ___
+ ,'_/ /// /.' \ / \,' // o.) / _/ / o | ,' _/
+/ /_ / ` // o // \,' // o \ / _/ /  ,' _\ `. 
+|__//_n_//_n_//_/ /_//___,'/___//_/`_\/___,' 
+";
     private int GetConfWindowWidth(List<ParamCoordinate> paramList)
     {
         switch (paramList)
@@ -7321,7 +7251,7 @@ public class Map
     public static int heightOffset {get; set;} = (Console.WindowHeight - (10 + gamerulesHeight + structuresHeight + bottomHeight)) / 6;
     public (int r, int g, int b) selectColor {get; set;} = ColorSpectrum.SILVER;
     public static (int x, int y) terminalCentre {get; set;} = (Console.WindowWidth / 2, Console.WindowHeight / 2);
-    private void CalculateParamCoordinates()
+    public void CalculateParamCoordinates()
     {
         int centerX = Console.WindowWidth / 2;
         int startY =  terminalCentre.y - configHeight / 2 + heightOffset;
@@ -7472,7 +7402,7 @@ public class Map
             Console.Write($"{param.PropertyName} - {GetParamValue(param)}");
         }
     }
-    private string GetParamValue(ParamCoordinate param)
+    public string GetParamValue(ParamCoordinate param)
     {
         switch (param.ParamType)
         {
@@ -7595,6 +7525,9 @@ public class Map
                     ? GetRedrawDistance(currentList, oldParam, true) : 0;
                 switch (key.Key)
                 {
+                    case ConsoleKey.Escape:
+                        conf.ShouldSave = false;
+                        return;
                     case ConsoleKey.UpArrow:
                     case ConsoleKey.W:
                         // Special 2-column logic for x=1, y=1

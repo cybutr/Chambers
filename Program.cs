@@ -1098,7 +1098,7 @@ namespace Internal
         {
             chambers[currentChamberIndex].InitializeSpecies(count - 1, count, new Turtle(0, 0, 0, 0, chambers[currentChamberIndex].mapData, chambers[currentChamberIndex].overlayData, config.Height, config.Width, seed));
         }
-        public void SpawnCloud(int x, int y, Map.CloudType type)
+        public void SpawnCloud(int x, int y, CloudType type)
         {
             chambers[currentChamberIndex].SpawnCloud(x, y, type);
         }
@@ -1118,8 +1118,8 @@ namespace Internal
         static (int x, int y) terminalCentre = (Console.WindowWidth / 2, Console.WindowHeight / 2);
         static int menuWidth = 95;
         static int menuHeight = 50;
-        static int numberOfRows = 5;
-        static int heightOffset = (Console.WindowHeight - 10 - 5 * numberOfRows) / 6;
+        static int numberOfRows = 8;
+        static int heightOffset = (Console.WindowHeight - (13 + (6 * numberOfRows))) / 4;
         static string delete = @"
 .__@@__.
  \##$$/ 
@@ -1147,16 +1147,12 @@ namespace Internal
             for (int i = 0; i < numberOfRows; i++)
             {
                 int index = colors.Count > i ? i : i % colors.Count;
-                DrawSaveFileBox(i, colors[index], false, i == 0 ? 1 : 4);
+                DrawSaveFileBox(i, colors[index], false,  i == 0 ? 1 : 4);
             }
-            // Load button
-            Map.DrawColoredBox(terminalCentre.x - 5, terminalCentre.y + heightOffset + 10, 10, 3, "", ColorSpectrum.LIGHT_GREEN);
-            Console.SetCursorPosition(terminalCentre.x - 2, terminalCentre.y + heightOffset + 11);
-            Console.ResetColor();
-            Console.Write("LOAD");
+            DrawLoadButton(false);
             ManageSaveSlots();
         }
-        public static void DrawSaveFileBox(int index, (int r, int g, int b) color, bool isSelected, int currentSelection)
+        public static void DrawSaveFileBox(int index, (int r, int g, int b) color, bool isSelected, int currentSelection, List<string>? typedLettersBuffer = null)
         {
             int x = terminalCentre.x - menuWidth / 2;
             int y = terminalCentre.y - menuHeight / 2 + heightOffset + 9 + index * 5 + 1;
@@ -1191,7 +1187,11 @@ namespace Internal
             Console.SetCursorPosition(x + menuWidth - 8, y + i);
             Console.Write(Map.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b) + selectLines[i] + Map.ResetColor());
             }
-            if ((currentSelection == 4 || currentSelection != 5) && slots[index].name != null)
+            if (typedLettersBuffer != null)
+            {
+                DisplayCustomLetters(index, typedLettersBuffer);
+            }
+            else if (slots[index].name != null)
             {
                 DisplayCustomLetters(index, ConvertStringToList(slots[index].name ?? ""));
             }
@@ -1214,6 +1214,10 @@ namespace Internal
                 {
                     list.Add("Spacebar");
                 }
+                else if (char.IsDigit(c))
+                {
+                    list.Add($"D{c}");
+                }
                 else
                 {
                     list.Add(char.ToUpper(c).ToString());
@@ -1224,18 +1228,18 @@ namespace Internal
         public static void ManageSaveSlots()
         {
             int currentIndex = 0; // Index of the currently selected slot
-            int currentSection = 1; // 0=delete, 1=main, 2=select
-            bool shouldSaveName = false;
+            int currentSection = 1; // 0=delete, 1=main, 2=select 4=none 5=none
             bool isTyping = false;
             bool isLoad = false;
             bool shouldMenu = true;
-            bool shouldSave = false;
-            bool shouldNameReset = false;
+            List<string> typedLettersBuffer = new List<string>();
+            string previousBuffer = "";
 
-            void RedrawSaveUI(bool isSelected, int currentSelection)
+            void RedrawSaveUI(bool isSelected, int currentSelection, List<string>? typedLettersBuffer = null)
             {
                 int index = colors.Count > currentIndex ? currentIndex : currentIndex % colors.Count;
-                if (!isLoad) DrawSaveFileBox(currentIndex, colors[index], isSelected, currentSelection);
+                if (!isLoad && typedLettersBuffer != null) DrawSaveFileBox(currentIndex, colors[index], isSelected, currentSelection, typedLettersBuffer);
+                else if (!isLoad) DrawSaveFileBox(currentIndex, colors[index], isSelected, currentSelection);
                 else DrawSaveFileBox(currentIndex, colors[index], isSelected, 4);
             }
 
@@ -1244,27 +1248,86 @@ namespace Internal
                 while (!isConfiguring)
                 {
                     var key = Console.ReadKey(true).Key;
-                    string previousBuffer = slots[currentIndex].chamber.conf.Name ?? "";
                     if (isTyping)
                     {
 
-                        if (!shouldSaveName)
-                        {
-                            shouldSaveName = true;
-                            typedLettersBuffer = ConvertStringToList(slots[currentIndex].name ?? "");
-                        }
-
                         switch (key)
                         {
-                            case ConsoleKey.Escape:
-                                shouldSaveName = false;
-                                isTyping = false;
-                                shouldNameReset = true;
-                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
-                                break;
                             case ConsoleKey.Enter:
-                                shouldSaveName = true;
-                                shouldSave = true;
+                                string name = "";
+                                bool nonSpaceFound = false;
+                                foreach (var letter in typedLettersBuffer)
+                                {
+                                    switch (letter)
+                                    {
+                                        case "Spacebar":
+                                            name += " ";
+                                            break;
+                                        case "D0":
+                                            name += "0";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D1":
+                                            name += "1";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D2":
+                                            name += "2";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D3":
+                                            name += "3";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D4":
+                                            name += "4";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D5":
+                                            name += "5";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D6":
+                                            name += "6";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D7":
+                                            name += "7";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D8":
+                                            name += "8";
+                                            nonSpaceFound = true;
+                                            break;
+                                        case "D9":
+                                            name += "9";
+                                            nonSpaceFound = true;
+                                            break;
+                                        default:
+                                            name += letter;
+                                            nonSpaceFound = true;
+                                            break;
+                                    }
+                                }
+                                // Only exit typing mode if the name contains non-space characters.
+                                if (!nonSpaceFound || string.IsNullOrWhiteSpace(name) || typedLettersBuffer.Count < 1)
+                                {
+                                    break;
+                                }
+                                isTyping = false;
+                                string oldPath = Path.Combine("Saves", slots[currentIndex].name + ".json");
+                                slots[currentIndex] = (slots[currentIndex].chamber, name, false, false, true);
+                                slots[currentIndex].chamber.conf.Name = name;
+                                typedLettersBuffer = new List<string>();
+                                RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                                string newPath = Path.Combine("Saves", name + ".json");
+
+                                if (File.Exists(oldPath))
+                                {
+                                    File.Move(oldPath, newPath);
+                                }
+                                break;
+                            case ConsoleKey.Escape:
                                 isTyping = false;
                                 RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
                                 break;
@@ -1272,69 +1335,31 @@ namespace Internal
                                 if (key == ConsoleKey.Backspace && typedLettersBuffer.Count > 0)
                                 {
                                     typedLettersBuffer.RemoveAt(typedLettersBuffer.Count - 1);
-                                    RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
+                                    RedrawSaveUI(slots[currentIndex].isSelected, currentSection, typedLettersBuffer);
                                     int x = terminalCentre.x - menuWidth / 2;
                                     int y = terminalCentre.y - menuHeight / 2 + heightOffset + 9 + currentIndex * 5 + 2;
                                     DisplayCustomLetters(currentIndex, typedLettersBuffer);
                                 }
-                                else if ((char.IsLetter(key.ToString()[0]) || key == ConsoleKey.Spacebar) && typedLettersBuffer.Count + key.ToString().Length < maxNameLength - 1)
+                                else if (
+                                    (
+                                        (key == ConsoleKey.Spacebar && typedLettersBuffer.Count > 0) ||
+                                        key == ConsoleKey.A || key == ConsoleKey.B || key == ConsoleKey.C || key == ConsoleKey.D ||
+                                        key == ConsoleKey.E || key == ConsoleKey.F || key == ConsoleKey.G || key == ConsoleKey.H ||
+                                        key == ConsoleKey.I || key == ConsoleKey.J || key == ConsoleKey.K || key == ConsoleKey.L ||
+                                        key == ConsoleKey.M || key == ConsoleKey.N || key == ConsoleKey.O || key == ConsoleKey.P ||
+                                        key == ConsoleKey.Q || key == ConsoleKey.R || key == ConsoleKey.S || key == ConsoleKey.T ||
+                                        key == ConsoleKey.U || key == ConsoleKey.V || key == ConsoleKey.W || key == ConsoleKey.X ||
+                                        key == ConsoleKey.Y || key == ConsoleKey.Z || key == ConsoleKey.D0 || key == ConsoleKey.D1 ||
+                                        key == ConsoleKey.D2 || key == ConsoleKey.D3 || key == ConsoleKey.D4 || key == ConsoleKey.D5 ||
+                                        key == ConsoleKey.D6 || key == ConsoleKey.D7 || key == ConsoleKey.D8 || key == ConsoleKey.D9
+                                    )
+                                    && GetTypedLettersListLenght(typedLettersBuffer)
+                                        + GetLetter(ConvertConsoleKeyToLetter(key.ToString())).Split('\n')[0].Length + 1 < 67)
                                 {
                                     typedLettersBuffer.Add(key.ToString());
                                     DisplayCustomLetters(currentIndex, typedLettersBuffer);
                                 }
                                 break;
-                        }
-                        if (shouldSaveName)
-                        {
-                            string name = "";
-                            foreach (var letter in typedLettersBuffer)
-                            {
-                                switch (letter)
-                                {
-                                    case "Spacebar":
-                                        name += " ";
-                                        break;
-                                    default:
-                                        name += letter;
-                                        break;
-                                }
-                            }
-                            slots[currentIndex] = (slots[currentIndex].chamber, name, false, false, true);
-                            typedLettersBuffer = new List<string>();
-                            shouldSaveName = false;
-                            if (shouldSave)
-                            {
-                                var slot = slots[currentIndex];
-                                slot.name = previousBuffer;
-                                slot.chamber.conf.Name = previousBuffer;
-                                slots[currentIndex] = slot;
-                                shouldSave = false;
-                            }
-                            else
-                            {
-                                var slot = slots[currentIndex];
-                                slot.name = name;
-                                slot.chamber.conf.Name = name;
-                                slots[currentIndex] = slot;
-                            }
-                            if (shouldNameReset)
-                            {
-                                shouldNameReset = false;
-                                slots[currentIndex] = (slots[currentIndex].chamber, previousBuffer, false, false, true);
-                                name = previousBuffer;
-                            }
-                            if (name != previousBuffer)
-                            {
-                                DeleteMap(Path.Combine(Environment.CurrentDirectory, "Saves", previousBuffer + ".json"));
-                                SaveMap(slots[currentIndex].chamber);
-                            }
-                            RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
-                        }
-                        else
-                        {
-                            typedLettersBuffer = new List<string>();
-                            shouldSaveName = false;
-                            RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
                         }
                         continue;
                     }
@@ -1433,18 +1458,18 @@ namespace Internal
                                 slot.isSelected = false;
                                 slots[currentIndex] = slot;
                             }
-                            else if (currentSection == 1)
+                            else if (currentSection == 1 && !isLoad)
                             {
+                                typedLettersBuffer = ConvertStringToList(slots[currentIndex].name ?? "");
                                 previousBuffer = slots[currentIndex].name ?? "";
                                 isTyping = true;
-                                shouldSaveName = false;
                             }
                             else if (currentSection == 0)
                             {
                                 if (!slots[currentIndex].isEmpty || slots[currentIndex].name != null)
                                 {
+                                    DeleteMap(Path.Combine(Environment.CurrentDirectory, "Saves", slots[currentIndex].name ?? "") + ".json");
                                     slots[currentIndex] = (new Map(), null, false, false, true);
-                                    DeleteMap(Path.Combine(Environment.CurrentDirectory, "Saves", previousBuffer + ".json"));
                                     RedrawSaveUI(slots[currentIndex].isSelected, 1);
                                     RedrawSaveUI(slots[currentIndex].isSelected, 2);
                                 }
@@ -1477,11 +1502,9 @@ namespace Internal
                 }
             }
         }
-        private static List<string> typedLettersBuffer = new List<string>();
-        private static int maxNameLength = 16;
         public static void DisplayCustomLetters(int currentIndex, List<string> buffer)
         {
-            int x = terminalCentre.x - menuWidth / 2 + 12;
+            int x = terminalCentre.x - menuWidth / 2 + 13;
             int y = terminalCentre.y - menuHeight / 2 + heightOffset + 9 + currentIndex * 5 + 1;
 
             int currentX = x;
@@ -1493,9 +1516,9 @@ namespace Internal
                     for (int i = 0; i < 3; i++)
                     {
                         Console.SetCursorPosition(currentX, y + 1 + i);
-                        Console.Write(new string(' ', 5));
+                        Console.Write(new string(' ', 3));
                     }
-                    currentX += 6; // 5 spaces plus 1 for spacing between letters
+                    currentX += 4; // 5 spaces plus 1 for spacing between letters
                     continue;
                 }
 
@@ -1569,14 +1592,82 @@ namespace Internal
                     return Characters.Y;
                 case "Z":
                     return Characters.Z;
+                case "D0":
+                    return Characters.Zero;
+                case "D1":
+                    return Characters.One;
+                case "D2":
+                    return Characters.Two;
+                case "D3":
+                    return Characters.Three;
+                case "D4":
+                    return Characters.Four;
+                case "D5":
+                    return Characters.Five;
+                case "D6":
+                    return Characters.Six;
+                case "D7":
+                    return Characters.Seven;
+                case "D8":
+                    return Characters.Eight;
+                case "D9":
+                    return Characters.Nine;
                 default:
                     return Characters.Unknown;
             }
         }
+        public static string ConvertConsoleKeyToLetter(string key)
+        {
+            switch (key)
+            {
+                case "Spacebar":
+                    return " ";
+                case "D0":
+                    return "0";
+                case "D1":
+                    return "1";
+                case "D2":
+                    return "2";
+                case "D3":
+                    return "3";
+                case "D4":
+                    return "4";
+                case "D5":
+                    return "5";
+                case "D6":
+                    return "6";
+                case "D7":
+                    return "7";
+                case "D8":
+                    return "8";
+                case "D9":
+                    return "9";
+                default:
+                    return key;
+            }
+        }
+        public static int GetTypedLettersListLenght(List<string> list)
+        {
+            int length = 0;
+            foreach (var letter in list)
+            {
+                if (letter == "Spacebar" || letter == " ")
+                {
+                    length += 4;
+                }
+                else
+                {
+                    string letterRepresentation = GetLetter(letter);
+                    int letterWidth = letterRepresentation.Split('\n').Max(line => line.Length);
+                    length += letterWidth + 1;
+                }
+            }
+            return length;
+        }
         public static void DrawLoadButton(bool isLoad)
         {
-            DrawSelectableBox(terminalCentre.x - 5, terminalCentre.y + heightOffset + 10, 10, 3, false, false, ColorSpectrum.LIGHT_GREEN);
-            Console.SetCursorPosition(terminalCentre.x - 2, terminalCentre.y + heightOffset + 11);
+            DrawSelectableBox(terminalCentre.x - 5, terminalCentre.y - menuHeight / 2 + heightOffset + 9 + numberOfRows * 5 + 1, 10, 3, false, false, ColorSpectrum.LIGHT_GREEN);
+            Console.SetCursorPosition(terminalCentre.x - 2, terminalCentre.y - menuHeight / 2 + heightOffset + 9 + numberOfRows * 5 + 2);
             Console.ResetColor();
             string foreground = isLoad ? Map.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b) : "";
             string background = isLoad ? Map.SetBackgroundColor(ColorSpectrum.SILVER.r, ColorSpectrum.SILVER.g, ColorSpectrum.SILVER.b) : "";
@@ -1652,26 +1743,40 @@ namespace Internal
         public static (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) AddNewChamber((Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) chamber)
         {
             isConfiguring = true;
-            Map newChamber = new Map();
-            isConfiguring = newChamber.GetConfig();
+            isConfiguring = chamber.chamber.GetConfig();
             DisplayCenteredText(asciiArt);
-            newChamber.conf.Name = chamber.name ?? "NEW CHAMBER";
-            if (chamber.name == "" || chamber.name == " ")
+            bool shouldSave = chamber.chamber.conf.ShouldSave;
+            string baseName = chamber.name ?? "NEW CHAMBER";
+            string uniqueName = baseName;
+
+            // Collect existing names from chambers and slots that start with the baseName
+            var existingNames = chambers.Select(c => c.conf.Name)
+                                        .Concat(slots.Select(s => s.name))
+                                        .Where(name => name != null && name.StartsWith(baseName))
+                                        .ToList();
+
+            int candidate = 1;
+            while(existingNames.Contains(uniqueName))
             {
-                newChamber.conf.Name = "NEW CHAMBER";
+                uniqueName = baseName + candidate.ToString();
+                candidate++;
             }
-            newChamber.Generate();
-            SaveMap(newChamber);
+
+            chamber.chamber.conf.Name = uniqueName;
+            chamber.name = uniqueName;
+
+            if (shouldSave) chamber.chamber.Generate();
+            if (shouldSave) SaveMap(chamber.chamber);
+            (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) newSlot = shouldSave ? (chamber.chamber, chamber.name, chamber.isSelected, chamber.isTyping, false) : (new Map(), null, false, false, true);
             Console.Clear();
             Map.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
             Map.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
             for (int i = 0; i < numberOfRows; i++)
             {
                 int index = colors.Count > i ? i : i % colors.Count;
-                DrawSaveFileBox(i, colors[index], false, i == 0 ? 1 : 4);
+                DrawSaveFileBox(i, colors[index], false, 4);
             }
             DrawLoadButton(false);
-            (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) newSlot = (newChamber, chamber.name, chamber.isSelected, chamber.isTyping, false);
             return newSlot;
         }
         public static void LoadSelectedSlots()
@@ -1681,10 +1786,7 @@ namespace Internal
             {
                 if (slot.isSelected)
                 {
-                    if (!slot.isEmpty)
-                    {
-                        chambers.Add(slot.chamber);
-                    }
+                    chambers.Add(slot.chamber);
                 }
             }
         }

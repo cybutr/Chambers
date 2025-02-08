@@ -54,8 +54,8 @@ _
 ";
 
     public static string J = @"
-_ 
-|  
+  _
+  |
 |_|";
     
     public static string K = @"
@@ -157,4 +157,63 @@ ___
 ?
 ?
 ?";
+    public static string One = @"
+ _
+/|
+ |
+";
+
+    public static string Two = @"
+_ 
+ )
+/_
+";
+
+    public static string Three = @"
+_ 
+_)
+_)
+";
+
+    public static string Four = @"
+_ _
+|_|
+  |
+";
+
+    public static string Five = @"
+ _.
+(_ 
+ _)
+";
+
+    public static string Six = @"
+ _.
+|_ 
+|_)
+";
+
+    public static string Seven = @"
+__
+ /
+/ 
+";
+
+    public static string Eight = @"
+ _ 
+(_)
+(_)
+";
+
+    public static string Nine = @"
+ _ 
+(_|
+  |
+";
+
+    public static string Zero = @"
+ _ 
+/ \
+\_/
+";
 }
