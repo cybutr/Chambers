@@ -1746,35 +1746,45 @@ namespace Internal
             isConfiguring = chamber.chamber.GetConfig();
             DisplayCenteredText(asciiArt);
             bool shouldSave = chamber.chamber.conf.ShouldSave;
-            string baseName = chamber.name ?? "NEW CHAMBER";
+            
+            // Use the provided name if available; otherwise use "NEW CHAMBER"
+            string providedName = chamber.name ?? "";
+            string baseName = string.IsNullOrWhiteSpace(providedName) ? "NEW CHAMBER" : providedName;
             string uniqueName = baseName;
+            
+            string savesFolder = Path.Combine(Environment.CurrentDirectory, "Saves");
+            Directory.CreateDirectory(savesFolder);
+            string fullPath = Path.Combine(savesFolder, baseName + ".json");
 
-            // Collect existing names from chambers and slots that start with the baseName
-            var existingNames = chambers.Select(c => c.conf.Name)
-                                        .Concat(slots.Select(s => s.name))
-                                        .Where(name => name != null && name.StartsWith(baseName))
-                                        .ToList();
-
-            int candidate = 1;
-            while(existingNames.Contains(uniqueName))
+            if (File.Exists(fullPath))
             {
-                uniqueName = baseName + candidate.ToString();
+            int candidate = 1;
+            while (File.Exists(Path.Combine(savesFolder, baseName + candidate.ToString() + ".json")))
+            {
                 candidate++;
             }
-
+            uniqueName = baseName + candidate.ToString();
+            }
+            
             chamber.chamber.conf.Name = uniqueName;
             chamber.name = uniqueName;
 
-            if (shouldSave) chamber.chamber.Generate();
-            if (shouldSave) SaveMap(chamber.chamber);
-            (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) newSlot = shouldSave ? (chamber.chamber, chamber.name, chamber.isSelected, chamber.isTyping, false) : (new Map(), null, false, false, true);
+            if (shouldSave)
+            {
+            chamber.chamber.Generate();
+            SaveMap(chamber.chamber);
+            }
+            
+            (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) newSlot = shouldSave
+            ? (chamber.chamber, chamber.name, chamber.isSelected, chamber.isTyping, false)
+            : (new Map(), null, false, false, true);
             Console.Clear();
             Map.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
             Map.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
             for (int i = 0; i < numberOfRows; i++)
             {
-                int index = colors.Count > i ? i : i % colors.Count;
-                DrawSaveFileBox(i, colors[index], false, 4);
+            int index = colors.Count > i ? i : i % colors.Count;
+            DrawSaveFileBox(i, colors[index], false, 4);
             }
             DrawLoadButton(false);
             return newSlot;
