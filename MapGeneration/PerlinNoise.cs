@@ -22,10 +22,20 @@ public static class Perlin
     78,66,215,61,156,180
     };
 
+    private static readonly int[][] grad3 = {
+        new[] {1,1,0}, new[] {-1,1,0}, new[] {1,-1,0}, new[] {-1,-1,0},
+        new[] {1,0,1}, new[] {-1,0,1}, new[] {1,0,-1}, new[] {-1,0,-1},
+        new[] {0,1,1}, new[] {0,-1,1}, new[] {0,1,-1}, new[] {0,-1,-1}
+    };
+
     private static int[] p;
     static Perlin()
     {
         p = new int[512];
+        for (int i = 0; i < 512; i++)
+        {
+            p[i] = permutation[i & 255];
+        }
     }
 
     private static void RandomizePermutation(int seed)
@@ -92,5 +102,129 @@ public static class Perlin
         double u = h < 8 ? x : y;
         double v = h < 4 ? y : h == 12 || h == 14 ? x : 0;
         return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v);
+    }
+    
+    // Generate Simplex Noise with fBm (multiple octaves)
+    public static double[,] GenerateSimplexFBM(int width, int height, float scale, int octaves, float persistence, float lacunarity, int seed)
+    {
+        RandomizePermutation(seed);
+        double[,] noiseMap = new double[width, height];
+        
+        float maxNoiseHeight = 0;
+        float amplitude = 1;
+        float frequency = 1;
+        
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                amplitude = 1;
+                frequency = 1;
+                float noiseHeight = 0;
+                
+                // Generate noise for each octave and sum
+                for (int i = 0; i < octaves; i++)
+                {
+                    float sampleX = x / scale * frequency;
+                    float sampleY = y / scale * frequency;
+                    
+                    // Get noise value using simplex noise
+                    double simplexValue = SimplexNoise(sampleX, sampleY);
+                    noiseHeight += (float)simplexValue * amplitude;
+                    
+                    // Prepare for the next octave
+                    amplitude *= persistence;
+                    frequency *= lacunarity;
+                }
+                
+                if (noiseHeight > maxNoiseHeight)
+                    maxNoiseHeight = noiseHeight;
+                
+                noiseMap[x, y] = noiseHeight;
+            }
+        }
+        
+        // Normalize the noise map
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                noiseMap[x, y] = (noiseMap[x, y] + 1) / (2f * maxNoiseHeight);
+            }
+        }
+        
+        return noiseMap;
+    }
+    
+    // Simplex noise implementation
+    private static double SimplexNoise(float x, float y)
+    {
+        const double F2 = 0.366025403; // 0.5*(sqrt(3.0)-1.0)
+        const double G2 = 0.211324865; // (3.0-sqrt(3.0))/6.0
+        
+        // Skew input space
+        double s = (x + y) * F2;
+        int i = FastFloor(x + s);
+        int j = FastFloor(y + s);
+        
+        double t = (i + j) * G2;
+        double X0 = i - t;
+        double Y0 = j - t;
+        double x0 = x - X0;
+        double y0 = y - Y0;
+        
+        // Determine simplex cell
+        int i1, j1;
+        if (x0 > y0) { i1 = 1; j1 = 0; } // lower triangle
+        else { i1 = 0; j1 = 1; } // upper triangle
+        
+        double x1 = x0 - i1 + G2;
+        double y1 = y0 - j1 + G2;
+        double x2 = x0 - 1.0 + 2.0 * G2;
+        double y2 = y0 - 1.0 + 2.0 * G2;
+        
+        // Calculate noise contribution from each corner
+        int ii = i & 255;
+        int jj = j & 255;
+        int gi0 = p[ii + p[jj]] % 12;
+        int gi1 = p[ii + i1 + p[jj + j1]] % 12;
+        int gi2 = p[ii + 1 + p[jj + 1]] % 12;
+        
+        double n0, n1, n2;
+        
+        // Calculate noise contributions from each corner
+        double t0 = 0.5 - x0 * x0 - y0 * y0;
+        if (t0 < 0) n0 = 0.0;
+        else {
+            t0 *= t0;
+            n0 = t0 * t0 * Dot(grad3[gi0], x0, y0);
+        }
+        
+        double t1 = 0.5 - x1 * x1 - y1 * y1;
+        if (t1 < 0) n1 = 0.0;
+        else {
+            t1 *= t1;
+            n1 = t1 * t1 * Dot(grad3[gi1], x1, y1);
+        }
+        
+        double t2 = 0.5 - x2 * x2 - y2 * y2;
+        if (t2 < 0) n2 = 0.0;
+        else {
+            t2 *= t2;
+            n2 = t2 * t2 * Dot(grad3[gi2], x2, y2);
+        }
+        
+        // Add contributions from each corner and scale to [-1,1]
+        return 70.0 * (n0 + n1 + n2);
+    }
+    
+    private static int FastFloor(double x)
+    {
+        return x > 0 ? (int)x : (int)x - 1;
+    }
+    
+    private static double Dot(int[] g, double x, double y)
+    {
+        return g[0] * x + g[1] * y;
     }
 }

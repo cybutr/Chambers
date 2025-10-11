@@ -216,4 +216,159 @@ __
 / \
 \_/
 ";
+    public static string a = @"
+ _ 
+(_|
+(_|
+";
+
+    public static string b = @"
+_  
+|_ 
+|_)
+";
+
+    public static string c = @"
+ _
+( 
+(_
+";
+
+    public static string d = @"
+  _
+ _|
+(_|
+";
+
+    public static string e = @"
+ _ 
+(__|
+(__
+";
+
+    public static string f = @"
+ _
+|_
+| 
+";
+
+    public static string g = @"
+ _ 
+(_|
+ _)
+";
+
+    public static string h = @"
+_  
+|_ 
+| |
+";
+
+    public static string i = @"
+.
+|
+|
+";
+
+    public static string j = @"
+ .
+ |
+_)
+";
+
+    public static string k = @"
+_  
+| /
+|< 
+";
+
+    public static string l = @"
+|
+|
+|
+";
+
+    public static string m = @"
+   
+|\/|
+|  |
+";
+
+    public static string n = @"
+   
+|\ 
+| \
+";
+
+    public static string o = @"
+ _ 
+/ \
+\_/
+";
+
+    public static string p = @"
+ _ 
+|_)
+|  
+";
+
+    public static string q = @"
+ _ 
+(_|
+  |
+";
+
+    public static string r = @"
+  
+|\ 
+|  
+";
+
+    public static string s = @"
+ _
+/_
+_)
+";
+
+    public static string t = @"
+_
+|_
+| 
+";
+
+    public static string u = @"
+   
+| |
+|_|
+";
+
+    public static string v = @"
+   
+\ /
+ v 
+";
+
+    public static string w = @"
+     
+\ | /
+ \|/ 
+";
+
+    public static string x = @"
+   
+\/\
+/  
+";
+
+    public static string y = @"
+   
+\_/
+ / 
+";
+
+    public static string z = @"
+__
+ /
+/_
+";
 }

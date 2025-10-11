@@ -25,6 +25,7 @@ public class Config
     public bool EnableTempatureBiomeChanges { get; set; } = true;
     public bool EnableHumidityBiomeChanges { get; set; } = true;
     public int BiomeBlend { get; set; } = 5;
+    public int NoiseType { get; set; } = 1;
 
     // Gamerules
     public bool EnableWildfires { get; set; }
