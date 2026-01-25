@@ -8,249 +8,262 @@ using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography.X509Certificates;
 using System.Reflection.Emit;
-using System.Runtime.InteropServices;
-using System.Drawing;
-using System.Runtime.CompilerServices;
-using System.ComponentModel.DataAnnotations;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Reflection;
-using System.Diagnostics;
-using Microsoft.VisualBasic;
-using System.Security.Authentication;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Runtime.InteropServices;
+using System.Reflection;
+using Internal;
 
-#nullable enable
-namespace Internal
+class Program
 {
-    public class Program
+    #region map
+    //public static int seed = DateTime.Now.Millisecond;
+    public static string seedString = Math.Round(new Random().Next() * ((new Random().NextDouble() - 0.5) * 2)).ToString();
+    public static int seed = ConvertStringToNumbers(seedString);
+    public Random rng = new Random(seed);
+    public static List<Map> chambers = new List<Map>();
+    public static List<Map> allChambers = new List<Map>();
+    public static int currentChamberIndex;
+    public static bool continueSimulating = true;
+    public static bool isUpdating = false;
+    public static bool isCommandInputMode = false;
+    public static bool isCloudsRendering = false;
+    public static bool isCloudsShadowsRendering = true;
+    public static bool IsHumidityRendering = false;
+    public static bool IsTemperatureRendering = false;
+    public static bool isConfiguring = false;
+    public static bool isMenu = true;
+    #endregion
+    private static bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+    private static readonly object mapLock = new object();
+    public static List<string> outputBuffer = new List<string>();
+    public static List<string> eventBuffer = new List<string>();
+    public static List<(Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty)> slots = new List<(Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty)>();
+    public static Config config = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding,
+    10.0, seedString);
+    public static bool displayGUI = true;
+    static Thread updateThread = null!;
+    static Thread keyListenerThread = null!;
+    static Thread weatherThread = null!;
+    static Thread guiThread = null!;
+    // Loading screen
+    public static string loadingAsciiArt = @"
+                    _,.---._        ,---.                       .=-.-.  .-._               _,---.                     
+    _.-.       ,-.' , -  `.    .--.'  \       _,..---._     /==/_ / /==/ \  .-._    _.='.'-,  \                       
+    .-,.'|      /==/_,  ,  - \   \==\-/\ \    /==/,   -  \   |==|, |  |==|, \/ /, /  /==.'-     /                     
+    |==|, |     |==|   .=.     |  /==/-|_\ |   |==|   _   _\  |==|  |  |==|-  \|  |  /==/ -   .-'                     
+    |==|- |     |==|_ : ;=:  - |  \==\,   - \  |==|  .=.   |  |==|- |  |==| ,  | -|  |==|_   /_,-.                    
+    |==|, |     |==| , '='     |  /==/ -   ,|  |==|,|   | -|  |==| ,|  |==| -   _ |  |==|  , \_.' )                   
+    |==|- `-._   \==\ -    ,_ /  /==/-  /\ - \ |==|  '='   /  |==|- |  |==|  /\ , |  \==\-  ,    (   .=.   .=.   .=.  
+    /==/ - , ,/   '.='. -   .'   \==\ _.\=\.-' |==|-,   _`/   /==/. /  /==/, | |- |   /==/ _  ,  /  :=; : :=; : :=; : 
+    `--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=` ";
+
+    public static void Main(string[] args)
     {
-        #region map
-        //public static int seed = DateTime.Now.Millisecond;
-        public static string seedString = Math.Round(new Random().Next() * ((new Random().NextDouble() - 0.5) * 2)).ToString();
-        public static int seed = ConvertStringToNumbers(seedString);
-        public Random rng = new Random(seed);
-        public static List<Map> chambers = new List<Map>();
-        public static List<Map> allChambers = new List<Map>();
-        public static int currentChamberIndex;
-        public static bool continueSimulating = true;
-        public static bool isUpdating = false;
-        public static bool isCommandInputMode = false;
-        public static bool isCloudsRendering = false;
-        public static bool isCloudsShadowsRendering = true;
-        public static bool IsHumidityRendering = false;
-        public static bool IsTemperatureRendering = false;
-        public static bool isConfiguring = false;
-        public static bool isMenu = true;
-        #endregion
-        private static bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-        private static readonly object mapLock = new object();
-        public static List<string> outputBuffer = new List<string>();
-        public static List<string> eventBuffer = new List<string>();
-        public static List<(Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty)> slots = new List<(Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty)>();
-        public static Config config = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding, 
-        10.0, seedString);
-        // Loading screen
-        public static string asciiArt = @"
-                        _,.---._        ,---.                       .=-.-.  .-._               _,---.                     
-        _.-.       ,-.' , -  `.    .--.'  \       _,..---._     /==/_ / /==/ \  .-._    _.='.'-,  \                       
-        .-,.'|      /==/_,  ,  - \   \==\-/\ \    /==/,   -  \   |==|, |  |==|, \/ /, /  /==.'-     /                     
-        |==|, |     |==|   .=.     |  /==/-|_\ |   |==|   _   _\  |==|  |  |==|-  \|  |  /==/ -   .-'                     
-        |==|- |     |==|_ : ;=:  - |  \==\,   - \  |==|  .=.   |  |==|- |  |==| ,  | -|  |==|_   /_,-.                    
-        |==|, |     |==| , '='     |  /==/ -   ,|  |==|,|   | -|  |==| ,|  |==| -   _ |  |==|  , \_.' )                   
-        |==|- `-._   \==\ -    ,_ /  /==/-  /\ - \ |==|  '='   /  |==|- |  |==|  /\ , |  \==\-  ,    (   .=.   .=.   .=.  
-        /==/ - , ,/   '.='. -   .'   \==\ _.\=\.-' |==|-,   _`/   /==/. /  /==/, | |- |   /==/ _  ,  /  :=; : :=; : :=; : 
-        `--`-----'      `--`--''      `--`         `-.`.____.'    `--`-`   `--`./  `--`   `--`------'    `=`   `=`   `=` ";
-
-        public static void Main(string[] args)
+        // Check for test mode
+        if (args.Length > 0 && args[0] == "--test-sync")
         {
-            // Check for test mode
-            if (args.Length > 0 && args[0] == "--test-sync")
-            {
-                TestSynchronizationIntegration();
-                return;
-            }
-            else if (args.Length > 0 && args[0] == "--test-gui")
-            {
-                TestGUIFixes();
-                return;
-            }
-            else if (args.Length > 0 && args[0] == "--test-config")
-            {
-                TestConfigGUI();
-                return;
-            }
-            
-            EnableVirtualTerminalProcessing();
-            currentChamberIndex = 0;
-            Console.ResetColor();
-            Console.Clear();
-            LoadAllMapsFromFolder(Path.Combine(Environment.CurrentDirectory, "Saves"));
-            
-            // Synchronize file names with config names at startup
-            SynchronizeAllChamberFiles();
+            TestSynchronizationIntegration();
+            return;
+        }
+        else if (args.Length > 0 && args[0] == "--test-gui")
+        {
+            TestGUIFixes();
+            return;
+        }
+        else if (args.Length > 0 && args[0] == "--test-config")
+        {
+            TestConfigGUI();
+            return;
+        }
+        else if (args.Length > 0 && args[0] == "--testing")
+        {
+            Testing();
+            return;
+        }
+        EnableVirtualTerminalProcessing();
+        currentChamberIndex = 0;
+        GUI.Write(GUI.ResetColor());
+        GUI.Clear();
+        LoadAllMapsFromFolder(Path.Combine(Environment.CurrentDirectory, "Saves"));
 
-            eventBuffer.Add("None");
-            Console.CursorVisible = false;
+        // Synchronize file names with config names at startup
+        SynchronizeAllChamberFiles();
 
-            // Check console size with fallback for headless environments
-            try
+        eventBuffer.Add("None");
+        GUI.SetCursorVisible(false);
+
+        // Check console size with fallback for headless environments
+        try
+        {
+            if (Console.WindowHeight < 55 || Console.WindowWidth < 100)
             {
-                if (Console.WindowHeight < 60 || Console.WindowWidth < 100)
+                GUI.WriteLine("Note: Console window is smaller than recommended (100x60). Some UI elements may not display properly.");
+                GUI.WriteLine("Current size: {0}x{1}", Console.WindowWidth, Console.WindowHeight);
+                GUI.WriteLine("Press Enter to exit...");
+                Console.ReadLine();
+                return;
+            }
+        }
+        catch
+        {
+            GUI.WriteLine("Running in headless mode, continuing with default settings...");
+        }
+
+        for (int i = 0; i < numberOfRows; i++)
+        {
+            // Use existing chamber from allChambers if available, otherwise mark as empty
+            if (i < allChambers.Count)
+            {
+                var chamber = allChambers[i];
+                // Ensure the chamber name is not null or empty
+                string chamberName = string.IsNullOrWhiteSpace(chamber.conf.Name) ? "NEW CHAMBER" : chamber.conf.Name;
+                chamber.conf.Name = chamberName; // Ensure consistency
+                slots.Add((chamber, chamberName, false, false, false));
+            }
+            else
+            {
+                slots.Add((new Map(), null, false, false, true));
+            }
+        }
+        // Main Loop
+        Program programInstance = new Program();
+        Random globalRandom = new Random(seed);
+        Map chamber1 = new Map();
+        GUI.Clear();
+        DrawSaveSelectionGUI();
+        GUI.Clear();
+        DisplayCurrentChamber();
+        GUI.Write(GUI.ResetColor());
+
+        // Start the map update thread
+        updateThread = new Thread(() => programInstance.UpdateMaps());
+        updateThread.Start();
+
+        // Start the key listener thread
+        keyListenerThread = new Thread(() => programInstance.ListenForKeyPress());
+        keyListenerThread.Start();
+
+        // Start the weather system thread
+        weatherThread = new Thread(() => programInstance.UpdateWeather());
+        weatherThread.Start();
+
+        // Start the GUI update thread
+        guiThread = new Thread(() => programInstance.UpdateGUI());
+        guiThread.Start();
+        while (continueSimulating)
+        {
+            while (!isConfiguring)
+            {
+                if (isCommandInputMode)
                 {
-                    Console.WriteLine("Note: Console window is smaller than recommended (100x60). Some UI elements may not display properly.");
-                    Console.WriteLine("Current size: {0}x{1}", Console.WindowWidth, Console.WindowHeight);
-                    Console.WriteLine("Press Enter to exit...");
-                    Console.ReadLine();
-                    return;
-                }
-            }
-            catch
-            {
-                Console.WriteLine("Running in headless mode, continuing with default settings...");
-            }
-
-            for (int i = 0; i < numberOfRows; i++)
-            {
-                // Use existing chamber from allChambers if available, otherwise mark as empty
-                if (i < allChambers.Count)
-                {
-                    var chamber = allChambers[i];
-                    // Ensure the chamber name is not null or empty
-                    string chamberName = string.IsNullOrWhiteSpace(chamber.conf.Name) ? "NEW CHAMBER" : chamber.conf.Name;
-                    chamber.conf.Name = chamberName; // Ensure consistency
-                    slots.Add((chamber, chamberName, false, false, false));
+                    GUI.Write(GUI.ResetColor()); // Reset color before reading commands
+                    GUI.SetCursorPosition(0, chamber1.height + GUIConfig.TopPadding + 2);
+                    GUI.Write(">> "); // Prompt for input
+                    string? command = ReadCommandWithAutocomplete(); // Read input
+                    if (command != null && !string.IsNullOrWhiteSpace(command))
+                    {
+                        if (command.ToLower() == "exit")
+                        {
+                            continueSimulating = false;
+                            isConfiguring = true;
+                            for (int i = 0; i < GUIConfig.BottomPadding; i++)
+                            {
+                                GUI.SetCursorPosition(0, Console.BufferHeight - i - 1);
+                                GUI.Write(new string(' ', Console.BufferWidth));
+                            }
+                            GUI.SetCursorVisible(true);
+                            break;
+                        }
+                        else if (command.ToLower().StartsWith("chamber "))
+                        {
+                            int chamberIndex;
+                            if (int.TryParse(command.Split(' ')[1], out chamberIndex) && chamberIndex >= 0 && chamberIndex < chambers.Count)
+                            {
+                                currentChamberIndex = chamberIndex;
+                                DisplayCurrentChamber();
+                                for (int i = 0; i < GUIConfig.BottomPadding; i++)
+                                {
+                                    GUI.SetCursorPosition(0, Console.BufferHeight - i - 1);
+                                    GUI.Write(new string(' ', Console.BufferWidth));
+                                }
+                            }
+                        }
+                        else
+                        {
+                            for (int i = 0; i < GUIConfig.BottomPadding; i++)
+                            {
+                                GUI.SetCursorPosition(0, Console.BufferHeight - i - 1);
+                                GUI.Write(new string(' ', Console.BufferWidth));
+                            }
+                            continueSimulating = programInstance.ProcessCommand(command);
+                            DisplayCurrentChamber();
+                        }
+                    }
+                    // Clear the command prompt line
+                    GUI.SetCursorPosition(0, chamber1.height + GUIConfig.TopPadding + 2);
+                    GUI.Write(new string(' ', Console.BufferWidth));
+                    isCommandInputMode = false; // Exit command input mode after processing the command
+                    if (displayGUI) UpdateStaticChamberStats();
+                    if (displayGUI) chambers[currentChamberIndex].DisplayGUI();
                 }
                 else
                 {
-                    slots.Add((new Map(), null, false, false, true));
+                    Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                 }
             }
-            // Main Loop
-            Program programInstance = new Program();
-            if (args.Length > 0)
-            {
-                int.TryParse(args[0], out seed);
-            }
-            Random globalRandom = new Random(seed);
-            Map chamber1 = new Map();
-            Console.Clear();
-            DrawSaveSelectionGUI();
-            Console.Clear();
-            DisplayCurrentChamber();
-            Console.ResetColor();
-
-            // Start the map update thread
-            Thread updateThread = new Thread(() => programInstance.UpdateMaps());
-            updateThread.Start();
-
-            // Start the key listener thread
-            Thread keyListenerThread = new Thread(() => programInstance.ListenForKeyPress());
-            keyListenerThread.Start();
-
-            // Start the weather system thread
-            Thread weatherThread = new Thread(() => programInstance.UpdateWeather());
-            weatherThread.Start();
-
-            // Start the GUI update thread
-            Thread guiThread = new Thread(() => programInstance.UpdateGUI());
-            guiThread.Start();
-            while (continueSimulating)
-            {
-                while (!isConfiguring)
-                {
-                    if (isCommandInputMode)
-                    {
-                        Console.ResetColor(); // Reset color before reading commands
-                        Console.SetCursorPosition(0, chamber1.height + GUIConfig.TopPadding + 2);
-                        Console.Write(">> "); // Prompt for input
-                        string? command = ReadCommandWithAutocomplete(); // Read input
-                        if (command != null)
-                        {
-                            if (command.ToLower() == "exit")
-                            {
-                                continueSimulating = false;
-                                isConfiguring = true;
-                                for (int i = 0; i < GUIConfig.BottomPadding; i++)
-                                {
-                                    Console.SetCursorPosition(0, Console.BufferHeight - i - 1);
-                                    Console.Write(new string(' ', Console.BufferWidth));
-                                }
-                                Console.CursorVisible = true;
-                                break;
-                            }
-                            else if (command.ToLower().StartsWith("chamber "))
-                            {
-                                int chamberIndex;
-                                if (int.TryParse(command.Split(' ')[1], out chamberIndex) && chamberIndex >= 0 && chamberIndex < chambers.Count)
-                                {
-                                    currentChamberIndex = chamberIndex;
-                                    DisplayCurrentChamber();
-                                    for (int i = 0; i < GUIConfig.BottomPadding; i++)
-                                    {
-                                        Console.SetCursorPosition(0, Console.BufferHeight - i - 1);
-                                        Console.Write(new string(' ', Console.BufferWidth));
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                for (int i = 0; i < GUIConfig.BottomPadding; i++)
-                                {
-                                    Console.SetCursorPosition(0, Console.BufferHeight - i - 1);
-                                    Console.Write(new string(' ', Console.BufferWidth));
-                                }
-                                continueSimulating = programInstance.ProcessCommand(command);
-                                DisplayCurrentChamber();
-                            }
-                        }
-                        isCommandInputMode = false; // Exit command input mode after processing the command
-                        UpdateStaticChamberStats();
-                        chambers[currentChamberIndex].DisplayGUI();
-                    }
-                    else
-                    {
-                        Thread.Sleep(sleepTime); // Adjust the sleep time as needed
-                    }
-                }
-            }
+        }
+        foreach (var chamber in chambers)
+        {
+            SaveMap(chamber);
+        }
+        GUI.Clear();
+        updateThread.Join();
+        keyListenerThread.Join();
+        weatherThread.Join();
+        guiThread.Join();
+    }
+    private static void OnExit(object? sender, ConsoleCancelEventArgs args)
+    {
+        if (isUpdating)
+        {
             foreach (var chamber in chambers)
             {
                 SaveMap(chamber);
             }
-            Console.Clear();
-            // Ensure the update thread stops when the simulation ends
+            continueSimulating = false;
             updateThread.Join();
             keyListenerThread.Join();
             weatherThread.Join();
             guiThread.Join();
+            Environment.Exit(0);
         }
-        #region map saving
-        // Compress JSON string to GZip
-        private static byte[] CompressString(string json)
+    }
+    #region map saving
+    // Compress JSON string to GZip
+    private static byte[] CompressString(string json)
+    {
+        using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        using var outputStream = new MemoryStream();
+        using (var gzip = new GZipStream(outputStream, CompressionLevel.Optimal))
         {
-            using var inputStream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-            using var outputStream = new MemoryStream();
-            using (var gzip = new GZipStream(outputStream, CompressionLevel.Optimal))
-            {
-                inputStream.CopyTo(gzip);
-            }
-            return outputStream.ToArray();
+            inputStream.CopyTo(gzip);
         }
+        return outputStream.ToArray();
+    }
 
-        // Decompress GZip back to JSON string
-        private static string DecompressToString(byte[] compressed)
+    // Decompress GZip back to JSON string
+    private static string DecompressToString(byte[] compressed)
+    {
+        using var inputStream = new MemoryStream(compressed);
+        using var gzip = new GZipStream(inputStream, CompressionMode.Decompress);
+        using var reader = new StreamReader(gzip, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+    public class Char2DArrayJsonConverter : JsonConverter<char[,]>
+    {
+        public override char[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            using var inputStream = new MemoryStream(compressed);
-            using var gzip = new GZipStream(inputStream, CompressionMode.Decompress);
-            using var reader = new StreamReader(gzip, Encoding.UTF8);
-            return reader.ReadToEnd();
-        }
-        public class Char2DArrayJsonConverter : JsonConverter<char[,]>
-        {
-            public override char[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
             var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
             if (lines.Count == 0) return new char[0, 0];
 
@@ -262,13 +275,13 @@ namespace Internal
             {
                 for (int x = 0; x < width; x++)
                 {
-                result[x, y] = lines[y][x];
+                    result[x, y] = lines[y][x];
                 }
             }
             return result;
-            }
-            public override void Write(Utf8JsonWriter writer, char[,] value, JsonSerializerOptions options)
-            {
+        }
+        public override void Write(Utf8JsonWriter writer, char[,] value, JsonSerializerOptions options)
+        {
             int width = value.GetLength(0);
             int height = value.GetLength(1);
             var lines = new List<string>(height);
@@ -278,7 +291,7 @@ namespace Internal
                 var row = new char[width];
                 for (int x = 0; x < width; x++)
                 {
-                row[x] = value[x, y];
+                    row[x] = value[x, y];
                 }
                 lines.Add(new string(row));
             }
@@ -286,12 +299,12 @@ namespace Internal
             {
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             });
-            }
         }
-        public class Bool2DArrayJsonConverter : JsonConverter<bool[,]>
+    }
+    public class Bool2DArrayJsonConverter : JsonConverter<bool[,]>
+    {
+        public override bool[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            public override bool[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
             var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
             if (lines.Count == 0) return new bool[0, 0];
 
@@ -303,13 +316,13 @@ namespace Internal
             {
                 for (int x = 0; x < width; x++)
                 {
-                result[x, y] = (lines[y][x] == '1');
+                    result[x, y] = (lines[y][x] == '1');
                 }
             }
             return result;
-            }
-            public override void Write(Utf8JsonWriter writer, bool[,] value, JsonSerializerOptions options)
-            {
+        }
+        public override void Write(Utf8JsonWriter writer, bool[,] value, JsonSerializerOptions options)
+        {
             int width = value.GetLength(0);
             int height = value.GetLength(1);
             var lines = new List<string>(height);
@@ -319,17 +332,17 @@ namespace Internal
                 var row = new char[width];
                 for (int x = 0; x < width; x++)
                 {
-                row[x] = value[x, y] ? '1' : '0';
+                    row[x] = value[x, y] ? '1' : '0';
                 }
                 lines.Add(new string(row));
             }
             JsonSerializer.Serialize(writer, lines, options);
-            }
         }
-        public class Int2DArrayJsonConverter : JsonConverter<int[,]>
+    }
+    public class Int2DArrayJsonConverter : JsonConverter<int[,]>
+    {
+        public override int[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            public override int[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
             var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
             if (lines.Count == 0) return new int[0, 0];
 
@@ -360,9 +373,9 @@ namespace Internal
                 }
             }
             return result;
-            }
-            public override void Write(Utf8JsonWriter writer, int[,] value, JsonSerializerOptions options)
-            {
+        }
+        public override void Write(Utf8JsonWriter writer, int[,] value, JsonSerializerOptions options)
+        {
             int height = value.GetLength(0);
             int width = value.GetLength(1);
             var lines = new List<string>(height);
@@ -372,7 +385,7 @@ namespace Internal
                 var row = new StringBuilder();
                 for (int x = 0; x < width; x++)
                 {
-                row.Append($"({value[y, x]})");
+                    row.Append($"({value[y, x]})");
                 }
                 lines.Add(row.ToString());
             }
@@ -380,98 +393,98 @@ namespace Internal
             {
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             });
-            }
         }
-        public class BoolJsonConverter : JsonConverter<bool>
+    }
+    public class BoolJsonConverter : JsonConverter<bool>
+    {
+        public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
             if (reader.TokenType == JsonTokenType.Number) return reader.GetInt32() != 0;
             throw new JsonException("Expected 0 or 1");
-            }
-            public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options)
-            {
-            writer.WriteNumberValue(value ? 1 : 0);
-            }
         }
-        public class ValueTupleIntKeyConverter<TValue> : JsonConverter<Dictionary<(int, int), TValue>>
+        public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options)
         {
-            public override Dictionary<(int, int), TValue> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
+            writer.WriteNumberValue(value ? 1 : 0);
+        }
+    }
+    public class ValueTupleIntKeyConverter<TValue> : JsonConverter<Dictionary<(int, int), TValue>>
+    {
+        public override Dictionary<(int, int), TValue> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
             var dict = new Dictionary<(int, int), TValue>();
             var intermediate = JsonSerializer.Deserialize<Dictionary<string, TValue>>(ref reader, options);
             if (intermediate != null)
             {
                 foreach (var kvp in intermediate)
                 {
-                var parts = kvp.Key.Split('|');
-                var key = (int.Parse(parts[0]), int.Parse(parts[1]));
-                dict[key] = kvp.Value;
+                    var parts = kvp.Key.Split('|');
+                    var key = (int.Parse(parts[0]), int.Parse(parts[1]));
+                    dict[key] = kvp.Value;
                 }
             }
             return dict;
-            }
-            public override void Write(Utf8JsonWriter writer, Dictionary<(int, int), TValue> value, JsonSerializerOptions options)
-            {
+        }
+        public override void Write(Utf8JsonWriter writer, Dictionary<(int, int), TValue> value, JsonSerializerOptions options)
+        {
             var intermediate = value.ToDictionary(k => $"{k.Key.Item1}|{k.Key.Item2}", v => v.Value);
             JsonSerializer.Serialize(writer, intermediate, options);
-            }
         }
-        public class ValueTupleIntDoubleKeyConverter : JsonConverter<Dictionary<(int, int), double>>
+    }
+    public class ValueTupleIntDoubleKeyConverter : JsonConverter<Dictionary<(int, int), double>>
+    {
+        public override Dictionary<(int, int), double> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            public override Dictionary<(int, int), double> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            var dict = new Dictionary<(int, int), double>();
+            var intermediate = JsonSerializer.Deserialize<Dictionary<string, double>>(ref reader, options);
+            if (intermediate != null)
             {
-                var dict = new Dictionary<(int, int), double>();
-                var intermediate = JsonSerializer.Deserialize<Dictionary<string, double>>(ref reader, options);
-                if (intermediate != null)
-                {
-                    foreach (var kvp in intermediate) { var parts = kvp.Key.Split('|'); var key = (int.Parse(parts[0]), int.Parse(parts[1])); dict[key] = kvp.Value; }
-                }
-                return dict;
+                foreach (var kvp in intermediate) { var parts = kvp.Key.Split('|'); var key = (int.Parse(parts[0]), int.Parse(parts[1])); dict[key] = kvp.Value; }
             }
-            public override void Write(Utf8JsonWriter writer, Dictionary<(int, int), double> value, JsonSerializerOptions options)
-            {
-                var intermediate = value.ToDictionary(k => $"{k.Key.Item1}|{k.Key.Item2}", v => v.Value);
-                JsonSerializer.Serialize(writer, intermediate, options);
-            }
+            return dict;
         }
-        public class Double2DArrayJsonConverter : JsonConverter<double[,]>
+        public override void Write(Utf8JsonWriter writer, Dictionary<(int, int), double> value, JsonSerializerOptions options)
         {
-            public override double[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            var intermediate = value.ToDictionary(k => $"{k.Key.Item1}|{k.Key.Item2}", v => v.Value);
+            JsonSerializer.Serialize(writer, intermediate, options);
+        }
+    }
+    public class Double2DArrayJsonConverter : JsonConverter<double[,]>
+    {
+        public override double[,] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
+            if (lines.Count == 0) return new double[0, 0];
+
+            int height = lines.Count;
+            var splittedLines = new List<List<double>>();
+            foreach (var line in lines)
             {
-                var lines = JsonSerializer.Deserialize<List<string>>(ref reader, options) ?? new();
-                if (lines.Count == 0) return new double[0, 0];
-
-                int height = lines.Count;
-                var splittedLines = new List<List<double>>();
-                foreach (var line in lines)
+                var rowData = new List<double>();
+                var parts = line.Split(new[] { '(', ')' }, StringSplitOptions.RemoveEmptyEntries);
+                parts = parts.Select(p => p.Trim())
+                            .Where(p => !string.IsNullOrWhiteSpace(p))
+                            .ToArray();
+                foreach (var chunk in parts)
                 {
-                    var rowData = new List<double>();
-                    var parts = line.Split(new[] { '(', ')' }, StringSplitOptions.RemoveEmptyEntries);
-                    parts = parts.Select(p => p.Trim())
-                                .Where(p => !string.IsNullOrWhiteSpace(p))
-                                .ToArray();
-                    foreach (var chunk in parts)
-                    {
-                        rowData.Add(double.Parse(chunk, CultureInfo.InvariantCulture));
-                    }
-                    splittedLines.Add(rowData);
+                    rowData.Add(double.Parse(chunk, CultureInfo.InvariantCulture));
                 }
-
-                int width = splittedLines.Max(r => r.Count);
-                var result = new double[height, width];
-
-                for (int y = 0; y < height; y++)
-                {
-                    for (int x = 0; x < splittedLines[y].Count; x++)
-                    {
-                        result[y, x] = splittedLines[y][x];
-                    }
-                }
-                return result;
+                splittedLines.Add(rowData);
             }
-            public override void Write(Utf8JsonWriter writer, double[,] value, JsonSerializerOptions options)
+
+            int width = splittedLines.Max(r => r.Count);
+            var result = new double[height, width];
+
+            for (int y = 0; y < height; y++)
             {
+                for (int x = 0; x < splittedLines[y].Count; x++)
+                {
+                    result[y, x] = splittedLines[y][x];
+                }
+            }
+            return result;
+        }
+        public override void Write(Utf8JsonWriter writer, double[,] value, JsonSerializerOptions options)
+        {
             int height = value.GetLength(0);
             int width = value.GetLength(1);
             var lines = new List<string>(height);
@@ -481,7 +494,7 @@ namespace Internal
                 var row = new StringBuilder();
                 for (int x = 0; x < width; x++)
                 {
-                row.Append($"({value[y, x].ToString(CultureInfo.InvariantCulture)})");
+                    row.Append($"({value[y, x].ToString(CultureInfo.InvariantCulture)})");
                 }
                 lines.Add(row.ToString());
             }
@@ -489,458 +502,501 @@ namespace Internal
             {
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             });
+        }
+    }
+
+    // Saving without compression
+    public static void SaveMap(Map map)
+    {
+        var folderPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+        Directory.CreateDirectory(folderPath);
+
+        string fileName = $"{map.conf.Name}.json";
+        string fullPath = Path.Combine(folderPath, fileName);
+
+        var options = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true };
+        options.Converters.Add(new Char2DArrayJsonConverter());
+        options.Converters.Add(new Bool2DArrayJsonConverter());
+        options.Converters.Add(new BoolJsonConverter());
+        options.Converters.Add(new Int2DArrayJsonConverter());
+        options.Converters.Add(new Double2DArrayJsonConverter());
+        options.Converters.Add(new ValueTupleIntKeyConverter<int>());
+        options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
+
+        string json = JsonSerializer.Serialize(map, options);
+        File.WriteAllText(fullPath, json);
+    }
+    public static Map? LoadMap(string filePath)
+    {
+        var options = new JsonSerializerOptions { IncludeFields = true };
+        options.Converters.Add(new Char2DArrayJsonConverter());
+        options.Converters.Add(new Bool2DArrayJsonConverter());
+        options.Converters.Add(new BoolJsonConverter());
+        options.Converters.Add(new Int2DArrayJsonConverter());
+        options.Converters.Add(new Double2DArrayJsonConverter());
+        options.Converters.Add(new ValueTupleIntKeyConverter<int>());
+        options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
+
+        string json = File.ReadAllText(filePath);
+        return JsonSerializer.Deserialize<Map>(json, options);
+    }
+
+    // Saving with compression
+    /*         public static void SaveMap(Map map)
+            {
+                var savePath = Path.Combine(Environment.CurrentDirectory, "Saves");
+                Directory.CreateDirectory(savePath);
+                var fileName = $"{map.conf.Name}.json.gz";
+                var fullPath = Path.Combine(savePath, fileName);
+
+                var options = new JsonSerializerOptions { IncludeFields = true };
+                options.Converters.Add(new Char2DArrayJsonConverter());
+                options.Converters.Add(new Bool2DArrayJsonConverter());
+                options.Converters.Add(new BoolJsonConverter());
+                options.Converters.Add(new Int2DArrayJsonConverter());
+                options.Converters.Add(new Double2DArrayJsonConverter());
+                options.Converters.Add(new ValueTupleIntKeyConverter<int>());
+                options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
+
+                var json = JsonSerializer.Serialize(map, options);
+                using var fileStream = File.Create(fullPath);
+                using var gzip = new GZipStream(fileStream, CompressionMode.Compress);
+                using var writer = new StreamWriter(gzip);
+                writer.Write(json);
+            }
+            public static Map? LoadMap(string filePath)
+            {
+                var options = new JsonSerializerOptions { IncludeFields = true };
+                options.Converters.Add(new Char2DArrayJsonConverter());
+                options.Converters.Add(new Bool2DArrayJsonConverter());
+                options.Converters.Add(new BoolJsonConverter());
+                options.Converters.Add(new Int2DArrayJsonConverter());
+                options.Converters.Add(new Double2DArrayJsonConverter());
+                options.Converters.Add(new ValueTupleIntKeyConverter<int>());
+                options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
+
+                using var fileStream = File.OpenRead(filePath);
+                using var gzip = new GZipStream(fileStream, CompressionMode.Decompress);
+                using var reader = new StreamReader(gzip);
+                var json = reader.ReadToEnd();
+                return JsonSerializer.Deserialize<Map>(json, options);
+            }
+     */
+    public static void DeleteMap(string filePath)
+    {
+        File.Delete(filePath);
+    }
+    public static string? RenameChamberFile(string oldFilePath, string newName, Map chamber)
+    {
+        try
+        {
+            string directory = Path.GetDirectoryName(oldFilePath) ?? "Saves";
+            string newFilePath = Path.Combine(directory, newName + ".json");
+
+            // Update chamber config first
+            chamber.conf.Name = newName;
+
+            // If the file doesn't need to be renamed (same path), just save
+            if (string.Equals(oldFilePath, newFilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                SaveMap(chamber);
+                return newFilePath;
+            }
+
+            // If target file already exists, delete it
+            if (File.Exists(newFilePath))
+            {
+                File.Delete(newFilePath);
+            }
+
+            // Move/rename the file if source exists
+            if (File.Exists(oldFilePath))
+            {
+                File.Move(oldFilePath, newFilePath);
+            }
+
+            // Save the updated chamber to ensure config is persisted
+            SaveMap(chamber);
+
+            return newFilePath;
+        }
+        catch
+        {
+            // If renaming fails, just save with the new name
+            chamber.conf.Name = newName;
+            SaveMap(chamber);
+            return Path.Combine("Saves", newName + ".json");
+        }
+    }
+
+    /// <summary>
+    /// Synchronizes all chamber files to ensure file names match config names
+    /// </summary>
+    public static void SynchronizeAllChamberFiles()
+    {
+        var folderPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+        if (!Directory.Exists(folderPath))
+            return;
+
+        var filesToRename = new List<(string oldPath, string newPath, Map chamber)>();
+
+        // Scan all files and check for mismatches
+        foreach (var file in Directory.GetFiles(folderPath, "*.json"))
+        {
+            Map? chamber = LoadMap(file);
+            if (chamber != null)
+            {
+                string actualFileName = Path.GetFileNameWithoutExtension(file);
+                string configName = chamber.conf.Name;
+
+                // If there's a mismatch, prepare for rename
+                if (actualFileName != configName)
+                {
+                    string newPath = Path.Combine(folderPath, configName + ".json");
+                    filesToRename.Add((file, newPath, chamber));
+                }
             }
         }
 
-        // Saving without compression
-        public static void SaveMap(Map map)
-        {
-            var folderPath = Path.Combine(Environment.CurrentDirectory, "Saves");
-            Directory.CreateDirectory(folderPath);
-
-            string fileName = $"{map.conf.Name}.json";
-            string fullPath = Path.Combine(folderPath, fileName);
-
-            var options = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true };
-            options.Converters.Add(new Char2DArrayJsonConverter());
-            options.Converters.Add(new Bool2DArrayJsonConverter());
-            options.Converters.Add(new BoolJsonConverter());
-            options.Converters.Add(new Int2DArrayJsonConverter());
-            options.Converters.Add(new Double2DArrayJsonConverter());
-            options.Converters.Add(new ValueTupleIntKeyConverter<int>());
-            options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
-
-            string json = JsonSerializer.Serialize(map, options);
-            File.WriteAllText(fullPath, json);
-        }
-        public static Map? LoadMap(string filePath)
-        {
-            var options = new JsonSerializerOptions { IncludeFields = true };
-            options.Converters.Add(new Char2DArrayJsonConverter());
-            options.Converters.Add(new Bool2DArrayJsonConverter());
-            options.Converters.Add(new BoolJsonConverter());
-            options.Converters.Add(new Int2DArrayJsonConverter());
-            options.Converters.Add(new Double2DArrayJsonConverter());
-            options.Converters.Add(new ValueTupleIntKeyConverter<int>());
-            options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
-
-            string json = File.ReadAllText(filePath);
-            return JsonSerializer.Deserialize<Map>(json, options);
-        }
-
-        // Saving with compression
-/*         public static void SaveMap(Map map)
-        {
-            var savePath = Path.Combine(Environment.CurrentDirectory, "Saves");
-            Directory.CreateDirectory(savePath);
-            var fileName = $"{map.conf.Name}.json.gz";
-            var fullPath = Path.Combine(savePath, fileName);
-
-            var options = new JsonSerializerOptions { IncludeFields = true };
-            options.Converters.Add(new Char2DArrayJsonConverter());
-            options.Converters.Add(new Bool2DArrayJsonConverter());
-            options.Converters.Add(new BoolJsonConverter());
-            options.Converters.Add(new Int2DArrayJsonConverter());
-            options.Converters.Add(new Double2DArrayJsonConverter());
-            options.Converters.Add(new ValueTupleIntKeyConverter<int>());
-            options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
-
-            var json = JsonSerializer.Serialize(map, options);
-            using var fileStream = File.Create(fullPath);
-            using var gzip = new GZipStream(fileStream, CompressionMode.Compress);
-            using var writer = new StreamWriter(gzip);
-            writer.Write(json);
-        }
-        public static Map? LoadMap(string filePath)
-        {
-            var options = new JsonSerializerOptions { IncludeFields = true };
-            options.Converters.Add(new Char2DArrayJsonConverter());
-            options.Converters.Add(new Bool2DArrayJsonConverter());
-            options.Converters.Add(new BoolJsonConverter());
-            options.Converters.Add(new Int2DArrayJsonConverter());
-            options.Converters.Add(new Double2DArrayJsonConverter());
-            options.Converters.Add(new ValueTupleIntKeyConverter<int>());
-            options.Converters.Add(new ValueTupleIntDoubleKeyConverter());
-
-            using var fileStream = File.OpenRead(filePath);
-            using var gzip = new GZipStream(fileStream, CompressionMode.Decompress);
-            using var reader = new StreamReader(gzip);
-            var json = reader.ReadToEnd();
-            return JsonSerializer.Deserialize<Map>(json, options);
-        }
- */
-        public static void DeleteMap(string filePath)
-        {
-            File.Delete(filePath);
-        }
-        
-        /// <summary>
-        /// Renames a chamber file and updates the chamber's config name accordingly
-        /// </summary>
-        /// <param name="oldFilePath">Current file path</param>
-        /// <param name="newName">New name for the chamber</param>
-        /// <param name="chamber">Chamber object to update</param>
-        /// <returns>New file path if successful, null if failed</returns>
-        public static string? RenameChamberFile(string oldFilePath, string newName, Map chamber)
+        // Perform renames
+        foreach (var (oldPath, newPath, chamber) in filesToRename)
         {
             try
             {
-                string directory = Path.GetDirectoryName(oldFilePath) ?? "Saves";
-                string newFilePath = Path.Combine(directory, newName + ".json");
-                
-                // Update chamber config first
-                chamber.conf.Name = newName;
-                
-                // If the file doesn't need to be renamed (same path), just save
-                if (string.Equals(oldFilePath, newFilePath, StringComparison.OrdinalIgnoreCase))
+                // If target exists, delete it (avoid conflicts)
+                if (File.Exists(newPath) && !string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    SaveMap(chamber);
-                    return newFilePath;
+                    File.Delete(newPath);
                 }
-                
-                // If target file already exists, delete it
-                if (File.Exists(newFilePath))
-                {
-                    File.Delete(newFilePath);
-                }
-                
-                // Move/rename the file if source exists
-                if (File.Exists(oldFilePath))
-                {
-                    File.Move(oldFilePath, newFilePath);
-                }
-                
-                // Save the updated chamber to ensure config is persisted
-                SaveMap(chamber);
-                
-                return newFilePath;
+
+                File.Move(oldPath, newPath);
             }
             catch
             {
-                // If renaming fails, just save with the new name
-                chamber.conf.Name = newName;
+                // If rename fails, at least ensure the config matches the current file name
+                chamber.conf.Name = Path.GetFileNameWithoutExtension(oldPath);
                 SaveMap(chamber);
-                return Path.Combine("Saves", newName + ".json");
             }
         }
-        
-        /// <summary>
-        /// Synchronizes all chamber files to ensure file names match config names
-        /// </summary>
-        public static void SynchronizeAllChamberFiles()
+    }
+
+    /// <summary>
+    /// Gets a unique chamber name by appending numbers if necessary
+    /// </summary>
+    /// <param name="baseName">Base name to start with</param>
+    /// <param name="existingNames">Collection of existing names to avoid</param>
+    /// <returns>Unique name</returns>
+    public static string GetUniqueChamberName(string baseName, IEnumerable<string> existingNames)
+    {
+        var existingSet = existingNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!existingSet.Contains(baseName))
+            return baseName;
+
+        int counter = 1;
+        string candidateName;
+        do
         {
-            var folderPath = Path.Combine(Environment.CurrentDirectory, "Saves");
-            if (!Directory.Exists(folderPath))
-                return;
-            
-            var filesToRename = new List<(string oldPath, string newPath, Map chamber)>();
-            
-            // Scan all files and check for mismatches
-            foreach (var file in Directory.GetFiles(folderPath, "*.json"))
+            candidateName = $"{baseName}{counter}";
+            counter++;
+        } while (existingSet.Contains(candidateName));
+
+        return candidateName;
+    }
+
+    public static void LoadAllMapsFromFolder(string folderPath)
+    {
+        // Ensure folder exists
+        if (!Directory.Exists(folderPath))
+            return;
+
+        // Find all .json map files
+        foreach (var file in Directory.GetFiles(folderPath, "*.json"))
+        {
+            Map? loadedMap = LoadMap(file);
+            if (loadedMap != null)
             {
-                Map? chamber = LoadMap(file);
-                if (chamber != null)
+                // Sync the config name with the actual filename (without extension)
+                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file);
+                loadedMap.conf.Name = fileNameWithoutExtension;
+                allChambers.Add(loadedMap);
+            }
+        }
+    }
+    #endregion
+    public static int ConvertStringToNumbers(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return new Random().Next();
+
+        int hash = 17;
+        foreach (char c in input)
+        {
+            hash = hash * 31 + c;
+        }
+
+        return hash;
+    }
+    public static void DisplayCenteredText(string text)
+    {
+        var lines = text.Split('\n');
+        int consoleWidth = Console.WindowWidth;
+        int consoleHeight = Console.WindowHeight;
+        int startY = (consoleHeight / 2) - (lines.Length / 2);
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            int startX = (consoleWidth / 2) - (lines[i].Length / 2);
+            GUI.SetCursorPosition(startX, startY + i);
+            GUI.WriteLine(lines[i]);
+        }
+    }
+    #region WinApi functions
+    // Import necessary WinAPI functions
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GetConsoleMode(IntPtr hConsoleHandle, out int lpMode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool SetConsoleMode(IntPtr hConsoleHandle, int dwMode);
+
+    const int ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004;
+
+    static void EnableVirtualTerminalProcessing()
+    {
+        if (isLinux)
+        {
+            // No need to enable anything on Linux, ANSI escape codes work by default
+            return;
+        }
+
+        IntPtr handle = System.Diagnostics.Process.GetCurrentProcess().Handle;
+        if (GetConsoleMode(handle, out int mode))
+        {
+            mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+            SetConsoleMode(handle, mode);
+        }
+    }
+    #endregion
+    public static readonly List<string> Commands = new List<string>
+            {
+                "help",
+                "exit",
+                "addchamber",
+                "removechamber",
+                "regenerate",
+                "chamber",
+                "run",
+                "seed",
+                "avaragetemp",
+                "avaragehum",
+                "menu"
+            };
+    public static int sleepTime = 100;
+    public int maxSleepTime = 3000;
+    public int minSleepTime = 10;
+    private void ListenForKeyPress()
+    {
+        while (continueSimulating)
+        {
+            while (!isConfiguring)
+            {
+                if (Console.KeyAvailable)
                 {
-                    string actualFileName = Path.GetFileNameWithoutExtension(file);
-                    string configName = chamber.conf.Name;
-                    
-                    // If there's a mismatch, prepare for rename
-                    if (actualFileName != configName)
+                    var keyInfo = Console.ReadKey(true);
+                    var key = keyInfo.Key;
+                    var tempUpd = isUpdating;
+                    if ((key == ConsoleKey.P || key == ConsoleKey.Spacebar) && !isCommandInputMode)
                     {
-                        string newPath = Path.Combine(folderPath, configName + ".json");
-                        filesToRename.Add((file, newPath, chamber));
+                        IsHumidityRendering = false;
+                        IsTemperatureRendering = false;
+                        isUpdating = !isUpdating;
                     }
-                }
-            }
-            
-            // Perform renames
-            foreach (var (oldPath, newPath, chamber) in filesToRename)
-            {
-                try
-                {
-                    // If target exists, delete it (avoid conflicts)
-                    if (File.Exists(newPath) && !string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+                    else if (key == ConsoleKey.C && !isUpdating)
                     {
-                        File.Delete(newPath);
+                        isCommandInputMode = !isCommandInputMode;
                     }
-                    
-                    File.Move(oldPath, newPath);
-                }
-                catch
-                {
-                    // If rename fails, at least ensure the config matches the current file name
-                    chamber.conf.Name = Path.GetFileNameWithoutExtension(oldPath);
-                    SaveMap(chamber);
-                }
-            }
-        }
-        
-        /// <summary>
-        /// Gets a unique chamber name by appending numbers if necessary
-        /// </summary>
-        /// <param name="baseName">Base name to start with</param>
-        /// <param name="existingNames">Collection of existing names to avoid</param>
-        /// <returns>Unique name</returns>
-        public static string GetUniqueChamberName(string baseName, IEnumerable<string> existingNames)
-        {
-            var existingSet = existingNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            
-            if (!existingSet.Contains(baseName))
-                return baseName;
-            
-            int counter = 1;
-            string candidateName;
-            do
-            {
-                candidateName = $"{baseName}{counter}";
-                counter++;
-            } while (existingSet.Contains(candidateName));
-            
-            return candidateName;
-        }
-
-        public static void LoadAllMapsFromFolder(string folderPath)
-        {
-            // Ensure folder exists
-            if (!Directory.Exists(folderPath))
-                return;
-
-            // Find all .json map files
-            foreach (var file in Directory.GetFiles(folderPath, "*.json"))
-            {
-                Map? loadedMap = LoadMap(file);
-                if (loadedMap != null)
-                {
-                    // Sync the config name with the actual filename (without extension)
-                    string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file);
-                    loadedMap.conf.Name = fileNameWithoutExtension;
-                    allChambers.Add(loadedMap);
-                }
-            }
-        }
-        #endregion
-        public static int ConvertStringToNumbers(string input)
-        {
-            if (string.IsNullOrEmpty(input))
-                return new Random().Next();
-
-            int hash = 17;
-            foreach (char c in input)
-            {
-                hash = hash * 31 + c;
-            }
-
-            return hash;
-        }
-        public static void DisplayCenteredText(string text)
-        {
-            var lines = text.Split('\n');
-            int consoleWidth = Console.WindowWidth;
-            int consoleHeight = Console.WindowHeight;
-            int startY = (consoleHeight / 2) - (lines.Length / 2);
-
-            for (int i = 0; i < lines.Length; i++)
-            {
-                int startX = (consoleWidth / 2) - (lines[i].Length / 2);
-                Console.SetCursorPosition(startX, startY + i);
-                Console.WriteLine(lines[i]);
-            }
-        }
-        #region WinApi functions
-        // Import necessary WinAPI functions
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool GetConsoleMode(IntPtr hConsoleHandle, out int lpMode);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool SetConsoleMode(IntPtr hConsoleHandle, int dwMode);
-
-        const int ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004;
-
-        static void EnableVirtualTerminalProcessing()
-        {
-            if (isLinux)
-            {
-                // No need to enable anything on Linux, ANSI escape codes work by default
-                return;
-            }
-
-            IntPtr handle = System.Diagnostics.Process.GetCurrentProcess().Handle;
-            if (GetConsoleMode(handle, out int mode))
-            {
-                mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-                SetConsoleMode(handle, mode);
-            }
-        }
-        #endregion
-        public static readonly List<string> Commands = new List<string>
-                {
-                    "help",
-                    "exit",
-                    "addchamber",
-                    "removechamber",
-                    "regenerate",
-                    "chamber",
-                    "run",
-                    "seed",
-                    "avaragetemp",
-                    "avaragehum",
-                    "menu"
-                };
-        public static int sleepTime = 100;
-        public int maxSleepTime = 3000;
-        public int minSleepTime = 10;
-        private void ListenForKeyPress()
-        {
-            while (continueSimulating)
-            {
-                while (!isConfiguring)
-                {
-                    if (Console.KeyAvailable)
+                    /*                         else if (key == ConsoleKey.R)
+                                            {
+                                                chambers[currentChamberIndex].Generate();
+                                                UpdateChamberStats();
+                                                DisplayCurrentChamber();
+                                            } */
+                    else if (key == ConsoleKey.Q)
                     {
-                        var keyInfo = Console.ReadKey(true);
-                        var key = keyInfo.Key;
-                        if ((key == ConsoleKey.P || key == ConsoleKey.Spacebar) && !isCommandInputMode)
+                        isUpdating = false;
+                        isCloudsRendering = !isCloudsRendering;
+                        Thread.Sleep(200);
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        Thread.Sleep(200);
+                        isUpdating = tempUpd;
+                    }
+                    else if (key == ConsoleKey.G)
+                    {
+                        isUpdating = false;
+                        displayGUI = !displayGUI;
+                        if (displayGUI)
                         {
-                            IsHumidityRendering = false;
-                            IsTemperatureRendering = false;
-                            isUpdating = !isUpdating;
+                            UpdateStaticChamberStats();
+                            chambers[currentChamberIndex].DisplayGUI();
                         }
-                        else if (key == ConsoleKey.C && !isUpdating)
+                        else
                         {
-                            isCommandInputMode = !isCommandInputMode;
-                        }
-                        /*                         else if (key == ConsoleKey.R)
-                                                {
-                                                    chambers[currentChamberIndex].Generate();
-                                                    UpdateChamberStats();
-                                                    DisplayCurrentChamber();
-                                                } */
-                        else if ((key == ConsoleKey.Q) && !isUpdating)
-                        {
-                            isCloudsRendering = !isCloudsRendering;
-                            UpdateChamberStats();
+                            GUI.Clear();
                             DisplayCurrentChamber();
                         }
-                        else if (key == ConsoleKey.LeftArrow && chambers.Count > 1 && currentChamberIndex > 0 && !isUpdating)
+                        DisplayCurrentChamber();
+                        Thread.Sleep(200);
+                        isUpdating = tempUpd;
+                    }
+                    else if (key == ConsoleKey.LeftArrow && chambers.Count > 1 && currentChamberIndex > 0 && !isUpdating)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex--;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if (key == ConsoleKey.RightArrow && chambers.Count > 1 && currentChamberIndex < chambers.Count - 1)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex++;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if (key == ConsoleKey.DownArrow && chambers.Count > 1 && currentChamberIndex != 0)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 0;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if (key == ConsoleKey.UpArrow && chambers.Count > 1 && currentChamberIndex != chambers.Count - 1)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = chambers.Count - 1;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D1 || key == ConsoleKey.NumPad1) && chambers.Count > 0 && currentChamberIndex != 0)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 0;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D2 || key == ConsoleKey.NumPad2) && chambers.Count > 1 && currentChamberIndex != 1)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 1;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D3 || key == ConsoleKey.NumPad3) && chambers.Count > 2 && currentChamberIndex != 2)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 2;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D4 || key == ConsoleKey.NumPad4) && chambers.Count > 3 && currentChamberIndex != 3)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 3;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D5 || key == ConsoleKey.NumPad5) && chambers.Count > 4 && currentChamberIndex != 4)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 4;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D6 || key == ConsoleKey.NumPad6) && chambers.Count > 5 && currentChamberIndex != 5)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 5;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D7 || key == ConsoleKey.NumPad7) && chambers.Count > 6 && currentChamberIndex != 6)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 6;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D8 || key == ConsoleKey.NumPad8) && chambers.Count > 7 && currentChamberIndex != 7)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 7;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D9 || key == ConsoleKey.NumPad9) && chambers.Count > 8 && currentChamberIndex != 8)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 8;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if ((key == ConsoleKey.D0 || key == ConsoleKey.NumPad0) && chambers.Count > 9 && currentChamberIndex != 9)
+                    {
+                        isUpdating = false;
+                        currentChamberIndex = 9;
+                        UpdateChamberStats();
+                        DisplayCurrentChamber();
+                        isUpdating = tempUpd;
+                    }
+                    else if (key == ConsoleKey.PageDown)
+                    {
+                        if (sleepTime < maxSleepTime)
                         {
-                            currentChamberIndex--;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
+                            sleepTime += 10;
                         }
-                        else if (key == ConsoleKey.RightArrow && chambers.Count > 1 && currentChamberIndex < chambers.Count - 1 && !isUpdating)
+                    }
+                    else if (key == ConsoleKey.PageUp)
+                    {
+                        if (sleepTime > minSleepTime)
                         {
-                            currentChamberIndex++;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
+                            sleepTime -= 10;
                         }
-                        else if (key == ConsoleKey.DownArrow && chambers.Count > 1 && currentChamberIndex != 0 && !isUpdating)
-                        {
-                            currentChamberIndex = 0;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if (key == ConsoleKey.UpArrow && chambers.Count > 1 && currentChamberIndex != chambers.Count - 1 && !isUpdating)
-                        {
-                            currentChamberIndex = chambers.Count - 1;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D1 || key == ConsoleKey.NumPad1) && chambers.Count > 0 && currentChamberIndex != 0 && !isUpdating)
-                        {
-                            currentChamberIndex = 0;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D2 || key == ConsoleKey.NumPad2) && chambers.Count > 1 && currentChamberIndex != 1 && !isUpdating)
-                        {
-                            currentChamberIndex = 1;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D3 || key == ConsoleKey.NumPad3) && chambers.Count > 2 && currentChamberIndex != 2 && !isUpdating)
-                        {
-                            currentChamberIndex = 2;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D4 || key == ConsoleKey.NumPad4) && chambers.Count > 3 && currentChamberIndex != 3 && !isUpdating)
-                        {
-                            currentChamberIndex = 3;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D5 || key == ConsoleKey.NumPad5) && chambers.Count > 4 && currentChamberIndex != 4 && !isUpdating)
-                        {
-                            currentChamberIndex = 4;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D6 || key == ConsoleKey.NumPad6) && chambers.Count > 5 && currentChamberIndex != 5 && !isUpdating)
-                        {
-                            currentChamberIndex = 5;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D7 || key == ConsoleKey.NumPad7) && chambers.Count > 6 && currentChamberIndex != 6 && !isUpdating)
-                        {
-                            currentChamberIndex = 6;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D8 || key == ConsoleKey.NumPad8) && chambers.Count > 7 && currentChamberIndex != 7 && !isUpdating)
-                        {
-                            currentChamberIndex = 7;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D9 || key == ConsoleKey.NumPad9) && chambers.Count > 8 && currentChamberIndex != 8 && !isUpdating)
-                        {
-                            currentChamberIndex = 8;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if ((key == ConsoleKey.D0 || key == ConsoleKey.NumPad0) && chambers.Count > 9 && currentChamberIndex != 9 && !isUpdating)
-                        {
-                            currentChamberIndex = 9;
-                            UpdateChamberStats();
-                            DisplayCurrentChamber();
-                        }
-                        else if (key == ConsoleKey.PageDown)
-                        {
-                            if (sleepTime < maxSleepTime)
-                            {
-                                sleepTime += 10;
-                            }
-                        }
-                        else if (key == ConsoleKey.PageUp)
-                        {
-                            if (sleepTime > minSleepTime)
-                            {
-                                sleepTime -= 10;
-                            }
-                        }
-                        else if (key == ConsoleKey.T && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0 && !isUpdating && !IsHumidityRendering)
-                        {
-                            if (IsTemperatureRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
-                            IsHumidityRendering = false;
-                            if (!IsTemperatureRendering) chambers[currentChamberIndex].RenderTemperatureNoise();
-                            else chambers[currentChamberIndex].DisplayMap();
-                            IsTemperatureRendering = !IsTemperatureRendering;
-                        }
-                        else if (key == ConsoleKey.H && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0 && !isUpdating && !IsTemperatureRendering)
-                        {
-                            if (!IsHumidityRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
-                            IsTemperatureRendering = false;
-                            if (!IsHumidityRendering) chambers[currentChamberIndex].RenderHumidityNoise();
-                            else chambers[currentChamberIndex].DisplayMap();
-                            IsHumidityRendering = !IsHumidityRendering;
-                        }
+                    }
+                    else if (key == ConsoleKey.T && (keyInfo.Modifiers & ConsoleModifiers.Shift) != 0 && !isUpdating && !IsHumidityRendering)
+                    {
+                        if (IsTemperatureRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
+                        IsHumidityRendering = false;
+                        if (!IsTemperatureRendering) chambers[currentChamberIndex].RenderTemperatureNoise();
+                        else chambers[currentChamberIndex].DisplayMap(displayGUI);
+                        IsTemperatureRendering = !IsTemperatureRendering;
+                    }
+                    else if (key == ConsoleKey.H && (keyInfo.Modifiers & ConsoleModifiers.Shift) != 0 && !isUpdating && !IsTemperatureRendering)
+                    {
+                        if (IsHumidityRendering) isCloudsShadowsRendering = !isCloudsShadowsRendering;
+                        IsTemperatureRendering = false;
+                        if (!IsHumidityRendering) chambers[currentChamberIndex].RenderHumidityNoise();
+                        else chambers[currentChamberIndex].DisplayMap(displayGUI);
+                        IsHumidityRendering = !IsHumidityRendering;
                     }
                     Thread.Sleep(sleepTime);
                 }
             }
         }
-        private void UpdateMaps()
+    }
+    private void UpdateMaps()
         {
             while (continueSimulating)
             {
@@ -959,17 +1015,17 @@ namespace Internal
                                     {
                                         if (chambers[currentChamberIndex].HasTileChanged(x, y))
                                         {
-                                            chambers[currentChamberIndex].UpdateTile(x, y);
+                                            chambers[currentChamberIndex].UpdateTile(x, y, displayGUI);
                                         }
                                         if (chambers[currentChamberIndex].HasOverlayTileChanged(x, y))
                                         {
-                                            chambers[currentChamberIndex].UpdateOverlayTile(x, y);
+                                            chambers[currentChamberIndex].UpdateOverlayTile(x, y, displayGUI);
                                         }
                                     }
                                 }
                                 chamber.UpdatePreviousMapData();
                                 chamber.UpdatePreviousOverlayData();
-                                Console.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
+                                GUI.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
                             }
                         }
                         Thread.Sleep(sleepTime); // Adjust the sleep time as needed
@@ -984,21 +1040,21 @@ namespace Internal
                 while (!isConfiguring && !isMenu)
                 {
                     lock (mapLock)
-                    {  
+                    {
                         if (isUpdating)
                         {
                             var currentMap = chambers[currentChamberIndex];
-                            currentMap.AnimateWater();
-                            currentMap.DisplayDayNightTransition();
+                            currentMap.AnimateWater(displayGUI);
+                            currentMap.DisplayDayNightTransition(displayGUI);
                             foreach (var chamber in chambers)
                             {
                                 chamber.UpdateClouds();
                             }
-                            if (currentMap.isCloudsShadowsRendering) 
-                                currentMap.DisplayCloudShadows();
+                            if (currentMap.isCloudsShadowsRendering)
+                                currentMap.DisplayCloudShadows(displayGUI);
                             if (currentMap.isCloudsRendering)
                             {
-                                currentMap.RenderClouds(); // Ensure this is called correctly
+                                currentMap.RenderClouds(displayGUI); // Ensure this is called correctly
                             }
                         }
                         Thread.Sleep(sleepTime); // Adjust the sleep time as needed
@@ -1017,8 +1073,8 @@ namespace Internal
                         if (isUpdating)
                         {
                             UpdateChamberStats();
-                            chambers[currentChamberIndex].UpdateGUIValues();
-                            Console.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
+                            if (displayGUI) chambers[currentChamberIndex].UpdateGUIValues();
+                            GUI.SetCursorPosition(GUIConfig.LeftPadding, config.Height + GUIConfig.TopPadding - 1);
                         }
                         Thread.Sleep(sleepTime); // Adjust the sleep time as needed
                     }
@@ -1036,9 +1092,10 @@ namespace Internal
         }
         public static void DisplayCurrentChamber()
         {
-            chambers[currentChamberIndex].DisplayMap();
+            chambers[currentChamberIndex].isCloudsRendering = false;
+            chambers[currentChamberIndex].DisplayMap(displayGUI);
         }
-        private static string ReadCommandWithAutocomplete()
+        private static string? ReadCommandWithAutocomplete()
         {
             StringBuilder input = new StringBuilder();
             int cursorPosition = 0;
@@ -1051,13 +1108,17 @@ namespace Internal
                 {
                     return input.ToString();
                 }
+                else if (keyInfo.Key == ConsoleKey.Escape)
+                {
+                    return null;
+                }
                 else if (keyInfo.Key == ConsoleKey.Backspace)
                 {
                     if (cursorPosition > 0)
                     {
                         input.Remove(cursorPosition - 1, 1);
                         cursorPosition--;
-                        Console.Write("\b \b");
+                        GUI.Write("\b \b");
                     }
                 }
                 else if (keyInfo.Key == ConsoleKey.Tab)
@@ -1067,18 +1128,18 @@ namespace Internal
                     if (suggestion != null)
                     {
                         // Clear the current input
-                        Console.Write(new string('\b', cursorPosition) + new string(' ', cursorPosition) + new string('\b', cursorPosition));
+                        GUI.Write(new string('\b', cursorPosition) + new string(' ', cursorPosition) + new string('\b', cursorPosition));
                         input.Clear();
                         input.Append(suggestion);
                         cursorPosition = suggestion.Length;
-                        Console.Write(suggestion);
+                        GUI.Write(suggestion);
                     }
                 }
                 else
                 {
                     input.Insert(cursorPosition, keyInfo.KeyChar);
                     cursorPosition++;
-                    Console.Write(keyInfo.KeyChar);
+                    GUI.Write(keyInfo.KeyChar);
                 }
             }
         }
@@ -1087,189 +1148,189 @@ namespace Internal
             string[] tokens = command.Split(' ');
             switch (tokens[0])
             {
-            case "menu":
-                isMenu = true;
-                isCloudsRendering = false;
-                isCloudsShadowsRendering = false;
-                IsTemperatureRendering = false;
-                IsHumidityRendering = false;
-                isUpdating = false;
-                chambers.Clear();
-                Console.Clear();
-                foreach (var slot in slots.Where(s => s.isSelected).ToList())
-                {
-                    var updatedSlot = slot;
-                    updatedSlot.isSelected = false;
-                    slots[slots.IndexOf(slot)] = updatedSlot;
-                }
-                DrawSaveSelectionGUI();
-                break;
-            case "chamber":
-                if (tokens.Length > 1 && int.TryParse(tokens[1], out int chamberIndex))
-                {
-                chamberIndex--; // Adjust for 1-based index
-                if (chamberIndex >= 0 && chamberIndex < chambers.Count)
-                {
-                    Program.currentChamberIndex = chamberIndex;
-                }
-                else
-                {
-                    outputBuffer.Add("Invalid chamber index");
-                }
-                }
-                else
-                {
-                outputBuffer.Add("Please specify the chamber index");
-                }
-                break;
-            case "exit":
-                return false;
-            case "addchamber":
-                if (tokens.Length > 1 && int.TryParse(tokens[1], out int numberOfChambers))
-                {
-                for (int i = 0; i < numberOfChambers; i++)
-                {
-                    isConfiguring = true;
-                    seed = rng.Next();
-                    Map newChamber = new Map();
-                    isConfiguring = newChamber.GetConfig();
-                    DisplayCenteredText(asciiArt);
-                    newChamber.Generate();
-                    chambers.Add(newChamber);
-                    outputBuffer.Add("Added a new chamber");
-                }
-                }
-                else
-                {
-                isConfiguring = true;
-                seed = rng.Next();
-                Map newChamber = new Map();
-                isConfiguring = newChamber.GetConfig();
-                DisplayCenteredText(asciiArt);
-                newChamber.Generate();
-                chambers.Add(newChamber);
-                outputBuffer.Add("Added a new chamber");
-                }
-                break;
-            case "removechamber":
-                if (tokens.Length > 1 && int.TryParse(tokens[1], out chamberIndex))
-                {
-                chamberIndex--; // Adjust for 1-based index
-                if (chamberIndex >= 0 && chamberIndex < chambers.Count)
-                {
-                    chambers.RemoveAt(chamberIndex);
-                    outputBuffer.Add($"Removed chamber {chamberIndex + 1}");
-                    if (chamberIndex == currentChamberIndex)
+                case "menu":
+                    isMenu = true;
+                    isCloudsRendering = false;
+                    isCloudsShadowsRendering = false;
+                    IsTemperatureRendering = false;
+                    IsHumidityRendering = false;
+                    isUpdating = false;
+                    chambers.Clear();
+                    GUI.Clear();
+                    foreach (var slot in slots.Where(s => s.isSelected).ToList())
                     {
-                    currentChamberIndex = Math.Max(0, chamberIndex - 1);
+                        var updatedSlot = slot;
+                        updatedSlot.isSelected = false;
+                        slots[slots.IndexOf(slot)] = updatedSlot;
                     }
-                    else if (chamberIndex < currentChamberIndex)
+                    DrawSaveSelectionGUI();
+                    break;
+                case "chamber":
+                    if (tokens.Length > 1 && int.TryParse(tokens[1], out int chamberIndex))
                     {
-                    currentChamberIndex--;
-                    }
-                }
-                else
-                {
-                    outputBuffer.Add("Invalid chamber index");
-                }
-                }
-                else
-                {
-                outputBuffer.Add("Please specify the chamber index to remove");
-                }
-                break;
-            case "regenerate":
-                if (tokens.Length > 1 && int.TryParse(tokens[1], out chamberIndex))
-                {
-                chamberIndex--; // Adjust for 1-based index
-                if (chamberIndex >= 0 && chamberIndex < chambers.Count)
-                {
-                    chambers[chamberIndex].Generate();
-                    outputBuffer.Add($"Regenerated chamber {chamberIndex + 1}");
-                }
-                else
-                {
-                    outputBuffer.Add("Invalid chamber index");
-                }
-                }
-                else
-                {
-                outputBuffer.Add("Please specify the chamber index to regenerate");
-                }
-                break;
-            case "run":
-                if (tokens.Length > 1)
-                {
-                // Extract method name and parameters
-                string fullCommand = string.Join(" ", tokens.Skip(1));
-                int methodStart = fullCommand.IndexOf('(');
-                string methodName = methodStart == -1 ? fullCommand : fullCommand.Substring(0, methodStart).Trim();
-
-                // Parse parameters if they exist
-                object[] parameters = new object[0];
-                if (methodStart != -1)
-                {
-                    int methodEnd = fullCommand.LastIndexOf(')');
-                    if (methodEnd != -1)
-                    {
-                    string paramString = fullCommand.Substring(methodStart + 1, methodEnd - methodStart - 1);
-                    parameters = paramString.Split(',')
-                        .Where(p => !string.IsNullOrWhiteSpace(p))
-                        .Select(p => Convert.ChangeType(p.Trim(), typeof(int)))
-                        .ToArray();
-                    }
-                }
-
-                try
-                {
-                    // Get method info with exact parameter count match
-                    var method = typeof(Program).GetMethod(methodName,
-                    BindingFlags.Public |
-                    BindingFlags.NonPublic |
-                    BindingFlags.Instance,
-                    null,
-                    CallingConventions.Any,
-                    parameters.Select(p => p.GetType()).ToArray(),
-                    null);
-
-                    if (method != null)
-                    {
-                    method.Invoke(this, parameters);
+                        chamberIndex--; // Adjust for 1-based index
+                        if (chamberIndex >= 0 && chamberIndex < chambers.Count)
+                        {
+                            Program.currentChamberIndex = chamberIndex;
+                        }
+                        else
+                        {
+                            outputBuffer.Add("Invalid chamber index");
+                        }
                     }
                     else
                     {
-                    outputBuffer.Add($"Method '{methodName}' not found");
+                        outputBuffer.Add("Please specify the chamber index");
                     }
-                }
-                catch (Exception ex)
-                {
-                    outputBuffer.Add($"Error executing method '{methodName}': {ex.Message}");
-                }
-                }
-                else
-                {
-                outputBuffer.Add("Please specify the method to run");
-                }
-                break;
-            case "seed":
-                outputBuffer.Add($"Current seed: {chambers[currentChamberIndex].conf.Seed}");
-                break;
-            case "avaragetemp":
-                outputBuffer.Add($"Average temperature: {Math.Round(chambers[currentChamberIndex].avarageTempature, 2)}");
-                break;
-            case "avaragehum":
-                outputBuffer.Add($"Average humidity: {Math.Round(chambers[currentChamberIndex].avarageHumidity, 2)}");
-                break;
-            default:
-                outputBuffer.Add("Invalid command");
-                break;
+                    break;
+                case "exit":
+                    return false;
+                case "addchamber":
+                    if (tokens.Length > 1 && int.TryParse(tokens[1], out int numberOfChambers))
+                    {
+                        for (int i = 0; i < numberOfChambers; i++)
+                        {
+                            isConfiguring = true;
+                            seed = rng.Next();
+                            Map newChamber = new Map();
+                            isConfiguring = newChamber.GetConfig();
+                            DisplayCenteredText(loadingAsciiArt);
+                            newChamber.Generate();
+                            chambers.Add(newChamber);
+                            outputBuffer.Add("Added a new chamber");
+                        }
+                    }
+                    else
+                    {
+                        isConfiguring = true;
+                        seed = rng.Next();
+                        Map newChamber = new Map();
+                        isConfiguring = newChamber.GetConfig();
+                        DisplayCenteredText(loadingAsciiArt);
+                        newChamber.Generate();
+                        chambers.Add(newChamber);
+                        outputBuffer.Add("Added a new chamber");
+                    }
+                    break;
+                case "removechamber":
+                    if (tokens.Length > 1 && int.TryParse(tokens[1], out chamberIndex))
+                    {
+                        chamberIndex--; // Adjust for 1-based index
+                        if (chamberIndex >= 0 && chamberIndex < chambers.Count)
+                        {
+                            chambers.RemoveAt(chamberIndex);
+                            outputBuffer.Add($"Removed chamber {chamberIndex + 1}");
+                            if (chamberIndex == currentChamberIndex)
+                            {
+                                currentChamberIndex = Math.Max(0, chamberIndex - 1);
+                            }
+                            else if (chamberIndex < currentChamberIndex)
+                            {
+                                currentChamberIndex--;
+                            }
+                        }
+                        else
+                        {
+                            outputBuffer.Add("Invalid chamber index");
+                        }
+                    }
+                    else
+                    {
+                        outputBuffer.Add("Please specify the chamber index to remove");
+                    }
+                    break;
+                case "regenerate":
+                    if (tokens.Length > 1 && int.TryParse(tokens[1], out chamberIndex))
+                    {
+                        chamberIndex--; // Adjust for 1-based index
+                        if (chamberIndex >= 0 && chamberIndex < chambers.Count)
+                        {
+                            chambers[chamberIndex].Generate();
+                            outputBuffer.Add($"Regenerated chamber {chamberIndex + 1}");
+                        }
+                        else
+                        {
+                            outputBuffer.Add("Invalid chamber index");
+                        }
+                    }
+                    else
+                    {
+                        outputBuffer.Add("Please specify the chamber index to regenerate");
+                    }
+                    break;
+                case "run":
+                    if (tokens.Length > 1)
+                    {
+                        // Extract method name and parameters
+                        string fullCommand = string.Join(" ", tokens.Skip(1));
+                        int methodStart = fullCommand.IndexOf('(');
+                        string methodName = methodStart == -1 ? fullCommand : fullCommand.Substring(0, methodStart).Trim();
+
+                        // Parse parameters if they exist
+                        object[] parameters = new object[0];
+                        if (methodStart != -1)
+                        {
+                            int methodEnd = fullCommand.LastIndexOf(')');
+                            if (methodEnd != -1)
+                            {
+                                string paramString = fullCommand.Substring(methodStart + 1, methodEnd - methodStart - 1);
+                                parameters = paramString.Split(',')
+                                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                                    .Select(p => Convert.ChangeType(p.Trim(), typeof(int)))
+                                    .ToArray();
+                            }
+                        }
+
+                        try
+                        {
+                            // Get method info with exact parameter count match
+                            var method = typeof(Program).GetMethod(methodName,
+                            BindingFlags.Public |
+                            BindingFlags.NonPublic |
+                            BindingFlags.Instance,
+                            null,
+                            CallingConventions.Any,
+                            parameters.Select(p => p.GetType()).ToArray(),
+                            null);
+
+                            if (method != null)
+                            {
+                                method.Invoke(this, parameters);
+                            }
+                            else
+                            {
+                                outputBuffer.Add($"Method '{methodName}' not found");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            outputBuffer.Add($"Error executing method '{methodName}': {ex.Message}");
+                        }
+                    }
+                    else
+                    {
+                        outputBuffer.Add("Please specify the method to run");
+                    }
+                    break;
+                case "seed":
+                    outputBuffer.Add($"Current seed: {chambers[currentChamberIndex].conf.Seed}");
+                    break;
+                case "avaragetemp":
+                    outputBuffer.Add($"Average temperature: {Math.Round(chambers[currentChamberIndex].avarageTempature, 2)}");
+                    break;
+                case "avaragehum":
+                    outputBuffer.Add($"Average humidity: {Math.Round(chambers[currentChamberIndex].avarageHumidity, 2)}");
+                    break;
+                default:
+                    outputBuffer.Add("Invalid command");
+                    break;
             }
-            chambers[currentChamberIndex].DisplayMap();
+            chambers[currentChamberIndex].DisplayMap(displayGUI);
             return true;
         }
         public static string GetCommand()
         {
-            Console.Write(">> ");
+            GUI.Write(">> ");
             string? input = Console.ReadLine();
             if (input == null)
             {
@@ -1330,19 +1391,19 @@ namespace Internal
         };
         public static void DrawSaveSelectionGUI()
         {
-            Console.Clear();
+            GUI.Clear();
             var folderPath = Path.Combine(Environment.CurrentDirectory, "Saves");
             Directory.CreateDirectory(folderPath);
-            Map.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
-            Map.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
+            GUI.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
+            GUI.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
             string[] files = Directory.GetFiles(Path.Combine(Environment.CurrentDirectory, "Saves"), "*.json")
                 .Select(f => Path.GetFileName(f))
                 .ToArray();
-            
+
             for (int i = 0; i < numberOfRows; i++)
             {
                 int index = colors.Count > i ? i : i % colors.Count;
-                DrawSaveFileBox(i, colors[index], false,  i == 0 ? 1 : 4);
+                DrawSaveFileBox(i, colors[index], false, i == 0 ? 1 : 4);
             }
             DrawLoadButton(false);
             ManageSaveSlots();
@@ -1365,7 +1426,7 @@ namespace Internal
             DrawSelectableBox(x + 11, y, menuWidth - 22, 5, isBox0Selected, isSelected, color);
             DrawSelectableBox(x, y, 10, 5, isBox1Selected, isSelected, ColorSpectrum.YELLOW);
             DrawSelectableBox(x + menuWidth - 10, y, 10, 5, isBox2Selected, isSelected, ColorSpectrum.LIGHT_GREEN);
-            Console.ResetColor();
+            GUI.Write(GUI.ResetColor());
 
             // Draw the delete ASCII in the first small box (with bounds checking)
             var deleteLines = delete.Split('\n');
@@ -1375,8 +1436,8 @@ namespace Internal
                 int lineY = y + i;
                 if (lineX >= 0 && lineY >= 0 && lineX < Console.WindowWidth && lineY < Console.WindowHeight)
                 {
-                    Console.SetCursorPosition(lineX, lineY);
-                    Console.Write(Map.SetForegroundColor(ColorSpectrum.YELLOW.r, ColorSpectrum.YELLOW.g, ColorSpectrum.YELLOW.b) + deleteLines[i] + Map.ResetColor());
+                    GUI.SetCursorPosition(lineX, lineY);
+                    GUI.Write(GUI.SetForegroundColor(ColorSpectrum.YELLOW.r, ColorSpectrum.YELLOW.g, ColorSpectrum.YELLOW.b) + deleteLines[i] + GUI.ResetColor());
                 }
             }
 
@@ -1388,8 +1449,8 @@ namespace Internal
                 int lineY = y + i;
                 if (lineX >= 0 && lineY >= 0 && lineX < Console.WindowWidth && lineY < Console.WindowHeight)
                 {
-                    Console.SetCursorPosition(lineX, lineY);
-                    Console.Write(Map.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b) + selectLines[i] + Map.ResetColor());
+                    GUI.SetCursorPosition(lineX, lineY);
+                    GUI.Write(GUI.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b) + selectLines[i] + GUI.ResetColor());
                 }
             }
             if (typedLettersBuffer != null)
@@ -1404,8 +1465,8 @@ namespace Internal
             {
                 for (int i = 0; i < 3; i++)
                 {
-                    Console.SetCursorPosition(x + 11, y++ + i);
-                    Console.Write(new string(' ', menuWidth - 24));
+                    GUI.SetCursorPosition(x + 11, y++ + i);
+                    GUI.Write(new string(' ', menuWidth - 24));
                 }
             }
 
@@ -1520,23 +1581,23 @@ namespace Internal
                                     break;
                                 }
                                 isTyping = false;
-                                
+
                                 // Ensure unique name to avoid conflicts
                                 var existingNames = slots.Where(s => s.name != null && s != slots[currentIndex])
                                                          .Select(s => s.name!)
                                                          .ToList();
                                 string uniqueName = GetUniqueChamberName(name, existingNames);
-                                
+
                                 // Get old file path
                                 string oldName = slots[currentIndex].name ?? "NEW CHAMBER";
                                 string oldPath = Path.Combine("Saves", oldName + ".json");
-                                
+
                                 // Use helper method to rename file and update config
                                 string? newFilePath = RenameChamberFile(oldPath, uniqueName, slots[currentIndex].chamber);
-                                
+
                                 // Update slot with the final unique name
                                 slots[currentIndex] = (slots[currentIndex].chamber, uniqueName, false, false, false);
-                                
+
                                 typedLettersBuffer = new List<string>();
                                 RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
                                 break;
@@ -1591,9 +1652,9 @@ namespace Internal
                                 // Clear the current slot's visual selection
                                 int currentColorIndex = colors.Count > currentIndex ? currentIndex : currentIndex % colors.Count;
                                 DrawSaveFileBox(currentIndex, colors[currentColorIndex], slots[currentIndex].isSelected, 4);
-                                
+
                                 currentIndex--;
-                                
+
                                 // Draw the new slot with proper selection
                                 int newColorIndex = colors.Count > currentIndex ? currentIndex : currentIndex % colors.Count;
                                 DrawSaveFileBox(currentIndex, colors[newColorIndex], slots[currentIndex].isSelected, currentSection);
@@ -1617,9 +1678,9 @@ namespace Internal
                                 // Clear the current slot's visual selection
                                 int currentColorIndex = colors.Count > currentIndex ? currentIndex : currentIndex % colors.Count;
                                 DrawSaveFileBox(currentIndex, colors[currentColorIndex], slots[currentIndex].isSelected, 4);
-                                
+
                                 currentIndex++;
-                                
+
                                 // Draw the new slot with proper selection
                                 int newColorIndex = colors.Count > currentIndex ? currentIndex : currentIndex % colors.Count;
                                 DrawSaveFileBox(currentIndex, colors[newColorIndex], slots[currentIndex].isSelected, currentSection);
@@ -1750,8 +1811,8 @@ namespace Internal
                         int lineY = y + 1 + i;
                         if (lineX >= 0 && lineY >= 0 && lineX < Console.WindowWidth && lineY < Console.WindowHeight)
                         {
-                            Console.SetCursorPosition(lineX, lineY);
-                            Console.Write(new string(' ', 3));
+                            GUI.SetCursorPosition(lineX, lineY);
+                            GUI.Write(new string(' ', 3));
                         }
                     }
                     currentX += 4; // 5 spaces plus 1 for spacing between letters
@@ -1769,8 +1830,8 @@ namespace Internal
                     int lineY = y + i;
                     if (lineX >= 0 && lineY >= 0 && lineX < Console.WindowWidth && lineY < Console.WindowHeight)
                     {
-                        Console.SetCursorPosition(lineX, lineY);
-                        Console.Write(lines[i]);
+                        GUI.SetCursorPosition(lineX, lineY);
+                        GUI.Write(lines[i]);
                     }
                 }
 
@@ -1908,11 +1969,11 @@ namespace Internal
         public static void DrawLoadButton(bool isLoad)
         {
             DrawSelectableBox(terminalCentre.x - 5, terminalCentre.y - menuHeight / 2 + heightOffset + 9 + numberOfRows * 5 + 1, 10, 3, false, false, ColorSpectrum.LIGHT_GREEN);
-            Console.SetCursorPosition(terminalCentre.x - 2, terminalCentre.y - menuHeight / 2 + heightOffset + 9 + numberOfRows * 5 + 2);
-            Console.ResetColor();
-            string foreground = isLoad ? Map.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b) : "";
-            string background = isLoad ? Map.SetBackgroundColor(ColorSpectrum.SILVER.r, ColorSpectrum.SILVER.g, ColorSpectrum.SILVER.b) : "";
-            Console.Write(background + foreground + "LOAD" + Map.ResetColor());
+            GUI.SetCursorPosition(terminalCentre.x - 2, terminalCentre.y - menuHeight / 2 + heightOffset + 9 + numberOfRows * 5 + 2);
+            GUI.Write(GUI.ResetColor());
+            string foreground = isLoad ? GUI.SetForegroundColor(ColorSpectrum.BLACK.r, ColorSpectrum.BLACK.g, ColorSpectrum.BLACK.b) : "";
+            string background = isLoad ? GUI.SetBackgroundColor(ColorSpectrum.SILVER.r, ColorSpectrum.SILVER.g, ColorSpectrum.SILVER.b) : "";
+            GUI.Write(background + foreground + "LOAD" + GUI.ResetColor());
         }
         public static void DrawSelectableBox(int x, int y, int width, int height, bool isSelected, bool isFullySelected, (int r, int g, int b) color)
         {
@@ -1921,7 +1982,7 @@ namespace Internal
             {
                 return; // Don't draw if box would be outside console bounds
             }
-            
+
             // Define box drawing characters
             string topLeft = "╔";
             string topRight = "╗";
@@ -1939,58 +2000,58 @@ namespace Internal
 
             // Set background color based on selection
             string background;
-            if (isFullySelected) background = Map.SetBackgroundColor(selectedColor.r, selectedColor.g, selectedColor.b);
-            else if (isSelected) background = Map.SetBackgroundColor(normalSelectionColor.r, normalSelectionColor.g, normalSelectionColor.b);
+            if (isFullySelected) background = GUI.SetBackgroundColor(selectedColor.r, selectedColor.g, selectedColor.b);
+            else if (isSelected) background = GUI.SetBackgroundColor(normalSelectionColor.r, normalSelectionColor.g, normalSelectionColor.b);
             else background = "";
 
             // Draw top border with double lines
-            Console.SetCursorPosition(x, y);
+            GUI.SetCursorPosition(x, y);
             if (!isLinux)
-                Console.Write(background + Map.SetForegroundColor(color.r, color.g, color.b) + topLeft + new string(doubleHorizontal[0], width - 2) + topRight + Map.ResetColor());
+                GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + topLeft + new string(doubleHorizontal[0], width - 2) + topRight + GUI.ResetColor());
             else
-                Console.Write(background + Map.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + Map.ResetColor());
+                GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + GUI.ResetColor());
 
             // Draw sides and content area
             for (int i = 1; i < height - 1; i++)
             {
-                Console.SetCursorPosition(x, y + i);
+                GUI.SetCursorPosition(x, y + i);
                 if (!isLinux)
                 {
-                    Console.Write(
+                    GUI.Write(
                         background +
-                        Map.SetForegroundColor(color.r, color.g, color.b) + doubleVertical + Map.ResetColor() +
+                        GUI.SetForegroundColor(color.r, color.g, color.b) + doubleVertical + GUI.ResetColor() +
                         new string(' ', width - 2) +
                         background +
-                        Map.SetForegroundColor(color.r, color.g, color.b) + doubleVertical + Map.ResetColor()
+                        GUI.SetForegroundColor(color.r, color.g, color.b) + doubleVertical + GUI.ResetColor()
                     );
                 }
                 else
                 {
-                    Console.Write(
+                    GUI.Write(
                         background +
-                        Map.SetForegroundColor(color.r, color.g, color.b) + vertical + Map.ResetColor() +
+                        GUI.SetForegroundColor(color.r, color.g, color.b) + vertical + GUI.ResetColor() +
                         new string(' ', width - 2) +
                         background +
-                        Map.SetForegroundColor(color.r, color.g, color.b) + vertical + Map.ResetColor()
+                        GUI.SetForegroundColor(color.r, color.g, color.b) + vertical + GUI.ResetColor()
                     );
                 }
             }
 
             // Draw bottom border with double lines
-            Console.SetCursorPosition(x, y + height - 1);
+            GUI.SetCursorPosition(x, y + height - 1);
             if (!isLinux)
-                Console.Write(background + Map.SetForegroundColor(color.r, color.g, color.b) + bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight + Map.ResetColor());
+                GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight + GUI.ResetColor());
             else
-                Console.Write(background + Map.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + Map.ResetColor());
+                GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + GUI.ResetColor());
 
             // Reset background color
             if (isSelected)
-                Console.Write(Map.ResetColor());
+                GUI.Write(GUI.ResetColor());
         }
         public static (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) AddNewChamber((Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) chamber)
         {
             isConfiguring = true;
-            
+
             // Only get config if not already configured (for testing purposes)
             bool shouldSave;
             if (chamber.chamber.conf.ShouldSave == false && chamber.chamber.conf.Name != "NEW CHAMBER")
@@ -2001,10 +2062,10 @@ namespace Internal
             else
             {
                 isConfiguring = chamber.chamber.GetConfig();
-                DisplayCenteredText(asciiArt);
+                DisplayCenteredText(loadingAsciiArt);
                 shouldSave = chamber.chamber.conf.ShouldSave;
             }
-            
+
             // Use the name that was already set (which should already be unique from the typing logic)
             // Only apply uniqueness logic if no name was set
             string finalName;
@@ -2032,9 +2093,9 @@ namespace Internal
             if (shouldSave) chamber.chamber.Generate();
             if (shouldSave) SaveMap(chamber.chamber);
             (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) newSlot = shouldSave ? (chamber.chamber, chamber.name, chamber.isSelected, chamber.isTyping, false) : (new Map(), null, false, true, true);
-            Console.Clear();
-            Map.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
-            Map.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
+            GUI.Clear();
+            GUI.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
+            GUI.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
             for (int i = 0; i < numberOfRows; i++)
             {
                 int index = colors.Count > i ? i : i % colors.Count;
@@ -2056,52 +2117,48 @@ namespace Internal
             }
         }
         #endregion
-        /// <summary>
-        /// Test method for chamber name synchronization system
-        /// </summary>
+        #region test methods
         public static void TestSynchronization()
         {
-            Console.WriteLine("Testing Chamber Name Synchronization System");
-            Console.WriteLine("==========================================");
-            
+            GUI.WriteLine("Testing Chamber Name Synchronization System");
+            GUI.WriteLine("==========================================");
+
             // Create test files with mismatched names
-            Console.WriteLine("1. Creating test files with mismatched names...");
+            GUI.WriteLine("1. Creating test files with mismatched names...");
             CreateTestFiles();
-            
+
             // Show current state
-            Console.WriteLine("2. Current state before synchronization:");
+            GUI.WriteLine("2. Current state before synchronization:");
             ShowCurrentState();
-            
+
             // Run synchronization
-            Console.WriteLine("3. Running synchronization...");
+            GUI.WriteLine("3. Running synchronization...");
             SynchronizeAllChamberFiles();
-            
+
             // Show state after synchronization
-            Console.WriteLine("4. State after synchronization:");
+            GUI.WriteLine("4. State after synchronization:");
             ShowCurrentState();
-            
-            Console.WriteLine("5. Testing load functionality...");
+
+            GUI.WriteLine("5. Testing load functionality...");
             TestLoadFunctionality();
-            
-            Console.WriteLine("\nTest completed!");
+
+            GUI.WriteLine("\nTest completed!");
         }
-        
         static void CreateTestFiles()
         {
             var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
             Directory.CreateDirectory(savesPath);
-            
+
             // Create a test chamber with mismatched name
             var testChamber = new Map();
             testChamber.conf.Name = "Test Chamber Config Name";
-            
+
             // Save it with a different filename
             var filePath = Path.Combine(savesPath, "WRONG_FILENAME.json");
             SaveMapDirect(testChamber, filePath);
-            
-            Console.WriteLine($"   Created: WRONG_FILENAME.json with config name 'Test Chamber Config Name'");
+
+            GUI.WriteLine($"   Created: WRONG_FILENAME.json with config name 'Test Chamber Config Name'");
         }
-        
         static void SaveMapDirect(Map map, string filePath)
         {
             var options = new JsonSerializerOptions { WriteIndented = true, IncludeFields = true };
@@ -2116,16 +2173,15 @@ namespace Internal
             string json = JsonSerializer.Serialize(map, options);
             File.WriteAllText(filePath, json);
         }
-        
         static void ShowCurrentState()
         {
             var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
             if (!Directory.Exists(savesPath))
             {
-                Console.WriteLine("   No Saves directory found.");
+                GUI.WriteLine("   No Saves directory found.");
                 return;
             }
-            
+
             foreach (var file in Directory.GetFiles(savesPath, "*.json"))
             {
                 var chamber = LoadMap(file);
@@ -2134,102 +2190,94 @@ namespace Internal
                     var fileName = Path.GetFileNameWithoutExtension(file);
                     var configName = chamber.conf.Name;
                     var match = fileName == configName ? "✓" : "✗";
-                    Console.WriteLine($"   {match} File: '{fileName}' | Config: '{configName}'");
+                    GUI.WriteLine($"   {match} File: '{fileName}' | Config: '{configName}'");
                 }
             }
         }
-        
         static void TestLoadFunctionality()
         {
-            Console.WriteLine("   Testing LoadAllMapsFromFolder...");
+            GUI.WriteLine("   Testing LoadAllMapsFromFolder...");
             allChambers.Clear();
             LoadAllMapsFromFolder(Path.Combine(Environment.CurrentDirectory, "Saves"));
-            
-            Console.WriteLine($"   Loaded {allChambers.Count} chambers:");
+
+            GUI.WriteLine($"   Loaded {allChambers.Count} chambers:");
             foreach (var chamber in allChambers)
             {
-                Console.WriteLine($"     - {chamber.conf.Name}");
+                GUI.WriteLine($"     - {chamber.conf.Name}");
             }
         }
-
-        /// <summary>
-        /// Comprehensive integration test for the chamber name synchronization system
-        /// </summary>
         public static void TestSynchronizationIntegration()
         {
-            Console.WriteLine("Comprehensive Chamber Name Synchronization Test");
-            Console.WriteLine("==============================================");
-            
+            GUI.WriteLine("Comprehensive Chamber Name Synchronization Test");
+            GUI.WriteLine("==============================================");
+
             // 1. Test with multiple mismatched files
-            Console.WriteLine("1. Creating multiple test files with various mismatches...");
+            GUI.WriteLine("1. Creating multiple test files with various mismatches...");
             CreateComplexTestFiles();
-            
-            Console.WriteLine("2. State before synchronization:");
+
+            GUI.WriteLine("2. State before synchronization:");
             ShowCurrentState();
-            
+
             // 2. Test synchronization
-            Console.WriteLine("3. Running synchronization...");
+            GUI.WriteLine("3. Running synchronization...");
             SynchronizeAllChamberFiles();
-            
-            Console.WriteLine("4. State after synchronization:");
+
+            GUI.WriteLine("4. State after synchronization:");
             ShowCurrentState();
-            
+
             // 3. Test edge cases
-            Console.WriteLine("5. Testing edge cases...");
+            GUI.WriteLine("5. Testing edge cases...");
             TestEdgeCases();
-            
+
             // 4. Test RenameChamberFile directly 
-            Console.WriteLine("6. Testing direct file renaming (simulates GUI usage)...");
+            GUI.WriteLine("6. Testing direct file renaming (simulates GUI usage)...");
             TestDirectRenaming();
-            
-            Console.WriteLine("7. Final state:");
+
+            GUI.WriteLine("7. Final state:");
             ShowCurrentState();
-            
-            Console.WriteLine("\nIntegration test completed!");
+
+            GUI.WriteLine("\nIntegration test completed!");
         }
-        
         static void CreateComplexTestFiles()
         {
             var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
             Directory.CreateDirectory(savesPath);
-            
+
             // Test case 1: Simple mismatch
             var chamber1 = new Map();
             chamber1.conf.Name = "My Awesome Chamber";
             SaveMapDirect(chamber1, Path.Combine(savesPath, "ugly_filename.json"));
-            
+
             // Test case 2: Name with special characters
             var chamber2 = new Map();
             chamber2.conf.Name = "Chamber: Special & Cool!";
             SaveMapDirect(chamber2, Path.Combine(savesPath, "simple.json"));
-            
+
             // Test case 3: Empty/null name (should get default)
             var chamber3 = new Map();
             chamber3.conf.Name = "";
             SaveMapDirect(chamber3, Path.Combine(savesPath, "empty_name.json"));
-            
-            Console.WriteLine("   Created test files with various mismatches");
+
+            GUI.WriteLine("   Created test files with various mismatches");
         }
-        
         static void TestEdgeCases()
         {
             var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
-            
+
             // Test unique name generation
             var existingNames = new[] { "Test", "Test1", "Test2" };
             string uniqueName = GetUniqueChamberName("Test", existingNames);
-            Console.WriteLine($"   Unique name generation: 'Test' -> '{uniqueName}' (should be 'Test3')");
-            
+            GUI.WriteLine($"   Unique name generation: 'Test' -> '{uniqueName}' (should be 'Test3')");
+
             // Test with already unique name
             string alreadyUnique = GetUniqueChamberName("Unique", existingNames);
-            Console.WriteLine($"   Already unique: 'Unique' -> '{alreadyUnique}' (should be 'Unique')");
+            GUI.WriteLine($"   Already unique: 'Unique' -> '{alreadyUnique}' (should be 'Unique')");
         }
-        
         static void TestDirectRenaming()
         {
             var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
             var files = Directory.GetFiles(savesPath, "*.json");
-            
+
             if (files.Length > 0)
             {
                 var testFile = files[0];
@@ -2238,67 +2286,63 @@ namespace Internal
                 {
                     string oldName = chamber.conf.Name;
                     string newName = "GUI Renamed Chamber";
-                    
-                    Console.WriteLine($"   Renaming '{oldName}' to '{newName}'");
+
+                    GUI.WriteLine($"   Renaming '{oldName}' to '{newName}'");
                     string? newPath = RenameChamberFile(testFile, newName, chamber);
-                    
+
                     if (newPath != null && File.Exists(newPath))
                     {
                         var reloadedChamber = LoadMap(newPath);
-                        Console.WriteLine($"   ✓ Rename successful: Config name is now '{reloadedChamber?.conf.Name}'");
+                        GUI.WriteLine($"   ✓ Rename successful: Config name is now '{reloadedChamber?.conf.Name}'");
                     }
                 }
             }
         }
-
-        /// <summary>
-        /// Test the GUI fixes for selection highlighting and duplicate file creation
-        /// </summary>
         public static void TestGUIFixes()
         {
-            Console.WriteLine("Testing GUI Fixes");
-            Console.WriteLine("=================");
-            
+            GUI.WriteLine("Testing GUI Fixes");
+            GUI.WriteLine("=================");
+
             // Test 1: Test the logic behind the fixes
-            Console.WriteLine("1. Testing unique name generation logic...");
-            
+            GUI.WriteLine("1. Testing unique name generation logic...");
+
             // Test the GetUniqueChamberName method directly
             var existingNames = new[] { "Test Chamber", "Test Chamber1", "Test Chamber2" };
             string uniqueName1 = GetUniqueChamberName("Test Chamber", existingNames);
-            Console.WriteLine($"   'Test Chamber' with existing names -> '{uniqueName1}' (should be 'Test Chamber3')");
-            
+            GUI.WriteLine($"   'Test Chamber' with existing names -> '{uniqueName1}' (should be 'Test Chamber3')");
+
             string uniqueName2 = GetUniqueChamberName("New Chamber", existingNames);
-            Console.WriteLine($"   'New Chamber' with existing names -> '{uniqueName2}' (should be 'New Chamber')");
-            
+            GUI.WriteLine($"   'New Chamber' with existing names -> '{uniqueName2}' (should be 'New Chamber')");
+
             // Test 2: Simulate the typing scenario
-            Console.WriteLine("\n2. Testing name renaming logic...");
-            
+            GUI.WriteLine("\n2. Testing name renaming logic...");
+
             // Create test files to simulate the scenario
             var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
             Directory.CreateDirectory(savesPath);
-            
+
             // Create a chamber and save it
             var testChamber = new Map();
             testChamber.conf.Name = "Test Rename Chamber";
             SaveMap(testChamber);
-            
-            Console.WriteLine($"   Created chamber with name: '{testChamber.conf.Name}'");
-            Console.WriteLine($"   File should exist: Test Rename Chamber.json");
-            
+
+            GUI.WriteLine($"   Created chamber with name: '{testChamber.conf.Name}'");
+            GUI.WriteLine($"   File should exist: Test Rename Chamber.json");
+
             // Test the rename functionality
             string oldPath = Path.Combine(savesPath, "Test Rename Chamber.json");
             string newName = "Renamed Chamber";
             string? newPath = RenameChamberFile(oldPath, newName, testChamber);
-            
-            Console.WriteLine($"   Renamed to: '{newName}'");
-            Console.WriteLine($"   New file path: {newPath}");
-            Console.WriteLine($"   Chamber config name now: '{testChamber.conf.Name}'");
-            
+
+            GUI.WriteLine($"   Renamed to: '{newName}'");
+            GUI.WriteLine($"   New file path: {newPath}");
+            GUI.WriteLine($"   Chamber config name now: '{testChamber.conf.Name}'");
+
             // Test 3: Check results
-            Console.WriteLine("\n3. Verifying results...");
+            GUI.WriteLine("\n3. Verifying results...");
             var files = Directory.GetFiles(savesPath, "*.json");
-            Console.WriteLine($"   Total JSON files: {files.Length}");
-            
+            GUI.WriteLine($"   Total JSON files: {files.Length}");
+
             foreach (var file in files)
             {
                 var chamber = LoadMap(file);
@@ -2307,79 +2351,179 @@ namespace Internal
                     var fileName = Path.GetFileNameWithoutExtension(file);
                     var configName = chamber.conf.Name;
                     var match = fileName == configName ? "✓" : "✗";
-                    Console.WriteLine($"   {match} File: '{fileName}' | Config: '{configName}'");
+                    GUI.WriteLine($"   {match} File: '{fileName}' | Config: '{configName}'");
                 }
             }
-            
+
             // Test 4: Test uniqueness with existing file names
-            Console.WriteLine("\n4. Testing uniqueness with existing names...");
-            
+            GUI.WriteLine("\n4. Testing uniqueness with existing names...");
+
             // Get all existing names in the saves folder
             var allExistingNames = Directory.GetFiles(savesPath, "*.json")
                                            .Select(Path.GetFileNameWithoutExtension)
                                            .Where(name => name != null)
                                            .Cast<string>()
                                            .ToList();
-            
-            Console.WriteLine($"   Existing names: [{string.Join(", ", allExistingNames)}]");
-            
+
+            GUI.WriteLine($"   Existing names: [{string.Join(", ", allExistingNames)}]");
+
             // Test what happens when we try to create a duplicate
             string testName = allExistingNames.FirstOrDefault() ?? "Test";
             string uniqueResult = GetUniqueChamberName(testName, allExistingNames);
-            Console.WriteLine($"   Trying to create '{testName}' -> got '{uniqueResult}'");
-            
-            Console.WriteLine("\nGUI fixes test completed!");
-        }
+            GUI.WriteLine($"   Trying to create '{testName}' -> got '{uniqueResult}'");
 
-        /// <summary>
-        /// Display Config GUI usage instructions
-        /// </summary>
+            GUI.WriteLine("\nGUI fixes test completed!");
+        }
         public static void TestConfigGUI()
         {
-            Console.WriteLine("Config GUI Fixes Applied Successfully!");
-            Console.WriteLine("====================================");
-            
-            Console.WriteLine("\n🎉 Fixed Issues:");
-            Console.WriteLine("✅ Int and Double parameters can now be edited");
-            Console.WriteLine("✅ Added direct typing support for all numeric values");
-            Console.WriteLine("✅ Added input validation for numeric fields");
-            Console.WriteLine("✅ Added quick increment/decrement with Ctrl+Arrow keys");
-            Console.WriteLine("✅ Improved error handling and value restoration");
-            
-            Console.WriteLine("\n📋 How to Use the Config GUI:");
-            Console.WriteLine("1. Navigation:");
-            Console.WriteLine("   • Use Arrow Keys (↑↓←→) or WASD to navigate between parameters");
-            Console.WriteLine("   • Different sections: Map Config, Gamerules, Structures, etc.");
-            
-            Console.WriteLine("\n2. Editing Parameters:");
-            Console.WriteLine("   • Boolean Values: Press Enter/Space to toggle ✔/✗");
-            Console.WriteLine("   • String Values: Press Enter/Space to start typing, Enter to confirm");
-            Console.WriteLine("   • Int/Double Values: Press Enter/Space to start typing, Enter to confirm");
-            Console.WriteLine("   • Quick Numeric Edit: Use Ctrl+Left/Right arrows to increment/decrement");
-            
-            Console.WriteLine("\n3. Input Validation:");
-            Console.WriteLine("   • Int fields: Only digits and minus sign allowed");
-            Console.WriteLine("   • Double fields: Digits, decimal point, and minus sign allowed");
-            Console.WriteLine("   • Invalid input will be rejected or reverted");
-            
-            Console.WriteLine("\n4. Saving:");
-            Console.WriteLine("   • Navigate to the SAVE button at the bottom");
-            Console.WriteLine("   • Press Enter to save your configuration");
-            Console.WriteLine("   • Press Escape to cancel without saving");
-            
-            Console.WriteLine("\n🔧 Parameter Examples:");
-            Console.WriteLine("   • Seed (String): Any text for world generation");
-            Console.WriteLine("   • NoiseScale (Double): Use Ctrl+Arrow or type values like '10.5'");
-            Console.WriteLine("   • MinBiomeSize (Int): Use Ctrl+Arrow or type integers like '25'");
-            Console.WriteLine("   • EnableMountainRanges (Bool): Toggle with Enter/Space");
-            
-            Console.WriteLine("\n💡 Tips:");
-            Console.WriteLine("   • Ctrl+Arrow keys provide quick +1/-1 for ints, +0.1/-0.1 for doubles");
-            Console.WriteLine("   • Scale parameters increment by ±1.0 for easier adjustment");
-            Console.WriteLine("   • Size/Width parameters have minimum constraints (≥1)");
-            Console.WriteLine("   • Press Escape while editing to cancel and restore original value");
-            
-            Console.WriteLine("\nThe config GUI is now fully functional! 🎯");
+            GUI.WriteLine("Config GUI Fixes Applied Successfully!");
+            GUI.WriteLine("====================================");
+
+            GUI.WriteLine("\n🎉 Fixed Issues:");
+            GUI.WriteLine("✅ Int and Double parameters can now be edited");
+            GUI.WriteLine("✅ Added direct typing support for all numeric values");
+            GUI.WriteLine("✅ Added input validation for numeric fields");
+            GUI.WriteLine("✅ Added quick increment/decrement with Ctrl+Arrow keys");
+            GUI.WriteLine("✅ Improved error handling and value restoration");
+
+            GUI.WriteLine("\n📋 How to Use the Config GUI:");
+            GUI.WriteLine("1. Navigation:");
+            GUI.WriteLine("   • Use Arrow Keys (↑↓←→) or WASD to navigate between parameters");
+            GUI.WriteLine("   • Different sections: Map Config, Gamerules, Structures, etc.");
+
+            GUI.WriteLine("\n2. Editing Parameters:");
+            GUI.WriteLine("   • Boolean Values: Press Enter/Space to toggle ✔/✗");
+            GUI.WriteLine("   • String Values: Press Enter/Space to start typing, Enter to confirm");
+            GUI.WriteLine("   • Int/Double Values: Press Enter/Space to start typing, Enter to confirm");
+            GUI.WriteLine("   • Quick Numeric Edit: Use Ctrl+Left/Right arrows to increment/decrement");
+
+            GUI.WriteLine("\n3. Input Validation:");
+            GUI.WriteLine("   • Int fields: Only digits and minus sign allowed");
+            GUI.WriteLine("   • Double fields: Digits, decimal point, and minus sign allowed");
+            GUI.WriteLine("   • Invalid input will be rejected or reverted");
+
+            GUI.WriteLine("\n4. Saving:");
+            GUI.WriteLine("   • Navigate to the SAVE button at the bottom");
+            GUI.WriteLine("   • Press Enter to save your configuration");
+            GUI.WriteLine("   • Press Escape to cancel without saving");
+
+            GUI.WriteLine("\n🔧 Parameter Examples:");
+            GUI.WriteLine("   • Seed (String): Any text for world generation");
+            GUI.WriteLine("   • NoiseScale (Double): Use Ctrl+Arrow or type values like '10.5'");
+            GUI.WriteLine("   • MinBiomeSize (Int): Use Ctrl+Arrow or type integers like '25'");
+            GUI.WriteLine("   • EnableMountainRanges (Bool): Toggle with Enter/Space");
+
+            GUI.WriteLine("\n💡 Tips:");
+            GUI.WriteLine("   • Ctrl+Arrow keys provide quick +1/-1 for ints, +0.1/-0.1 for doubles");
+            GUI.WriteLine("   • Scale parameters increment by ±1.0 for easier adjustment");
+            GUI.WriteLine("   • Size/Width parameters have minimum constraints (≥1)");
+            GUI.WriteLine("   • Press Escape while editing to cancel and restore original value");
+
+            GUI.WriteLine("\nThe config GUI is now fully functional! 🎯");
+        }
+        #endregion
+        private static void Testing()
+        {
+            GUI.WriteLine("Entering testing mode...");
+            GUI.WriteLine("Generating chamber for testing...");
+
+            // Calculate safe chamber dimensions for testing
+            int safeWidth = Math.Max(20, Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding);
+            int safeHeight = Math.Max(15, Console.WindowHeight - GUIConfig.BottomPadding);
+
+            // Create a simple config for testing
+            var testConfig = new Config(safeWidth, safeHeight, 10.0, "TEST");
+
+            // Configure for testing
+            testConfig.Name = "TEST_CHAMBER";
+
+            // Create test chamber with proper initialization
+            Map testChamber = new Map();
+
+            // Set the config first, then reinitialize arrays with correct dimensions
+            testChamber.conf = testConfig;
+            testChamber.width = testConfig.Width;
+            testChamber.height = testConfig.Height;
+
+            // Reinitialize all arrays with correct dimensions
+            testChamber.mapData = new char[testConfig.Width, testConfig.Height];
+            testChamber.previousMapData = new char[testConfig.Width, testConfig.Height];
+            testChamber.overlayData = new char[testConfig.Width, testConfig.Height];
+            testChamber.previousOverlayData = new char[testConfig.Width, testConfig.Height];
+            testChamber.temperatureData = new int[testConfig.Width, testConfig.Height];
+            testChamber.humidityData = new int[testConfig.Width, testConfig.Height];
+            testChamber.cloudIsNight = new bool[testConfig.Width, testConfig.Height];
+            testChamber.cloudIsDarkening = new bool[testConfig.Width, testConfig.Height];
+            testChamber.noise = new double[testConfig.Width, testConfig.Height];
+            testChamber.tempatureNoise = new double[testConfig.Width, testConfig.Height];
+            testChamber.humidityNoise = new double[testConfig.Width, testConfig.Height];
+
+            // Initialize cloud data arrays
+            int cloudWidth = Math.Max(1, Math.Min(testConfig.Width * 3, 10000));
+            int cloudHeight = Math.Max(1, Math.Min(testConfig.Height * 3, 10000));
+            testChamber.cloudData = new char[cloudWidth, cloudHeight];
+            testChamber.previousCloudData = new char[cloudWidth, cloudHeight];
+            testChamber.cloudDepthData = new int[cloudWidth, cloudHeight];
+            testChamber.precipitationData = new double[cloudWidth, cloudHeight];
+            testChamber.previousPrecipitationData = new double[cloudWidth, cloudHeight];
+
+            GUI.WriteLine($"Chamber size: {testConfig.Width}x{testConfig.Height}");
+            GUI.WriteLine("Generating test terrain...");
+
+            testChamber.HandleTestGen();
+            chambers.Add(testChamber);
+            currentChamberIndex = 0;
+
+            GUI.WriteLine("Generation complete!");
+            GUI.WriteLine("Testing Mode Controls:");
+            GUI.WriteLine("- ESC: Exit");
+            GUI.WriteLine("- C: Command mode (for testing generation functions)");
+            GUI.WriteLine("- All other keybinds disabled in testing mode");
+            GUI.WriteLine();
+
+            GUI.Clear();
+            displayGUI = false;
+            DisplayCurrentChamber();
+
+            // Simple key listener for testing mode - only ESC and C allowed
+            while (continueSimulating)
+            {
+                if (Console.KeyAvailable)
+                {
+                    var keyInfo = Console.ReadKey(true);
+                    var key = keyInfo.Key;
+
+                    if (key == ConsoleKey.Escape)
+                    {
+                        GUI.WriteLine("Exiting testing mode...");
+                        break;
+                    }
+                    else if (key == ConsoleKey.C)
+                    {
+                        isCommandInputMode = true;
+                        GUI.SetCursorPosition(0, testChamber.height + GUIConfig.TopPadding + 2);
+                        GUI.Write(">> ");
+                        string? command = Console.ReadLine();
+                        if (command?.ToLower() == "exit")
+                        {
+                            break;
+                        }
+                        isCommandInputMode = false;
+                        GUI.Clear();
+                        DisplayCurrentChamber();
+                    }
+                    else if (key == ConsoleKey.R)
+                    {
+                        testChamber.HandleTestGen();
+                        GUI.Clear();
+                        DisplayCurrentChamber();
+                    }
+                    // All other keys are ignored in testing mode
+                }
+                Thread.Sleep(50);
+            }
+
+            GUI.Clear();
+            GUI.WriteLine("Testing mode ended.");
         }
     }
-}
