@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "UQb7ksWkYxo=",
+  "dgSpecHash": "+ilvsQbEFpo=",
   "success": true,
   "projectFilePath": "/home/chedda/csharp/Chambers/Chambers.csproj",
   "expectedPackageFiles": [
-    "/home/chedda/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.0/microsoft.aspnetcore.app.ref.10.0.0.nupkg.sha512"
+    "/home/chedda/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.3/microsoft.aspnetcore.app.ref.10.0.3.nupkg.sha512"
   ],
   "logs": []
 }
