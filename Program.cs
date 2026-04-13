@@ -34,6 +34,7 @@ partial class Program
     public static bool IsTemperatureRendering = false;
     public static bool isConfiguring = false;
     public static bool isMenu = true;
+    public static bool autoResize = true;
     #endregion
     private static bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
     private static readonly object mapLock = new object();
@@ -83,11 +84,12 @@ partial class Program
             return;
         }
         EnableVirtualTerminalProcessing();
+        RequestMinimumTerminalResize();
         currentChamberIndex = 0;
         GUI.Write(GUI.ResetColor());
         GUI.Clear();
         TryLoadUserConfig(config);
-        LoadAllMapsFromFolder(Path.Combine(Environment.CurrentDirectory, "Saves"));
+        LoadAllMapsFromFolder(Path.Combine(Environment.CurrentDirectory, "Data/Saves"));
 
         // Synchronize file names with config names at startup
         SynchronizeAllChamberFiles();
@@ -135,6 +137,8 @@ partial class Program
         GUI.Clear();
         DrawSaveSelectionGUI();
         GUI.Clear();
+        if (chambers.Count > 0)
+            RequestTerminalResize(chambers[currentChamberIndex]);
         DisplayCurrentChamber();
         GUI.Write(GUI.ResetColor());
 
@@ -182,7 +186,7 @@ partial class Program
                             int chamberIndex;
                             if (int.TryParse(command.Split(' ')[1], out chamberIndex) && chamberIndex >= 0 && chamberIndex < chambers.Count)
                             {
-                                currentChamberIndex = chamberIndex;
+                                SwitchToChamber(chamberIndex);
                                 DisplayCurrentChamber();
                                 for (int i = 0; i < GUIConfig.BottomPadding; i++)
                                 {
@@ -369,7 +373,7 @@ partial class Program
                     else if (key == ConsoleKey.LeftArrow && chambers.Count > 1 && currentChamberIndex > 0 && !isUpdating)
                     {
                         isUpdating = false;
-                        currentChamberIndex--;
+                        SwitchToChamber(currentChamberIndex - 1);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -377,7 +381,7 @@ partial class Program
                     else if (key == ConsoleKey.RightArrow && chambers.Count > 1 && currentChamberIndex < chambers.Count - 1)
                     {
                         isUpdating = false;
-                        currentChamberIndex++;
+                        SwitchToChamber(currentChamberIndex + 1);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -385,7 +389,7 @@ partial class Program
                     else if (key == ConsoleKey.DownArrow && chambers.Count > 1 && currentChamberIndex != 0)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 0;
+                        SwitchToChamber(0);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -393,7 +397,7 @@ partial class Program
                     else if (key == ConsoleKey.UpArrow && chambers.Count > 1 && currentChamberIndex != chambers.Count - 1)
                     {
                         isUpdating = false;
-                        currentChamberIndex = chambers.Count - 1;
+                        SwitchToChamber(chambers.Count - 1);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -401,7 +405,7 @@ partial class Program
                     else if ((key == ConsoleKey.D1 || key == ConsoleKey.NumPad1) && chambers.Count > 0 && currentChamberIndex != 0)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 0;
+                        SwitchToChamber(0);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -409,7 +413,7 @@ partial class Program
                     else if ((key == ConsoleKey.D2 || key == ConsoleKey.NumPad2) && chambers.Count > 1 && currentChamberIndex != 1)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 1;
+                        SwitchToChamber(1);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -417,7 +421,7 @@ partial class Program
                     else if ((key == ConsoleKey.D3 || key == ConsoleKey.NumPad3) && chambers.Count > 2 && currentChamberIndex != 2)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 2;
+                        SwitchToChamber(2);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -425,7 +429,7 @@ partial class Program
                     else if ((key == ConsoleKey.D4 || key == ConsoleKey.NumPad4) && chambers.Count > 3 && currentChamberIndex != 3)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 3;
+                        SwitchToChamber(3);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -433,7 +437,7 @@ partial class Program
                     else if ((key == ConsoleKey.D5 || key == ConsoleKey.NumPad5) && chambers.Count > 4 && currentChamberIndex != 4)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 4;
+                        SwitchToChamber(4);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -441,7 +445,7 @@ partial class Program
                     else if ((key == ConsoleKey.D6 || key == ConsoleKey.NumPad6) && chambers.Count > 5 && currentChamberIndex != 5)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 5;
+                        SwitchToChamber(5);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -449,7 +453,7 @@ partial class Program
                     else if ((key == ConsoleKey.D7 || key == ConsoleKey.NumPad7) && chambers.Count > 6 && currentChamberIndex != 6)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 6;
+                        SwitchToChamber(6);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -457,7 +461,7 @@ partial class Program
                     else if ((key == ConsoleKey.D8 || key == ConsoleKey.NumPad8) && chambers.Count > 7 && currentChamberIndex != 7)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 7;
+                        SwitchToChamber(7);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -465,7 +469,7 @@ partial class Program
                     else if ((key == ConsoleKey.D9 || key == ConsoleKey.NumPad9) && chambers.Count > 8 && currentChamberIndex != 8)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 8;
+                        SwitchToChamber(8);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -473,7 +477,7 @@ partial class Program
                     else if ((key == ConsoleKey.D0 || key == ConsoleKey.NumPad0) && chambers.Count > 9 && currentChamberIndex != 9)
                     {
                         isUpdating = false;
-                        currentChamberIndex = 9;
+                        SwitchToChamber(9);
                         UpdateChamberStats();
                         DisplayCurrentChamber();
                         isUpdating = tempUpd;
@@ -607,6 +611,40 @@ partial class Program
             continueSimulating = chambers[currentChamberIndex].shouldSimulationContinue;
             chambers[currentChamberIndex].actualOutputBuffer = Map.outputBuffer;
         }
+        public static void RequestTerminalResize(Map map)
+        {
+            if (!autoResize || map.SavedConsoleWidth <= 0 || map.SavedConsoleHeight <= 0)
+                return;
+            // ANSI xterm resize: ESC[8;<rows>;<cols>t
+            Console.Write($"\033[8;{map.SavedConsoleHeight};{map.SavedConsoleWidth}t");
+            // Brief pause to allow the terminal emulator to process the resize
+            Thread.Sleep(150);
+        }
+
+        public static void RequestMinimumTerminalResize()
+        {
+            if (!autoResize)
+                return;
+            // Resize to the minimum viable size for the program (matches the startup size check)
+            const int minWidth = 100;
+            const int minHeight = 55;
+            Console.Write($"\033[8;{minHeight};{minWidth}t");
+            // Poll until the terminal actually reports the new size, or give up after 2 seconds
+            var deadline = DateTime.Now.AddSeconds(2);
+            while (DateTime.Now < deadline)
+            {
+                Thread.Sleep(50);
+                if (Console.WindowWidth >= minWidth && Console.WindowHeight >= minHeight)
+                    break;
+            }
+        }
+
+        public static void SwitchToChamber(int index)
+        {
+            currentChamberIndex = index;
+            RequestTerminalResize(chambers[index]);
+        }
+
         public static void DisplayCurrentChamber()
         {
             chambers[currentChamberIndex].isCloudsRendering = false;
@@ -688,7 +726,7 @@ partial class Program
                         chamberIndex--; // Adjust for 1-based index
                         if (chamberIndex >= 0 && chamberIndex < chambers.Count)
                         {
-                            Program.currentChamberIndex = chamberIndex;
+                            SwitchToChamber(chamberIndex);
                         }
                         else
                         {
@@ -739,7 +777,11 @@ partial class Program
                             outputBuffer.Add($"Removed chamber {chamberIndex + 1}");
                             if (chamberIndex == currentChamberIndex)
                             {
-                                currentChamberIndex = Math.Max(0, chamberIndex - 1);
+                                int newIndex = Math.Max(0, chamberIndex - 1);
+                                if (chambers.Count > 0)
+                                    SwitchToChamber(newIndex);
+                                else
+                                    currentChamberIndex = 0;
                             }
                             else if (chamberIndex < currentChamberIndex)
                             {

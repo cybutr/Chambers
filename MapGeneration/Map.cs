@@ -51,6 +51,9 @@ public partial class Map
     public int seed { get; set; } = 0;
     public Config conf { get; set; }
     private static int numberOfWaves { get; set; }
+    public int SavedConsoleWidth { get; set; }
+    public int SavedConsoleHeight { get; set; }
+
     public Map()
     {
         // Safe console dimension access with fallback values
@@ -61,6 +64,8 @@ public partial class Map
             int consoleHeight = Console.WindowHeight;
             safeWidth = Math.Max(1, consoleWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding);
             safeHeight = Math.Max(1, consoleHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding);
+            SavedConsoleWidth = consoleWidth;
+            SavedConsoleHeight = consoleHeight;
         }
         catch
         {

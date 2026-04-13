@@ -28,11 +28,11 @@ partial class Program
         public static void DrawSaveSelectionGUI()
         {
             GUI.Clear();
-            var folderPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            var folderPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
             Directory.CreateDirectory(folderPath);
             GUI.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
             GUI.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
-            string[] files = Directory.GetFiles(Path.Combine(Environment.CurrentDirectory, "Saves"), "*.json")
+            string[] files = Directory.GetFiles(Path.Combine(Environment.CurrentDirectory, "Data/Saves"), "*.json")
                 .Select(f => Path.GetFileName(f))
                 .ToArray();
 
@@ -226,7 +226,7 @@ partial class Program
 
                                 // Get old file path
                                 string oldName = slots[currentIndex].name ?? "NEW CHAMBER";
-                                string oldPath = Path.Combine("Saves", oldName + ".json");
+                                string oldPath = Path.Combine("Data/Saves", oldName + ".json");
 
                                 // Use helper method to rename file and update config
                                 string? newFilePath = RenameChamberFile(oldPath, uniqueName, slots[currentIndex].chamber);
@@ -715,7 +715,7 @@ partial class Program
             {
                 // No name was set, use default and make it unique
                 string baseName = "NEW CHAMBER";
-                var savePath = Path.Combine(Environment.CurrentDirectory, "Saves");
+                var savePath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
                 var existingNames = Directory.GetFiles(savePath, "*.json")
                                             .Select(Path.GetFileNameWithoutExtension)
                                             .Where(name => name != null)

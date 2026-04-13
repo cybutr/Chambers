@@ -37,7 +37,7 @@ partial class Program
         }
         static void CreateTestFiles()
         {
-            var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            var savesPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
             Directory.CreateDirectory(savesPath);
 
             // Create a test chamber with mismatched name
@@ -66,7 +66,7 @@ partial class Program
         }
         static void ShowCurrentState()
         {
-            var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            var savesPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
             if (!Directory.Exists(savesPath))
             {
                 GUI.WriteLine("   No Saves directory found.");
@@ -89,7 +89,7 @@ partial class Program
         {
             GUI.WriteLine("   Testing LoadAllMapsFromFolder...");
             allChambers.Clear();
-            LoadAllMapsFromFolder(Path.Combine(Environment.CurrentDirectory, "Saves"));
+            LoadAllMapsFromFolder(Path.Combine(Environment.CurrentDirectory, "Data/Saves"));
 
             GUI.WriteLine($"   Loaded {allChambers.Count} chambers:");
             foreach (var chamber in allChambers)
@@ -131,7 +131,7 @@ partial class Program
         }
         static void CreateComplexTestFiles()
         {
-            var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            var savesPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
             Directory.CreateDirectory(savesPath);
 
             // Test case 1: Simple mismatch
@@ -153,7 +153,7 @@ partial class Program
         }
         static void TestEdgeCases()
         {
-            var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            var savesPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
 
             // Test unique name generation
             var existingNames = new[] { "Test", "Test1", "Test2" };
@@ -166,7 +166,7 @@ partial class Program
         }
         static void TestDirectRenaming()
         {
-            var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            var savesPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
             var files = Directory.GetFiles(savesPath, "*.json");
 
             if (files.Length > 0)
@@ -209,7 +209,7 @@ partial class Program
             GUI.WriteLine("\n2. Testing name renaming logic...");
 
             // Create test files to simulate the scenario
-            var savesPath = Path.Combine(Environment.CurrentDirectory, "Saves");
+            var savesPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
             Directory.CreateDirectory(savesPath);
 
             // Create a chamber and save it
