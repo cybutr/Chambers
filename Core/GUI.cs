@@ -5,6 +5,7 @@ namespace Internal
     public static class GUI
     {
         private static readonly object _consoleLock = new object();
+        private static readonly bool _isLinux = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux);
 
         public static string SetBackgroundColor(int r, int g, int b)
         {
@@ -160,7 +161,7 @@ namespace Internal
 
         public static void DrawBox(int x, int y, int width, int height, string title, string titleLeftDecor = "{", string titleRightDecor = "}")
         {
-            bool isLinux = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux);
+            bool isLinux = _isLinux;
             
             // Define box drawing characters
             string topLeft = "╔";
@@ -236,7 +237,7 @@ namespace Internal
 
         public static void DrawColoredBox(int x, int y, int width, int height, string title, (int r, int g, int b) color, string titleLeftDecor = "{", string titleRightDecor = "}")
         {
-            bool isLinux = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux);
+            bool isLinux = _isLinux;
 
             // Safety check - ensure box fits within console bounds
             if (x < 0 || y < 0 || x + width > Console.WindowWidth || y + height > Console.WindowHeight)

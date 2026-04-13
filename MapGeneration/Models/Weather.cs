@@ -29,12 +29,13 @@ public enum WeatherType
 }
 public enum CloudType
 {
-    Cumulus = 1,
-    Stratus = 2,
-    Cirrus = 3,
+    None         = 0,
+    Cumulus      = 1,
+    Stratus      = 2,
+    Cirrus       = 3,
     Cumulonimbus = 4,
     Nimbostratus = 5,
-    Altocumulus = 6
+    Altocumulus  = 6
 }
 public class CloudLayer
 {

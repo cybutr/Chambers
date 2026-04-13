@@ -52,16 +52,16 @@ public partial class Map
             // Define the river path
             while (true)
             {
-                int riverWidth = rng.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
+                int riverWidth = rng.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1);
                 for (int i = -riverWidth / 2; i <= riverWidth / 2; i++)
                 {
                     if (x + i >= 0 && x + i < width)
                     {
-                        mapData[x + i, y] = 'R'; // Mark the tile as river
+                        mapData[x + i, y] = TileId.River;
                     }
                     if (y + i >= 0 && y + i < height)
                     {
-                        mapData[x, y + i] = 'R'; // Mark the tile as river
+                        mapData[x, y + i] = TileId.River;
                     }
                 }
 
@@ -71,27 +71,26 @@ public partial class Map
                 {
                     if (startEdge == 2 || startEdge == 3)
                     {
-                        y += rng.Next(2) == 0 ? 1 : -1; // Move up or down
+                        y += rng.Next(2) == 0 ? 1 : -1;
                     }
                     else
                     {
-                        x += rng.Next(2) == 0 ? 1 : -1; // Move left or right
+                        x += rng.Next(2) == 0 ? 1 : -1;
                     }
                 }
                 else if (direction < 60)
                 {
                     if (startEdge == 2 || startEdge == 3)
                     {
-                        x += startEdge == 2 ? 1 : -1; // Move right if starting at left, left if starting at right
+                        x += startEdge == 2 ? 1 : -1;
                     }
                     else
                     {
-                        y += startEdge == 0 ? 1 : -1; // Move down if starting at top, up if starting at bottom
+                        y += startEdge == 0 ? 1 : -1;
                     }
                 }
                 else
                 {
-                    // Add some winding effect
                     if (startEdge == 2 || startEdge == 3)
                     {
                         y += rng.Next(2) == 0 ? 1 : -1;
@@ -102,13 +101,11 @@ public partial class Map
                     }
                 }
 
-                // Ensure the river flows within bounds
                 if (x < 0) x = 0;
                 if (x >= width) x = width - 1;
                 if (y < 0) y = 0;
                 if (y >= height) y = height - 1;
 
-                // Check if the river has reached any edge that is not the starting edge
                 if ((startEdge == 0 && y == height - 1) || (startEdge == 1 && y == 0) ||
                     (startEdge == 2 && x == width - 1) || (startEdge == 3 && x == 0) ||
                     (startEdge != 0 && startEdge != 1 && (y == 0 || y == height - 1)) ||
@@ -121,20 +118,19 @@ public partial class Map
             // Ensure the river reaches an edge
             while (true)
             {
-                int riverWidth = rng.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1); // River width between minRiverWidth and maxRiverWidth
+                int riverWidth = rng.Next(conf.MinRiverWidth, conf.MaxRiverWidth + 1);
                 for (int i = -riverWidth / 2; i <= riverWidth / 2; i++)
                 {
                     if (x + i >= 0 && x + i < width)
                     {
-                        mapData[x + i, y] = 'R'; // Mark the tile as river
+                        mapData[x + i, y] = TileId.River;
                     }
                     if (y + i >= 0 && y + i < height)
                     {
-                        mapData[x, y + i] = 'R'; // Mark the tile as river
+                        mapData[x, y + i] = TileId.River;
                     }
                 }
 
-                // Move towards the nearest edge
                 if (x > 0 && x < width - 1)
                 {
                     x += x < width / 2 ? 1 : -1;
@@ -144,16 +140,13 @@ public partial class Map
                     y += y < height / 2 ? 1 : -1;
                 }
 
-                // Ensure the river flows within bounds
                 if (x < 0) x = 0;
                 if (x >= width) x = width - 1;
                 if (y < 0) y = 0;
                 if (y >= height) y = height - 1;
 
-                // Check if the river has reached any edge
                 if (x == 0 || x == width - 1 || y == 0 || y == height - 1)
                 {
-                    // Ensure the river does not end on a similar y or x
                     if ((startEdge == 2 || startEdge == 3) && Math.Abs(y - startY) < height / 3)
                     {
                         y = (y + height / 3) % height;
@@ -175,7 +168,6 @@ public partial class Map
             }
         }
 
-        // Smooth the river edges
         SmoothRiverEdges();
     }
     private void SmoothRiverEdges()
@@ -184,21 +176,12 @@ public partial class Map
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] == 'R')
+                if (mapData[x, y] == TileId.River)
                 {
-                    int riverCount = 0;
-                    if (mapData[x - 1, y] == 'R') riverCount++;
-                    if (mapData[x + 1, y] == 'R') riverCount++;
-                    if (mapData[x, y - 1] == 'R') riverCount++;
-                    if (mapData[x, y + 1] == 'R') riverCount++;
-                    if (mapData[x - 1, y - 1] == 'R') riverCount++;
-                    if (mapData[x + 1, y - 1] == 'R') riverCount++;
-                    if (mapData[x - 1, y + 1] == 'R') riverCount++;
-                    if (mapData[x + 1, y + 1] == 'R') riverCount++;
-
+                    int riverCount = CountSurroundingBiomes(x, y, TileId.River);
                     if (riverCount < 3)
                     {
-                        mapData[x, y] = GetMostSurroundedBiome(x, y); // Turn isolated river into the biome it's most surrounded by
+                        mapData[x, y] = GetMostSurroundedBiome(x, y);
                     }
                 }
             }
@@ -253,8 +236,8 @@ public partial class Map
     }
     private bool IsValidStartingPoint(int x, int y)
     {
-        char tile = mapData[x, y];
-        if (tile != 'P' && tile != 'F') return false;
+        TileId tile = mapData[x, y];
+        if (tile != TileId.Plains && tile != TileId.Forest) return false;
 
         int minX = Math.Max(0, x - 6);
         int maxX = Math.Min(width - 1, x + 6);
@@ -265,9 +248,9 @@ public partial class Map
         {
             for (int ny = minY; ny <= maxY; ny++)
             {
-                char neighborTile = mapData[nx, ny];
-                if (neighborTile == 'O' || neighborTile == 'L' || neighborTile == 'R' || 
-                    neighborTile == 'M' || neighborTile == 'm' || neighborTile == 'S')
+                TileId neighborTile = mapData[nx, ny];
+                if (neighborTile == TileId.Ocean || neighborTile == TileId.Lake || neighborTile == TileId.River ||
+                    neighborTile == TileId.Mountain || neighborTile == TileId.MountainDeep || neighborTile == TileId.Snow)
                 {
                     return false;
                 }
@@ -294,12 +277,12 @@ public partial class Map
     private bool IsValidTargetPoint(int x, int y)
     {
         if (x < 0 || y < 0 || x >= width || y >= height) return false;
-        
-        char tile = mapData[x, y];
-        if (tile == 'M' || tile == 'm' || tile == 'S') return false;
 
-        int distToMountain = GetClosestDistanceOfType(x, y, 'M');
-        int distToDeepMountain = GetClosestDistanceOfType(x, y, 'm');
+        TileId tile = mapData[x, y];
+        if (tile == TileId.Mountain || tile == TileId.MountainDeep || tile == TileId.Snow) return false;
+
+        int distToMountain = GetClosestDistanceOfType(x, y, TileId.Mountain);
+        int distToDeepMountain = GetClosestDistanceOfType(x, y, TileId.MountainDeep);
         if (distToMountain != -1 && distToMountain < 3) return false;
         if (distToDeepMountain != -1 && distToDeepMountain < 3) return false;
 
@@ -312,8 +295,8 @@ public partial class Map
         {
             for (int ny = minY; ny <= maxY; ny++)
             {
-                char neighborTile = mapData[nx, ny];
-                if (neighborTile == 'O' || neighborTile == 'L' || neighborTile == 'R')
+                TileId neighborTile = mapData[nx, ny];
+                if (neighborTile == TileId.Ocean || neighborTile == TileId.Lake || neighborTile == TileId.River)
                 {
                     return false;
                 }
@@ -328,7 +311,7 @@ public partial class Map
             int dx = target.x - startPoint.x;
             int dy = target.y - startPoint.y;
             int steps = Math.Max(Math.Abs(dx), Math.Abs(dy));
-            
+
             if (steps == 0) continue;
 
             double stepX = dx / (double)steps;
@@ -338,39 +321,37 @@ public partial class Map
             {
                 int x = startPoint.x + (int)(i * stepX);
                 int y = startPoint.y + (int)(i * stepY);
-                FillCircle(x, y, 'L', 2, 5);
+                FillCircle(x, y, TileId.Lake, 2, 5);
             }
         }
     }
     private void SmoothLakeEdges()
     {
-        const char lakeTile = 'L';
         const int smoothingThreshold = 4;
 
         for (int x = 1; x < width - 1; x++)
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] != lakeTile)
+                if (mapData[x, y] != TileId.Lake)
                 {
                     int lakeNeighbors = 0;
-                    
-                    for (int dx = -1; dx <= 1; dx++)
+                    bool assigned = false;
+                    for (int dx = -1; dx <= 1 && !assigned; dx++)
                     {
-                        for (int dy = -1; dy <= 1; dy++)
+                        for (int dy = -1; dy <= 1 && !assigned; dy++)
                         {
-                            if ((dx != 0 || dy != 0) && mapData[x + dx, y + dy] == lakeTile)
+                            if ((dx != 0 || dy != 0) && mapData[x + dx, y + dy] == TileId.Lake)
                             {
                                 lakeNeighbors++;
                                 if (lakeNeighbors >= smoothingThreshold)
                                 {
-                                    mapData[x, y] = lakeTile;
-                                    goto NextTile;
+                                    mapData[x, y] = TileId.Lake;
+                                    assigned = true;
                                 }
                             }
                         }
                     }
-                    NextTile:;
                 }
             }
         }
@@ -388,16 +369,16 @@ public partial class Map
         {
             streamPositions.Clear();
             (int, int) start, end, closestMountain;
-            List<char> tilePool = new List<char> { 'R', 'O', 'L', 'L', 'L' };
+            List<TileId> tilePool = new List<TileId> { TileId.River, TileId.Ocean, TileId.Lake, TileId.Lake, TileId.Lake };
             end = GetRandomPointInBiomeWithTilePool(tilePool);
-            closestMountain = GetClosestTileOfType(end.Item1, end.Item2, 'M');
+            closestMountain = GetClosestTileOfType(end.Item1, end.Item2, TileId.Mountain);
             int distance = (int)Math.Round(GetDistance(end.Item1, end.Item2, closestMountain.Item1, closestMountain.Item2));
             if (distance < 15)
             {
                 attempts++;
                 continue;
             }
-            start = GetRandomPointInBiomeInRange('M', end.Item1, end.Item2, distance, distance + 2);
+            start = GetRandomPointInBiomeInRange(TileId.Mountain, end.Item1, end.Item2, distance, distance + 2);
             values = aStar.FindPath(mapData, start.Item1, start.Item2, end.Item1, end.Item2);
             if (values == null) return;
             isInBorder = false;
@@ -408,14 +389,16 @@ public partial class Map
                 streamPositions.Add((value.Item1, value.Item2));
                 foreach (var neighbor in neighbors)
                 {
-                    if (mapData[neighbor.Item1, neighbor.Item2] == 'L' || mapData[neighbor.Item1, neighbor.Item2] == 'R' || mapData[neighbor.Item1, neighbor.Item2] == 'O' || mapData[neighbor.Item1, neighbor.Item2] == 's') hasWater = true;
+                    TileId neighborTile = mapData[neighbor.Item1, neighbor.Item2];
+                    if (neighborTile == TileId.Lake || neighborTile == TileId.River ||
+                        neighborTile == TileId.Ocean || neighborTile == TileId.Stream) hasWater = true;
                 }
-                if (mapData[value.Item1, value.Item2] == '@') isInBorder = true;
+                if (mapData[value.Item1, value.Item2] == TileId.Border) isInBorder = true;
                 if (hasWater) break;
             }
             attempts++;
         } while (isInBorder && streamPositions.Count < 15 && attempts < 50);
-        foreach ((int, int) position in streamPositions) mapData[position.Item1, position.Item2] = 's';
+        foreach ((int, int) position in streamPositions) mapData[position.Item1, position.Item2] = TileId.Stream;
     }
     #endregion
     #region beach functions
@@ -430,8 +413,7 @@ public partial class Map
             < 0.7 => 0.06, // Temperate
             _ => 0.09,      // Warm
         };
-        //double beachChance = avarageTempature * 0.5 * 0.01; // Chance of creating a beach
-        double beachChance = Math.Clamp((avarageTempature - 0.4) * avarageTempatureFactor, 0.001, 0.03); // Adjusted formula for beach chance
+        double beachChance = Math.Clamp((avarageTempature - 0.4) * avarageTempatureFactor, 0.001, 0.03);
         int minBeachSize = (int)Math.Clamp(25 + (avarageTempature - 0.5) * 20, 20, 50);
         int maxBeachSize = (int)Math.Clamp(35 + (avarageTempature - 0.5) * 20, 30, 68);
 
@@ -439,13 +421,13 @@ public partial class Map
         {
             for (int y = 0; y < height; y++)
             {
-            if (mapData[x, y] == 'O' && IsNextToLand(x, y) && !IsNextToMountain(x, y))
-            {
-                if (rng.NextDouble() < beachChance)
+                if (mapData[x, y] == TileId.Ocean && IsNextToLand(x, y) && !IsNextToMountain(x, y))
                 {
-                CreateSmoothBeach(x, y, minBeachSize, maxBeachSize);
+                    if (rng.NextDouble() < beachChance)
+                    {
+                        CreateSmoothBeach(x, y, minBeachSize, maxBeachSize);
+                    }
                 }
-            }
             }
         }
         BeachesDepth();
@@ -460,7 +442,8 @@ public partial class Map
                 if (dx == 0 && dy == 0) continue;
                 int nx = x + dx;
                 int ny = y + dy;
-                if (nx >= 0 && ny >= 0 && nx < width && ny < height && (mapData[nx, ny] == 'P' || mapData[nx, ny] == 'F'))
+                if (nx >= 0 && ny >= 0 && nx < width && ny < height &&
+                    (mapData[nx, ny] == TileId.Plains || mapData[nx, ny] == TileId.Forest))
                 {
                     return true;
                 }
@@ -477,7 +460,8 @@ public partial class Map
                 if (dx == 0 && dy == 0) continue;
                 int nx = x + dx;
                 int ny = y + dy;
-                if (nx >= 0 && ny >= 0 && nx < width && ny < height && (mapData[nx, ny] == 'M' || mapData[nx, ny] == 'm' || mapData[nx, ny] == 'S'))
+                if (nx >= 0 && ny >= 0 && nx < width && ny < height &&
+                    (mapData[nx, ny] == TileId.Mountain || mapData[nx, ny] == TileId.MountainDeep || mapData[nx, ny] == TileId.Snow))
                 {
                     return true;
                 }
@@ -496,9 +480,9 @@ public partial class Map
         while (queue.Count > 0 && beachSize > 0)
         {
             (int x, int y) = queue.Dequeue();
-            if (mapData[x, y] == 'P' || mapData[x, y] == 'F') // Replace only land tiles
+            if (mapData[x, y] == TileId.Plains || mapData[x, y] == TileId.Forest)
             {
-                mapData[x, y] = 'B'; // Assuming 'B' represents beach
+                mapData[x, y] = TileId.Beach;
                 beachSize--;
             }
 
@@ -514,17 +498,16 @@ public partial class Map
     }
     private void BeachesDepth()
     {
-        // Add dark spots to the beaches
         for (int x = 1; x < width - 1; x++)
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] == 'B')
+                if (mapData[x, y] == TileId.Beach)
                 {
-                    if (rng.NextDouble() < 0.1) // 10% chance to place a dark spot
+                    if (rng.NextDouble() < 0.1)
                     {
-                        mapData[x, y] = 'b'; // Assuming 'D' represents a dark spot
-                        SpreadTile(x, y, 0.5, 1, 3); // Spread the dark spot with a max of 3 tiles
+                        mapData[x, y] = TileId.BeachDark;
+                        SpreadTile(x, y, 0.5, 1, 3);
                     }
                 }
             }
@@ -536,7 +519,7 @@ public partial class Map
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] == 'B' && CountSurroundingBiomes(x, y, 'B') < 5)
+                if (mapData[x, y] == TileId.Beach && CountSurroundingBiomes(x, y, TileId.Beach) < 5)
                 {
                     mapData[x, y] = GetMostSurroundingBiome(x, y);
                 }
@@ -550,21 +533,16 @@ public partial class Map
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] == 'L' && CountSurroundingBiomes(x, y, 'L') + CountSurroundingBiomes(x, y, 'l') + CountSurroundingBiomes(x, y, 'O') + CountSurroundingBiomes(x, y, 'o') + CountSurroundingBiomes(x, y, 'R') + CountSurroundingBiomes(x, y, 'r') + CountSurroundingBiomes(x, y, 's') == 8)
+                // A water tile becomes its depth variant when all 8 neighbors are water
+                int allWater = CountSurroundingBiomesAny(x, y,
+                    TileId.Lake, TileId.LakeShallow,
+                    TileId.Ocean, TileId.OceanShallow,
+                    TileId.River, TileId.RiverShallow,
+                    TileId.Stream);
+                var def = TileRegistry.Get(mapData[x, y]);
+                if (def.DeepVariant.HasValue && allWater == 8)
                 {
-                    mapData[x, y] = 'l'; // Turn surrounded lake into deep lake
-                }
-                else if (mapData[x, y] == 'O' && CountSurroundingBiomes(x, y, 'O') + CountSurroundingBiomes(x, y, 'o') + CountSurroundingBiomes(x, y, 'L') + CountSurroundingBiomes(x, y, 'l') + CountSurroundingBiomes(x, y, 'R') + CountSurroundingBiomes(x, y, 'r') + CountSurroundingBiomes(x, y, 's') == 8)
-                {
-                    mapData[x, y] = 'o'; // Turn surrounded ocean into deep ocean
-                }
-                else if (mapData[x, y] == 'R' && CountSurroundingBiomes(x, y, 'R') + CountSurroundingBiomes(x, y, 'r') + CountSurroundingBiomes(x, y, 'O') + CountSurroundingBiomes(x, y, 'o') + CountSurroundingBiomes(x, y, 'L') + CountSurroundingBiomes(x, y, 'l') + CountSurroundingBiomes(x, y, 's') == 8)
-                {
-                    mapData[x, y] = 'r'; // Turn surrounded river into deep river
-                }
-                else if (mapData[x, y] == 's' && CountSurroundingBiomes(x, y, 's') + CountSurroundingBiomes(x, y, 'R') + CountSurroundingBiomes(x, y, 'r') + CountSurroundingBiomes(x, y, 'O') + CountSurroundingBiomes(x, y, 'o') + CountSurroundingBiomes(x, y, 'L') + CountSurroundingBiomes(x, y, 'l') == 8)
-                {
-                    mapData[x, y] = 'r'; // Turn surrounded stream into deep stream
+                    mapData[x, y] = def.DeepVariant.Value;
                 }
             }
         }

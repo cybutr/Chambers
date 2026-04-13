@@ -8,7 +8,7 @@ using static Internal.GUI;
 public partial class Map
 {
     #region map frame
-    private void FrameMap(char frameChar)
+    private void FrameMap(TileId frameChar)
     {
         // Top and bottom borders
         for (int x = 0; x < width; x++)
@@ -60,9 +60,9 @@ public partial class Map
         {
             for (int x = 0; x < width; x++)
             {
-                if (mapData[x, y] == '@')
+                if (mapData[x, y] == TileId.Border)
                 {
-                    FillCircle(x, y, 'O', 2, 4);
+                    FillCircle(x, y, TileId.Ocean, 2, 4);
                 }
             }
         }
@@ -95,7 +95,7 @@ public partial class Map
         while (queue.Count > 0)
         {
             (int x, int y) = queue.Dequeue();
-            mapData[x, y] = 'O';
+            mapData[x, y] = TileId.Ocean;
 
             foreach ((int nx, int ny) in GetNeighbors(x, y))
             {
@@ -180,20 +180,16 @@ public partial class Map
 
         return points;
     }
-    private char GetMostSurroundingBiome(int x, int y)
+    private TileId GetMostSurroundingBiome(int x, int y)
     {
-        Dictionary<char, int> biomeCounts = new Dictionary<char, int>();
+        Dictionary<TileId, int> biomeCounts = new Dictionary<TileId, int>();
         foreach ((int nx, int ny) in GetNeighbors(x, y))
         {
-            char biome = mapData[nx, ny];
+            TileId biome = mapData[nx, ny];
             if (biomeCounts.ContainsKey(biome))
-            {
                 biomeCounts[biome]++;
-            }
             else
-            {
                 biomeCounts[biome] = 1;
-            }
         }
         return biomeCounts.OrderByDescending(b => b.Value).First().Key;
     }
@@ -204,23 +200,23 @@ public partial class Map
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] == 'P' || mapData[x, y] == 'F')
+                if (mapData[x, y] == TileId.Plains || mapData[x, y] == TileId.Forest)
                 {
-                    int surroundingWater = CountSurroundingBiomes(x, y, 'O') + CountSurroundingBiomes(x, y, 'o');
-                    int surroundingPlains = CountSurroundingBiomes(x, y, 'P');
-                    int surroundingForest = CountSurroundingBiomes(x, y, 'F');
+                    int surroundingWater = CountSurroundingBiomesAny(x, y, TileId.Ocean, TileId.OceanShallow);
+                    int surroundingPlains = CountSurroundingBiomes(x, y, TileId.Plains);
+                    int surroundingForest = CountSurroundingBiomes(x, y, TileId.Forest);
 
                     if (surroundingWater > surroundingPlains + surroundingForest)
                     {
-                        mapData[x, y] = 'O';
+                        mapData[x, y] = TileId.Ocean;
                     }
                     else if (surroundingForest > surroundingPlains)
                     {
-                        mapData[x, y] = 'F'; // Preserve forest
+                        mapData[x, y] = TileId.Forest;
                     }
                     else if (surroundingPlains > surroundingForest)
                     {
-                        mapData[x, y] = 'P'; // Preserve plains
+                        mapData[x, y] = TileId.Plains;
                     }
                 }
             }
@@ -231,23 +227,23 @@ public partial class Map
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] == 'P' || mapData[x, y] == 'F')
+                if (mapData[x, y] == TileId.Plains || mapData[x, y] == TileId.Forest)
                 {
-                    int surroundingWater = CountSurroundingBiomes(x, y, 'O') + CountSurroundingBiomes(x, y, 'V');
-                    int surroundingPlains = CountSurroundingBiomes(x, y, 'P');
-                    int surroundingForest = CountSurroundingBiomes(x, y, 'F');
+                    int surroundingWater = CountSurroundingBiomesAny(x, y, TileId.Ocean, TileId.OceanShallow);
+                    int surroundingPlains = CountSurroundingBiomes(x, y, TileId.Plains);
+                    int surroundingForest = CountSurroundingBiomes(x, y, TileId.Forest);
 
                     if (surroundingWater > surroundingPlains + surroundingForest)
                     {
-                        mapData[x, y] = 'O';
+                        mapData[x, y] = TileId.Ocean;
                     }
                     else if (surroundingForest > surroundingPlains)
                     {
-                        mapData[x, y] = 'F'; // Preserve forest
+                        mapData[x, y] = TileId.Forest;
                     }
                     else if (surroundingPlains > surroundingForest)
                     {
-                        mapData[x, y] = 'P'; // Preserve plains
+                        mapData[x, y] = TileId.Plains;
                     }
                 }
             }
@@ -258,23 +254,23 @@ public partial class Map
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] == 'P' || mapData[x, y] == 'F')
+                if (mapData[x, y] == TileId.Plains || mapData[x, y] == TileId.Forest)
                 {
-                    int surroundingWater = CountSurroundingBiomes(x, y, 'O') + CountSurroundingBiomes(x, y, 'V');
-                    int surroundingPlains = CountSurroundingBiomes(x, y, 'P');
-                    int surroundingForest = CountSurroundingBiomes(x, y, 'F');
+                    int surroundingWater = CountSurroundingBiomesAny(x, y, TileId.Ocean, TileId.OceanShallow);
+                    int surroundingPlains = CountSurroundingBiomes(x, y, TileId.Plains);
+                    int surroundingForest = CountSurroundingBiomes(x, y, TileId.Forest);
 
                     if (surroundingWater > surroundingPlains + surroundingForest)
                     {
-                        mapData[x, y] = 'O';
+                        mapData[x, y] = TileId.Ocean;
                     }
                     else if (surroundingForest > surroundingPlains)
                     {
-                        mapData[x, y] = 'F'; // Preserve forest
+                        mapData[x, y] = TileId.Forest;
                     }
                     else if (surroundingPlains > surroundingForest)
                     {
-                        mapData[x, y] = 'P'; // Preserve plains
+                        mapData[x, y] = TileId.Plains;
                     }
                 }
             }
@@ -305,7 +301,7 @@ public partial class Map
         {
             if (point.x >= 0 && point.x < width && point.y >= 0 && point.y < height)
             {
-                mapData[point.x, point.y] = '@';
+                mapData[point.x, point.y] = TileId.Border;
             }
         }
     }

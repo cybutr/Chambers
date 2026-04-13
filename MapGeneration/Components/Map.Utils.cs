@@ -8,16 +8,16 @@ using static Internal.GUI;
 public partial class Map
 {
     #region useful functions
-    private int GetClosestDistanceOfType(int startX, int startY, char tileType)
+    private int GetClosestDistanceOfType(int startX, int startY, TileId tileType)
     {
         (int x, int y) = GetClosestTileOfType(startX, startY, tileType);
         if (x == -1 && y == -1)
         {
-            return -1; 
+            return -1;
         }
         return (int)GetDistance(startX, startY, x, y);
     }
-    private (int, int) GetClosestTileOfType(int startX, int startY, char tileType)
+    private (int, int) GetClosestTileOfType(int startX, int startY, TileId tileType)
     {
         Queue<(int, int)> toVisit = new Queue<(int, int)>();
         HashSet<(int, int)> visited = new HashSet<(int, int)>();
@@ -43,7 +43,7 @@ public partial class Map
             }
         }
 
-        return (-1, -1); 
+        return (-1, -1);
     }
     private (int, int) GetRandomPoint()
     {
@@ -56,24 +56,25 @@ public partial class Map
         int endX, endY;
         int attempts = 0;
         int maxAttempts = 100;
-        
+        int minDistSq = minDistance * minDistance;
+
         do
         {
             endX = rng.Next(startX - maxDistance, startX + maxDistance + 1);
             endY = rng.Next(startY - maxDistance, startY + maxDistance + 1);
             attempts++;
-            
+
             if (attempts >= maxAttempts)
             {
                 // Fallback to start position if no valid point found
                 return (startX, startY);
             }
-        } while (Math.Sqrt(Math.Pow(endX - startX, 2) + Math.Pow(endY - startY, 2)) < minDistance ||
+        } while ((endX - startX) * (endX - startX) + (endY - startY) * (endY - startY) < minDistSq ||
                 endX < 0 || endX >= width || endY < 0 || endY >= height);
         
         return (endX, endY);
     }
-    public (int, int) GetRandomPointInBiome(char biome)
+    public (int, int) GetRandomPointInBiome(TileId biome)
     {
         List<(int, int)> biomePoints = new List<(int, int)>();
 
@@ -100,22 +101,21 @@ public partial class Map
         }
         return (-1, -1);
     }
-    public (int, int) GetRandomPointInBiomeWithTilePool(List<char> tilePool)
+    public (int, int) GetRandomPointInBiomeWithTilePool(List<TileId> tilePool)
     {
-        List<(int, int)> biomePoints = new List<(int, int)>();
+        // Pre-build weight map so we do O(1) lookup per tile instead of O(tilePool) per tile
+        var weights = new Dictionary<TileId, int>();
+        foreach (TileId t in tilePool)
+            weights[t] = weights.GetValueOrDefault(t, 0) + 1;
 
+        var biomePoints = new List<(int, int)>();
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
-                // Count how many times this tile appears in the pool
-                int weight = tilePool.Count(t => t == mapData[x, y]);
-                
-                // Add the point multiple times based on its weight
-                for (int i = 0; i < weight; i++)
-                {
-                    biomePoints.Add((x, y));
-                }
+                if (weights.TryGetValue(mapData[x, y], out int w))
+                    for (int i = 0; i < w; i++)
+                        biomePoints.Add((x, y));
             }
         }
 
@@ -125,11 +125,10 @@ public partial class Map
             return (-1, -1);
         }
 
-        int randomIndex = rng.Next(biomePoints.Count);
-        return biomePoints[randomIndex];
+        return biomePoints[rng.Next(biomePoints.Count)];
     }
-    
-    public (int, int) GetRandomPointInBiomeInRange(char biome, int centerX, int centerY, int minDistance, int maxDistance)
+
+    public (int, int) GetRandomPointInBiomeInRange(TileId biome, int centerX, int centerY, int minDistance, int maxDistance)
     {
         List<(int, int)> biomePoints = new List<(int, int)>();
 
@@ -160,15 +159,16 @@ public partial class Map
         }
         return (-1, -1);
     }
-    private bool IsInBiome(int x, int y, char biome)
+    private bool IsInBiome(int x, int y, TileId biome)
     {
         return x >= 0 && x < width && y >= 0 && y < height && mapData[x, y] == biome;
     }
     private double GetDistance(int x1, int y1, int x2, int y2)
     {
-        return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
+        double dx = x2 - x1, dy = y2 - y1;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
-    private int CountSurroundingBiomes(int x, int y, char biome)
+    private int CountSurroundingBiomes(int x, int y, TileId biome)
     {
         int count = 0;
         if (x > 0 && mapData[x - 1, y] == biome) count++;
@@ -181,7 +181,22 @@ public partial class Map
         if (x < width - 1 && y < height - 1 && mapData[x + 1, y + 1] == biome) count++;
         return count;
     }
-    private void ReplaceBiome(char oldBiome, char newBiome)
+    // Counts neighbors matching any of the given tile types in a single 8-neighbor pass.
+    private int CountSurroundingBiomesAny(int x, int y, params TileId[] biomes)
+    {
+        var set = new HashSet<TileId>(biomes);
+        int count = 0;
+        if (x > 0              && set.Contains(mapData[x - 1, y    ])) count++;
+        if (x < width - 1      && set.Contains(mapData[x + 1, y    ])) count++;
+        if (y > 0              && set.Contains(mapData[x,     y - 1])) count++;
+        if (y < height - 1     && set.Contains(mapData[x,     y + 1])) count++;
+        if (x > 0 && y > 0              && set.Contains(mapData[x - 1, y - 1])) count++;
+        if (x < width - 1 && y > 0      && set.Contains(mapData[x + 1, y - 1])) count++;
+        if (x > 0 && y < height - 1     && set.Contains(mapData[x - 1, y + 1])) count++;
+        if (x < width - 1 && y < height - 1 && set.Contains(mapData[x + 1, y + 1])) count++;
+        return count;
+    }
+    private void ReplaceBiome(TileId oldBiome, TileId newBiome)
     {
         for (int x = 0; x < width; x++)
         {
@@ -230,30 +245,8 @@ public partial class Map
     }
     private void SmoothMap(int smoothFactor)
     {
-        for (int i = 0; i < smoothFactor; i++)
-        {
-            for (int y = 1; y < conf.Height - 1; y++)
-            {
-                for (int x = 1; x < conf.Width - 1; x++)
-                {
-                    double sum = 0;
-                    int count = 0;
-                    for (int ny = -1; ny <= 1; ny++)
-                    {
-                        for (int nx = -1; nx <= 1; nx++)
-                        {
-                            sum += mapData[x + nx, y + ny];
-                            count++;
-                        }
-                    }
-                    mapData[x, y] = (char)(sum / count);
-                }
-            }
-        }
-    }
-    private double Heuristic(int x1, int y1, int x2, int y2)
-    {
-        return Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
+        // Dead code — retained for potential future use.
+        // Originally averaged tile chars numerically; not applicable with typed TileId.
     }
     private List<(int, int)> ReconstructPath(Dictionary<(int, int), (int, int)> cameFrom, (int, int) current)
     {
@@ -297,7 +290,7 @@ public partial class Map
     }
     private void SpreadTile(int startX, int startY, double spreadChance, int minSpread, int maxSpread)
     {
-        char tile = mapData[startX, startY];
+        TileId tile = mapData[startX, startY];
         Queue<(int, int)> queue = new Queue<(int, int)>();
         queue.Enqueue((startX, startY));
         int spreadCount = 0;
@@ -336,9 +329,9 @@ public partial class Map
             }
         }
     }
-    private void SpreadTileOnTile(int startX, int startY, char targetTile, double spreadChance, int minSpread, int maxSpread)
+    private void SpreadTileOnTile(int startX, int startY, TileId targetTile, double spreadChance, int minSpread, int maxSpread)
     {
-        char tile = mapData[startX, startY];
+        TileId tile = mapData[startX, startY];
         Queue<(int, int)> queue = new Queue<(int, int)>();
         HashSet<(int, int)> visited = new HashSet<(int, int)>();
         queue.Enqueue((startX, startY));
@@ -447,7 +440,7 @@ public partial class Map
 
         return (centerX, centerY);
     }
-    private void FillCircle(int x, int y, char tile, int minRadius, int maxRadius)
+    private void FillCircle(int x, int y, TileId tile, int minRadius, int maxRadius)
     {
         Random rng = new Random(seed);
         int radius = rng.Next(minRadius, maxRadius + 1);
@@ -467,20 +460,14 @@ public partial class Map
         }
     }
     private bool IsOceanTile(int x, int y)
-    {
-        if (mapData[x, y] == 'O')
-        {
-            return true;
-        }
-        return false;
-    }
+        => mapData[x, y] == TileId.Ocean;
     private void RemoveSeperatedOceanTiles()
     {
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                if (mapData[x, y] == 'O')
+                if (mapData[x, y] == TileId.Ocean)
                 {
                     int plainsCount = 0;
                     int forestCount = 0;
@@ -494,19 +481,19 @@ public partial class Map
 
                             if (nx >= 0 && nx < width && ny >= 0 && ny < height)
                             {
-                                if (mapData[nx, ny] == 'P') plainsCount++;
-                                if (mapData[nx, ny] == 'F') forestCount++;
+                                if (mapData[nx, ny] == TileId.Plains) plainsCount++;
+                                if (mapData[nx, ny] == TileId.Forest) forestCount++;
                             }
                         }
                     }
 
-                    if (plainsCount >= 5) mapData[x, y] = 'P';
-                    else if (forestCount >= 5) mapData[x, y] = 'F';
+                    if (plainsCount >= 5) mapData[x, y] = TileId.Plains;
+                    else if (forestCount >= 5) mapData[x, y] = TileId.Forest;
                 }
             }
         }
     }
-    private void FloodFillRegion(int startX, int startY, char biomeType, bool[,] visited, List<(int x, int y)> region)
+    private void FloodFillRegion(int startX, int startY, TileId biomeType, bool[,] visited, List<(int x, int y)> region)
     {
         Queue<(int, int)> queue = new Queue<(int, int)>();
         queue.Enqueue((startX, startY));
@@ -527,7 +514,7 @@ public partial class Map
             }
         }
     }
-    private void ExpandSmallBiome(List<(int x, int y)> region, char biomeType)
+    private void ExpandSmallBiome(List<(int x, int y)> region, TileId biomeType)
     {
         int targetSize = conf.MinBiomeSize * conf.MinBiomeSize;
         HashSet<(int, int)> regionSet = new HashSet<(int, int)>(region);
@@ -558,11 +545,11 @@ public partial class Map
     }
     private int GetBiomeSize(int startX, int startY)
     {
-        char biomeType = mapData[startX, startY];
+        TileId biomeType = mapData[startX, startY];
         bool[,] visited = new bool[width, height];
         return FloodFill(startX, startY, biomeType, visited);
     }
-    private int FloodFill(int x, int y, char biomeType, bool[,] visited)
+    private int FloodFill(int x, int y, TileId biomeType, bool[,] visited)
     {
         if (x < 0 || x >= width || y < 0 || y >= height || visited[x, y] || mapData[x, y] != biomeType)
         {
@@ -587,7 +574,7 @@ public partial class Map
     }
     private void ExpandBiome(int startX, int startY)
     {
-        char biomeType = mapData[startX, startY];
+        TileId biomeType = mapData[startX, startY];
         Queue<(int, int)> queue = new Queue<(int, int)>();
         queue.Enqueue((startX, startY));
 

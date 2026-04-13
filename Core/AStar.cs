@@ -28,9 +28,9 @@ public class AStar
         public float HCost { get; set; }
         public float FCost => GCost + HCost;
         public PathNode? Parent { get; set; }
-        public char TerrainType { get; set; }
+        public TileId TerrainType { get; set; }
 
-        public PathNode(int x, int y, char terrainType)
+        public PathNode(int x, int y, TileId terrainType)
         {
             X = x;
             Y = y;
@@ -43,8 +43,8 @@ public class AStar
 
     public class TerrainConfig
     {
-        private Dictionary<char, float> _movementCosts;
-        private HashSet<char> _blockedTerrain;
+        private Dictionary<TileId, float> _movementCosts;
+        private HashSet<TileId> _blockedTerrain;
 
         // Path Shape & Style
         public float PathRandomness { get; set; } = 0.2f;
@@ -72,32 +72,22 @@ public class AStar
 
         public TerrainConfig()
         {
-            _movementCosts = new Dictionary<char, float>();
-            _blockedTerrain = new HashSet<char>();
-            
-            SetTerrainCost('P', 0.8f);
-            SetTerrainCost('F', 0.2f);
-            SetTerrainCost('m', 15.0f);
-            SetTerrainCost('M', 10.0f);
-            SetTerrainCost('S', 20.0f);
-            SetTerrainCost('R', 4.0f);
-            SetTerrainCost('L', 4.0f);
-            SetTerrainCost('O', 5.0f);
-            SetTerrainCost('s', 3.0f);
-            SetTerrainCost('r', 3.0f);
-            SetTerrainCost('l', 3.0f);
-            SetTerrainCost('o', 6.0f);
-            SetTerrainCost('B', 0.5f);
-            SetTerrainCost('b', 0.7f);
-            BlockTerrain('@');
+            _movementCosts = new Dictionary<TileId, float>();
+            _blockedTerrain = new HashSet<TileId>();
+            // Default costs come from TileRegistry; add overrides here if needed.
+            BlockTerrain(TileId.Border);
         }
 
-        public void SetTerrainCost(char terrain, float cost) => _movementCosts[terrain] = cost;
-        public void BlockTerrain(char terrain) => _blockedTerrain.Add(terrain);
-        public void UnblockTerrain(char terrain) => _blockedTerrain.Remove(terrain);
-        public float GetTerrainCost(char terrain) => _movementCosts.GetValueOrDefault(terrain, 1.0f);
-        public bool IsTerrainBlocked(char terrain) => _blockedTerrain.Contains(terrain) || GetTerrainCost(terrain) >= float.MaxValue;
-        public bool IsHighCostTerrain(char terrain) => GetTerrainCost(terrain) >= HighCostThreshold;
+        public void SetTerrainCost(TileId terrain, float cost) => _movementCosts[terrain] = cost;
+        public void BlockTerrain(TileId terrain) => _blockedTerrain.Add(terrain);
+        public void UnblockTerrain(TileId terrain) => _blockedTerrain.Remove(terrain);
+        public float GetTerrainCost(TileId terrain)
+        {
+            if (_movementCosts.TryGetValue(terrain, out float cost)) return cost;
+            return TileRegistry.IsValid(terrain) ? TileRegistry.Get(terrain).MovementCost : 1.0f;
+        }
+        public bool IsTerrainBlocked(TileId terrain) => _blockedTerrain.Contains(terrain) || GetTerrainCost(terrain) >= float.MaxValue;
+        public bool IsHighCostTerrain(TileId terrain) => GetTerrainCost(terrain) >= HighCostThreshold;
     }
 
     private TerrainConfig _terrainConfig;
@@ -116,7 +106,7 @@ public class AStar
         _random = customConfig.RandomSeed != 0 ? new Random(customConfig.RandomSeed) : new Random();
     }
 
-    public List<(int x, int y)>? FindPath(char[,] mapData, int startX, int startY, int goalX, int goalY)
+    public List<(int x, int y)>? FindPath(TileId[,] mapData, int startX, int startY, int goalX, int goalY)
     {
         int width = mapData.GetLength(0);
         int height = mapData.GetLength(1);
@@ -252,7 +242,7 @@ public class AStar
         return neighbors;
     }
 
-    private Dictionary<(int, int), float> ComputeObstacleDistanceMap(char[,] mapData, int width, int height)
+    private Dictionary<(int, int), float> ComputeObstacleDistanceMap(TileId[,] mapData, int width, int height)
     {
         var distanceMap = new Dictionary<(int, int), float>();
         var queue = new Queue<(int x, int y, float dist)>();
@@ -349,7 +339,7 @@ public class AStar
         // NEW: Biome stickiness (prefer staying in same biome, reward being surrounded by low-cost terrain)
         if (_terrainConfig.BiomeStickiness > 0)
         {
-            char neighborBiome = neighbor.TerrainType;
+            TileId neighborBiome = neighbor.TerrainType;
             int sameBiomeNeighbors = CountNeighborsOfType(neighbor, neighborBiome, nodeGrid);
             
             // If surrounded by same biome (3-4 neighbors), calculate reward/penalty based on terrain cost
@@ -443,7 +433,7 @@ public class AStar
         return totalPenalty;
     }
 
-    private int CountNeighborsOfType(PathNode node, char terrainType, PathNode[,] nodeGrid)
+    private int CountNeighborsOfType(PathNode node, TileId terrainType, PathNode[,] nodeGrid)
     {
         int count = 0;
         int[] dx = { 0, 0, -1, 1 };
@@ -533,38 +523,38 @@ public class AStar
         switch (animalType.ToLower())
         {
             case "bird":
-                config.SetTerrainCost('P', 1.0f);
-                config.SetTerrainCost('F', 1.0f);
-                config.SetTerrainCost('M', 1.2f);
-                config.SetTerrainCost('~', 1.0f);
+                config.SetTerrainCost(TileId.Plains, 1.0f);
+                config.SetTerrainCost(TileId.Forest, 1.0f);
+                config.SetTerrainCost(TileId.Mountain, 1.2f);
+                config.SetTerrainCost(TileId.Ocean, 1.0f);
                 config.DirectionChangePenalty = 0.3f;
                 config.PathRandomness = 0.15f;
                 break;
 
             case "fish":
-                config.SetTerrainCost('~', 1.0f);
-                config.BlockTerrain('P');
-                config.BlockTerrain('F');
-                config.BlockTerrain('M');
+                config.SetTerrainCost(TileId.Ocean, 1.0f);
+                config.BlockTerrain(TileId.Plains);
+                config.BlockTerrain(TileId.Forest);
+                config.BlockTerrain(TileId.Mountain);
                 config.DirectionChangePenalty = 0.5f;
                 config.WanderingBias = 0.2f;
                 config.PathRandomness = 0.1f;
                 break;
 
             case "land_animal":
-                config.SetTerrainCost('P', 1.0f);
-                config.SetTerrainCost('F', 1.8f);
-                config.SetTerrainCost('M', 4.0f);
-                config.BlockTerrain('~');
+                config.SetTerrainCost(TileId.Plains, 1.0f);
+                config.SetTerrainCost(TileId.Forest, 1.8f);
+                config.SetTerrainCost(TileId.Mountain, 4.0f);
+                config.BlockTerrain(TileId.Ocean);
                 config.PathRandomness = 0.2f;
                 config.DiagonalPenalty = 1.3f;
                 break;
 
             case "amphibian":
-                config.SetTerrainCost('P', 1.2f);
-                config.SetTerrainCost('F', 1.5f);
-                config.SetTerrainCost('M', 3.0f);
-                config.SetTerrainCost('~', 0.8f);
+                config.SetTerrainCost(TileId.Plains, 1.2f);
+                config.SetTerrainCost(TileId.Forest, 1.5f);
+                config.SetTerrainCost(TileId.Mountain, 3.0f);
+                config.SetTerrainCost(TileId.Ocean, 0.8f);
                 config.PathRandomness = 0.25f;
                 config.WanderingBias = 0.15f;
                 break;
