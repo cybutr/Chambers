@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /home/chedda/csharp/Chambers/MapGeneration/Components/*.cs /home/chedda/csharp/Chambers/Other/*.cs)",
+      "Bash(dotnet build:*)",
+      "Bash(sed -n 344,350p /home/chedda/csharp/Chambers/MapGeneration/Map.cs)",
+      "Bash(sed -n 6112,6127p /home/chedda/csharp/Chambers/MapGeneration/Map.cs)",
+      "Bash(sed -n '235,247p' /home/chedda/csharp/Chambers/Program.cs)",
+      "Bash(sed -n '869,903p' /home/chedda/csharp/Chambers/Program.cs)"
+    ]
+  }
+}
