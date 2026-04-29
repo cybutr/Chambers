@@ -80,11 +80,29 @@ Tile properties come from `TileRegistry.Get(TileId)` → `TileDefinition`:
 | `CloudType.Nimbostratus` | `5` | |
 | `CloudType.Stratus` | `6` | |
 
-### JSON serialization
+### Serialization
 
-All three arrays serialize to/from legacy char strings for human-readable saves:
-- `TileIdArrayJsonConverter`, `EntityIdArrayJsonConverter`, `CloudTypeArrayJsonConverter` in `Program.cs`
-- `previous*` arrays are `[JsonIgnore]` — not saved, cloned from live data on load
+Two formats are supported, controlled by `Program.SaveFormat` (`SerializationFormat` enum):
+
+| Format | Extension | Default |
+|--------|-----------|---------|
+| `SerializationFormat.Binary` | `.chmb` | ✅ yes |
+| `SerializationFormat.Json` | `.json` | legacy |
+
+**Binary format** (`SaveMapBinary` / `LoadMapBinary` in `Program/Program.Serialization.cs`):
+- 5-byte uncompressed header (`CHMB` + version byte), then GZip-compressed BinaryWriter stream
+- 2D arrays written as raw bytes/ints/doubles; enum arrays cast to `byte`
+- Complex objects (`Config`, `Weather`, `Cloud`, `Wave`, species lists) embedded as length-prefixed JSON strings
+- `noise`, `tempatureNoise`, `humidityNoise` are **not saved** — regenerated on load via `RegenerateNoise()`
+- `rng` is **not saved** — reconstructed as `new Random(map.seed)` on load
+- `previous*` arrays are **not saved** — cloned from live data on load
+
+**JSON format** (legacy, `SaveMapJson` / `LoadMapJson`):
+- All three typed arrays serialize to/from legacy char strings via `TileIdArrayJsonConverter`, `EntityIdArrayJsonConverter`, `CloudTypeArrayJsonConverter`
+- `RegenerateNoise()` is also called on JSON load — noise arrays in old saves are ignored
+- `previous*` arrays are `[JsonIgnore]`
+
+`LoadMap(path)` auto-detects format by extension. `LoadAllMapsFromFolder` scans both `*.chmb` and `*.json`, preferring `.chmb` when both exist for the same name.
 
 ---
 
@@ -171,6 +189,55 @@ GUI.Write(GUI.SetBackgroundColor(color.r, color.g, color.b) + "  " + GUI.ResetCo
 
 ---
 
+## Framebuffer Dirty Renderer
+
+`_framebuffer[sx, sy]` caches `(color, overlayId)` per viewport cell. `DisplayMap` skips the console write if both match — only changed cells are flushed each frame.
+
+```csharp
+// Force full redraw — call whenever bulk state changes
+map.InvalidateFramebuffer();   // sets _framebuffer = null
+```
+
+Always call `InvalidateFramebuffer()` on: chamber switch, map load, or any bulk state change that bypasses the normal tick path. Defined in `Map.Camera.cs`.
+
+---
+
+## Tick System & Simulation Speed
+
+```csharp
+[JsonIgnore] public ulong tick;           // incremented each UpdateClouds() call
+public int cloudMorphInterval = 2;        // SmoothAndFluffClouds runs every N ticks
+public static double SimulationSpeed = 5.0;  // on Program
+// deltaTime = sleepTime / 1000.0 * SimulationSpeed
+// 100ms * 5.0 = 0.5 — all existing timer thresholds were designed around 0.5
+```
+
+`tick % (ulong)cloudMorphInterval == 0` gates `SmoothAndFluffClouds` in `MoveClouds`. `deltaTime` is set per weather-thread iteration in `Program.UpdateWeather`.
+
+---
+
+## Cloud Movement
+
+Clouds move via global sub-pixel accumulators — no per-tick allocation:
+
+```csharp
+_cloudAccumX += Math.Cos(radians) * speed + jitter;
+_cloudAccumY += Math.Sin(radians) * speed + jitter;
+int shiftX = (int)_cloudAccumX;   // integer tiles to shift this tick
+_cloudAccumX -= shiftX;            // remainder carries to next tick
+if (shiftX != 0 || shiftY != 0) ShiftCloudData(shiftX, shiftY);
+```
+
+`ShiftCloudData(dx, dy)` does `Array.Clear` + copy into pre-allocated swap buffers, then swaps references:
+
+```csharp
+(cloudData, _cloudDataSwap) = (_cloudDataSwap, cloudData);
+```
+
+`_cloudDataSwap` and `_cloudDepthSwap` are allocated once in the constructor — never reallocated. Cloud presence is checked via `cloudData[x,y] != CloudType.None` (no Dict).
+
+---
+
 ## Partial Class Structure
 
 `Map` is one class split across many files. All compile into the same class — methods from any file can call methods in any other.
@@ -178,6 +245,7 @@ GUI.Write(GUI.SetBackgroundColor(color.r, color.g, color.b) + "  " + GUI.ResetCo
 | File | What goes here |
 |------|---------------|
 | `Map.cs` | Fields, constructor, `Generate()`, biome assignment, `Update()` |
+| `Map.Camera.cs` | `Camera`, `InitializeCamera()`, `InitializeFramebuffer()`, `InvalidateFramebuffer()` |
 | `Map.Frame.cs` | Coastline and border generation |
 | `Map.Mountains.cs` | Mountain ranges, snow peaks, forest integration |
 | `Map.WaterGen.cs` | Rivers, lakes, water depth |

@@ -10,12 +10,18 @@ public abstract class Species
     public int Y { get; set; }
     public int seedOffset { get; set; }
     protected Random rng { get; set; }
-    public List<TileId> allowedTiles { get; set; } = new();
+    public HashSet<TileId> allowedTiles { get; set; } = [];
     public bool isAggressive { get; set; }
     public bool predatorNearby { get; set; }
     public bool isHunted { get; set; }
     public int predatorX { get; set; }
     public int predatorY { get; set; }
+    public bool isNight { get; set; }
+    public double time { get; set; }
+    public double sunriseTime { get; set; }
+    public double sunsetTime { get; set; }
+
+    public abstract EntityId EntityId { get; }
 
     protected Species(string name, string habitat, int x, int y, int seedOffset)
     {
@@ -32,6 +38,11 @@ public abstract class Species
         : this(name, habitat, 0, 0, seedOffset) { }
 
     public abstract void Behave(TileId[,] mapData, EntityId[,] overlayData);
+
+    public void SetTime(double currentTime, double sunrise, double sunset)
+    {
+        time = currentTime; sunriseTime = sunrise; sunsetTime = sunset;
+    }
 
     protected static double GetDistance(int x1, int y1, int x2, int y2)
     {
@@ -55,6 +66,88 @@ public abstract class Species
             case 2: X--; break;
             case 3: X++; break;
         }
+    }
+
+    protected void MoveToward(TileId[,] mapData, int tx, int ty)
+    {
+        int w = mapData.GetLength(0), h = mapData.GetLength(1);
+        int nx = X + (tx > X ? 1 : tx < X ? -1 : 0);
+        int ny = Y + (ty > Y ? 1 : ty < Y ? -1 : 0);
+        if (nx >= 0 && nx < w && ny >= 0 && ny < h && allowedTiles.Contains(mapData[nx, ny])) X = nx; Y = ny;
+    }
+
+    protected void MoveRandomlyNear(TileId[,] mapData, int anchorX, int anchorY, double maxDist)
+    {
+        int w = mapData.GetLength(0), h = mapData.GetLength(1);
+        var dirs = new List<(int, int)> { (-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1) };
+        foreach (var (dx, dy) in dirs.OrderBy(_ => rng.Next()))
+        {
+            int nx = X + dx, ny = Y + dy;
+            if (nx >= 0 && nx < w && ny >= 0 && ny < h &&
+                allowedTiles.Contains(mapData[nx, ny]) &&
+                GetDistance(nx, ny, anchorX, anchorY) <= maxDist)
+            {
+                X = nx; Y = ny;
+                return;
+            }
+        }
+    }
+
+    protected void MoveInGroups(TileId[,] mapData, EntityId[,] overlayData, EntityId clusterEntity, EntityId fallbackEntity)
+    {
+        int w = mapData.GetLength(0), h = mapData.GetLength(1);
+        (int x, int y) nearest = (-1, -1);
+        double minDist = double.MaxValue;
+
+        for (int dx = -3; dx <= 3; dx++)
+            for (int dy = -3; dy <= 3; dy++)
+            {
+                int cx = X + dx, cy = Y + dy;
+                if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
+                if (overlayData[cx, cy] == clusterEntity && !(cx == X && cy == Y))
+                {
+                    double dist = GetDistance(X, Y, cx, cy);
+                    if (dist < minDist) { minDist = dist; nearest = (cx, cy); }
+                }
+            }
+
+        if (nearest.x != -1)
+        {
+            if (minDist > 3) MoveToward(mapData, nearest.x, nearest.y);
+            else MoveRandomlyNear(mapData, nearest.x, nearest.y, 3);
+        }
+        else MoveTowardNearest(mapData, overlayData, fallbackEntity);
+    }
+
+    protected void MoveTowardNearest(TileId[,] mapData, EntityId[,] overlayData, EntityId entityType)
+    {
+        int w = mapData.GetLength(0), h = mapData.GetLength(1);
+        for (int dx = -20; dx <= 20; dx++)
+            for (int dy = -20; dy <= 20; dy++)
+            {
+                int cx = X + dx, cy = Y + dy;
+                if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
+                if (overlayData[cx, cy] == entityType && !(cx == X && cy == Y))
+                {
+                    MoveToward(mapData, cx, cy);
+                    return;
+                }
+            }
+    }
+
+    protected (int, int) FindNearestAllowedTile(TileId[,] mapData)
+    {
+        int w = mapData.GetLength(0), h = mapData.GetLength(1);
+        int nearestX = -1, nearestY = -1;
+        double nearestDist = double.MaxValue;
+        for (int x = 0; x < w; x++)
+            for (int y = 0; y < h; y++)
+            {
+                if (!allowedTiles.Contains(mapData[x, y])) continue;
+                double dist = GetDistance(X, Y, x, y);
+                if (dist < nearestDist) { nearestX = x; nearestY = y; nearestDist = dist; }
+            }
+        return (nearestX, nearestY);
     }
 
     protected void CheckForPredatorsInRange(EntityId[,] overlayData, EntityId predatorType, int radius = 10)
@@ -109,7 +202,7 @@ public abstract class Species
 #region species behavior
 public class Boids
 {
-    public List<Species> Species { get; set; } = new();
+    public List<Species> Species { get; set; } = [];
 
     public void AddSpecies(Species species) => Species.Add(species);
     public void RemoveSpecies(Species species) => Species.Remove(species);
@@ -126,17 +219,18 @@ public class Boids
 #region beach species
 public class Crab : Species
 {
+    public override EntityId EntityId => EntityId.Crab;
+
     public Crab(int x, int y, int seedOffset)
         : base("Crab", "Beach", x, y, seedOffset)
     {
-        allowedTiles = new List<TileId> { TileId.Beach, TileId.BeachDark };
+        allowedTiles = new HashSet<TileId> { TileId.Beach, TileId.BeachDark };
         isAggressive = rng.NextDouble() > 0.005;
     }
 
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData)
     {
-        if (rng.NextDouble() > 0.7 && !isHunted)
-            MoveRandomly(mapData);
+        if (rng.NextDouble() > 0.7 && !isHunted) MoveRandomly(mapData);
         SearchForFood();
         if (isAggressive) Attack();
         // No overlayData-based predator detection for crabs yet
@@ -146,41 +240,25 @@ public class Crab : Species
 
     private void MoveToBeach(TileId[,] mapData)
     {
-        var (nx, ny) = FindNearestBeachTile(mapData);
+        var (nx, ny) = FindNearestAllowedTile(mapData);
         if (nx != -1) { X = nx; Y = ny; }
-    }
-
-    private (int, int) FindNearestBeachTile(TileId[,] mapData)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        int nearestX = -1, nearestY = -1;
-        double nearestDist = double.MaxValue;
-        for (int x = 0; x < w; x++)
-        {
-            for (int y = 0; y < h; y++)
-            {
-                if (!allowedTiles.Contains(mapData[x, y])) continue;
-                double dist = GetDistance(X, Y, x, y);
-                if (dist < nearestDist) { nearestX = x; nearestY = y; nearestDist = dist; }
-            }
-        }
-        return (nearestX, nearestY);
     }
 }
 
 public class Turtle : Species
 {
+    public override EntityId EntityId => EntityId.Turtle;
+
     public Turtle(int x, int y, int seedOffset)
         : base("Turtle", "Beach", x, y, seedOffset)
     {
-        allowedTiles = new List<TileId> { TileId.Beach, TileId.BeachDark };
+        allowedTiles = new HashSet<TileId> { TileId.Beach, TileId.BeachDark };
         isAggressive = rng.NextDouble() > 0.005;
     }
 
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData)
     {
-        if (rng.NextDouble() > 0.7 && !isHunted)
-            MoveInWater(mapData);
+        if (rng.NextDouble() > 0.7 && !isHunted) MoveInWater(mapData);
         SearchForFood();
         if (isAggressive) Attack();
         CheckForPredatorsInRange(overlayData, EntityId.Wolf);
@@ -190,7 +268,7 @@ public class Turtle : Species
     private void MoveInWater(TileId[,] mapData)
     {
         int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        var extended = new List<TileId>(allowedTiles)
+        var extended = new HashSet<TileId>(allowedTiles)
         {
             TileId.Ocean, TileId.OceanShallow, TileId.Lake, TileId.LakeShallow,
             TileId.River, TileId.RiverShallow
@@ -211,8 +289,7 @@ public class Turtle : Species
             case 3: X++; break;
         }
 
-        if (TileRegistry.Get(mapData[X, Y]).IsWater && !IsNearBeach(mapData, 5) && rng.NextDouble() < 0.2)
-            WalkToBeach(mapData, FindNearestBeachTile(mapData));
+        if (TileRegistry.Get(mapData[X, Y]).IsWater && !IsNearBeach(mapData, 5) && rng.NextDouble() < 0.2) WalkToBeach(mapData, FindNearestAllowedTile(mapData));
     }
 
     private bool IsNearBeach(TileId[,] mapData, int range)
@@ -222,9 +299,7 @@ public class Turtle : Species
             for (int dy = -range; dy <= range; dy++)
             {
                 int cx = X + dx, cy = Y + dy;
-                if (cx >= 0 && cx < w && cy >= 0 && cy < h &&
-                    (mapData[cx, cy] == TileId.Beach || mapData[cx, cy] == TileId.BeachDark))
-                    return true;
+                if (cx >= 0 && cx < w && cy >= 0 && cy < h && (mapData[cx, cy] == TileId.Beach || mapData[cx, cy] == TileId.BeachDark)) return true;
             }
         return false;
     }
@@ -254,236 +329,51 @@ public class Turtle : Species
             }
         }
     }
-
-    private (int, int) FindNearestBeachTile(TileId[,] mapData)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        int nearestX = -1, nearestY = -1;
-        double nearestDist = double.MaxValue;
-        for (int x = 0; x < w; x++)
-            for (int y = 0; y < h; y++)
-            {
-                if (!allowedTiles.Contains(mapData[x, y])) continue;
-                double dist = GetDistance(X, Y, x, y);
-                if (dist < nearestDist) { nearestX = x; nearestY = y; nearestDist = dist; }
-            }
-        return (nearestX, nearestY);
-    }
 }
 #endregion
 
 #region plains species
 public class Sheep : Species
 {
-    public bool isNight { get; set; }
-    public double time { get; set; }
-    public double sunriseTime { get; set; }
-    public double sunsetTime { get; set; }
+    public override EntityId EntityId => EntityId.Sheep;
 
     public Sheep(int x, int y, int seedOffset)
         : base("Sheep", "Plains", x, y, seedOffset)
     {
-        allowedTiles = new List<TileId> { TileId.Plains };
+        allowedTiles = new HashSet<TileId> { TileId.Plains };
         isAggressive = rng.NextDouble() > 0.005;
-    }
-
-    public void SetTime(double currentTime, double sunrise, double sunset)
-    {
-        time = currentTime; sunriseTime = sunrise; sunsetTime = sunset;
     }
 
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData)
     {
-        if (rng.NextDouble() > 0.8 && !isHunted)
-            isNight = time > sunsetTime || time < sunriseTime;
-        if (rng.NextDouble() > 0.7 && !isHunted && !isNight)
-            MoveInGroups(mapData, overlayData);
+        if (rng.NextDouble() > 0.8 && !isHunted) isNight = time > sunsetTime || time < sunriseTime;
+        if (rng.NextDouble() > 0.7 && !isHunted && !isNight) MoveInGroups(mapData, overlayData, EntityId.Cow, EntityId.Sheep);
         SearchForFood();
         if (isAggressive) Attack();
         CheckForPredatorsInRange(overlayData, EntityId.Wolf);
         AvoidPredators(mapData);
-    }
-
-    private void MoveInGroups(TileId[,] mapData, EntityId[,] overlayData)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        (int x, int y) nearestCow = (-1, -1);
-        double minDist = double.MaxValue;
-
-        for (int dx = -3; dx <= 3; dx++)
-            for (int dy = -3; dy <= 3; dy++)
-            {
-                int cx = X + dx, cy = Y + dy;
-                if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
-                if (overlayData[cx, cy] == EntityId.Cow && !(cx == X && cy == Y))
-                {
-                    double dist = GetDistance(X, Y, cx, cy);
-                    if (dist < minDist) { minDist = dist; nearestCow = (cx, cy); }
-                }
-            }
-
-        if (nearestCow.x != -1)
-        {
-            if (minDist > 3)
-                MoveToward(mapData, nearestCow.x, nearestCow.y);
-            else
-                MoveRandomlyNear(mapData, nearestCow.x, nearestCow.y, 3);
-        }
-        else
-        {
-            MoveTowardNearestSheep(mapData, overlayData);
-        }
-    }
-
-    private void MoveTowardNearestSheep(TileId[,] mapData, EntityId[,] overlayData)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        for (int dx = -20; dx <= 20; dx++)
-            for (int dy = -20; dy <= 20; dy++)
-            {
-                int cx = X + dx, cy = Y + dy;
-                if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
-                if (overlayData[cx, cy] == EntityId.Sheep && !(cx == X && cy == Y))
-                {
-                    MoveToward(mapData, cx, cy);
-                    return;
-                }
-            }
-    }
-
-    private void MoveToward(TileId[,] mapData, int tx, int ty)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        int nx = X + (tx > X ? 1 : tx < X ? -1 : 0);
-        int ny = Y + (ty > Y ? 1 : ty < Y ? -1 : 0);
-        if (nx >= 0 && nx < w && ny >= 0 && ny < h && allowedTiles.Contains(mapData[nx, ny]))
-        {
-            X = nx; Y = ny;
-        }
-    }
-
-    private void MoveRandomlyNear(TileId[,] mapData, int anchorX, int anchorY, double maxDist)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        var dirs = new List<(int, int)> { (-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1) };
-        foreach (var (dx, dy) in dirs.OrderBy(_ => rng.Next()))
-        {
-            int nx = X + dx, ny = Y + dy;
-            if (nx >= 0 && nx < w && ny >= 0 && ny < h &&
-                allowedTiles.Contains(mapData[nx, ny]) &&
-                GetDistance(nx, ny, anchorX, anchorY) <= maxDist)
-            {
-                X = nx; Y = ny;
-                return;
-            }
-        }
     }
 }
 
 public class Cow : Species
 {
-    public bool isNight { get; set; }
-    public double time { get; set; }
-    public double sunriseTime { get; set; }
-    public double sunsetTime { get; set; }
+    public override EntityId EntityId => EntityId.Cow;
 
     public Cow(int x, int y, int seedOffset)
         : base("Cow", "Plains", x, y, seedOffset)
     {
-        allowedTiles = new List<TileId> { TileId.Plains };
+        allowedTiles = new HashSet<TileId> { TileId.Plains };
         isAggressive = rng.NextDouble() > 0.005;
-    }
-
-    public void SetTime(double currentTime, double sunrise, double sunset)
-    {
-        time = currentTime; sunriseTime = sunrise; sunsetTime = sunset;
     }
 
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData)
     {
-        if (rng.NextDouble() > 0.8 && !isHunted)
-            isNight = time > sunsetTime || time < sunriseTime;
-        if (rng.NextDouble() > 0.7 && !isHunted && !isNight)
-            MoveInGroups(mapData, overlayData);
+        if (rng.NextDouble() > 0.8 && !isHunted) isNight = time > sunsetTime || time < sunriseTime;
+        if (rng.NextDouble() > 0.7 && !isHunted && !isNight) MoveInGroups(mapData, overlayData, EntityId.Cow, EntityId.Cow);
         SearchForFood();
         if (isAggressive) Attack();
         CheckForPredatorsInRange(overlayData, EntityId.Wolf);
         AvoidPredators(mapData);
-    }
-
-    private void MoveInGroups(TileId[,] mapData, EntityId[,] overlayData)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        (int x, int y) nearestCow = (-1, -1);
-        double minDist = double.MaxValue;
-
-        for (int dx = -3; dx <= 3; dx++)
-            for (int dy = -3; dy <= 3; dy++)
-            {
-                int cx = X + dx, cy = Y + dy;
-                if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
-                if (overlayData[cx, cy] == EntityId.Cow && !(cx == X && cy == Y))
-                {
-                    double dist = GetDistance(X, Y, cx, cy);
-                    if (dist < minDist) { minDist = dist; nearestCow = (cx, cy); }
-                }
-            }
-
-        if (nearestCow.x != -1)
-        {
-            if (minDist > 3)
-                MoveToward(mapData, nearestCow.x, nearestCow.y);
-            else
-                MoveRandomlyNear(mapData, nearestCow.x, nearestCow.y, 3);
-        }
-        else
-        {
-            MoveTowardNearestCow(mapData, overlayData);
-        }
-    }
-
-    private void MoveTowardNearestCow(TileId[,] mapData, EntityId[,] overlayData)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        for (int dx = -20; dx <= 20; dx++)
-            for (int dy = -20; dy <= 20; dy++)
-            {
-                int cx = X + dx, cy = Y + dy;
-                if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
-                if (overlayData[cx, cy] == EntityId.Cow && !(cx == X && cy == Y))
-                {
-                    MoveToward(mapData, cx, cy);
-                    return;
-                }
-            }
-    }
-
-    private void MoveToward(TileId[,] mapData, int tx, int ty)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        int nx = X + (tx > X ? 1 : tx < X ? -1 : 0);
-        int ny = Y + (ty > Y ? 1 : ty < Y ? -1 : 0);
-        if (nx >= 0 && nx < w && ny >= 0 && ny < h && allowedTiles.Contains(mapData[nx, ny]))
-        {
-            X = nx; Y = ny;
-        }
-    }
-
-    private void MoveRandomlyNear(TileId[,] mapData, int anchorX, int anchorY, double maxDist)
-    {
-        int w = mapData.GetLength(0), h = mapData.GetLength(1);
-        var dirs = new List<(int, int)> { (-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1) };
-        foreach (var (dx, dy) in dirs.OrderBy(_ => rng.Next()))
-        {
-            int nx = X + dx, ny = Y + dy;
-            if (nx >= 0 && nx < w && ny >= 0 && ny < h &&
-                allowedTiles.Contains(mapData[nx, ny]) &&
-                GetDistance(nx, ny, anchorX, anchorY) <= maxDist)
-            {
-                X = nx; Y = ny;
-                return;
-            }
-        }
     }
 }
 #endregion
@@ -491,12 +381,14 @@ public class Cow : Species
 #region forest species
 public class Bear : Species
 {
+    public override EntityId EntityId => EntityId.Bear;
     public Bear(int seedOffset) : base("Bear", "Forest", seedOffset) { }
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData) { }
 }
 
 public class Wolf : Species
 {
+    public override EntityId EntityId => EntityId.Wolf;
     public Wolf(int seedOffset) : base("Wolf", "Forest", seedOffset) { }
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData) { }
 }
@@ -505,6 +397,7 @@ public class Wolf : Species
 #region mountain species
 public class Goat : Species
 {
+    public override EntityId EntityId => EntityId.Goat;
     public Goat(int seedOffset) : base("Goat", "Mountain", seedOffset) { }
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData) { }
 }
@@ -513,6 +406,7 @@ public class Goat : Species
 #region water species
 public class Fish : Species
 {
+    public override EntityId EntityId => EntityId.Fish;
     public Fish(int seedOffset) : base("Fish", "Water", seedOffset) { }
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData) { }
 }
@@ -521,6 +415,7 @@ public class Fish : Species
 #region air species
 public class Bird : Species
 {
+    public override EntityId EntityId => EntityId.Bird;
     public Bird(int seedOffset) : base("Bird", "Air", seedOffset) { }
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData) { }
 }

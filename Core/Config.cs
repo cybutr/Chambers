@@ -77,6 +77,7 @@ public class Config
     public bool DisplayShadows { get; set; } = true;
     public bool DisplayWaves { get; set; } = true;
     public int NumberOfWaves { get; set; } = 13;
+    public int CloudMorphInterval { get; set; } = 2;
 
     public string Seed { get; set; }
     public bool ShouldSave { get; set; } = true;
@@ -128,19 +129,16 @@ public class GUIConfig
         TitleWidth = 50;
         TitleHeight = TopPadding - 2;
 
-        // Weather Stats
-        StatsWidth = ((consoleWidth / 2 - RadarWidth - TitleWidth / 2) / 2) + 1;
+        // Weather Stats — minimum 20 to hold content; 0 = skip rendering
+        int rawStatsWidth = (consoleWidth / 2 - RadarWidth - TitleWidth / 2 - 1) / 2;
+        StatsWidth = rawStatsWidth >= 20 ? rawStatsWidth : 0;
         StatsHeight = TopPadding - 2;
 
         // Time Info
-        if (consoleWidth % 2 == 0)
-        {
-            TimeWidth = StatsWidth + 2;
-        }
+        if (StatsWidth > 0)
+            TimeWidth = consoleWidth % 2 == 0 ? StatsWidth + 1 : StatsWidth + 1;
         else
-        {
-            TimeWidth = StatsWidth + 1;
-        }
+            TimeWidth = 0;
         TimeHeight = TopPadding - 2;
 
         // Help Menu
@@ -164,14 +162,8 @@ public class GUIConfig
         }
 
         // Output Log
-        if (consoleWidth > 100)
-        {
-            OutputWidth = (consoleWidth) / 2 - (TitleWidth / 2) - ThanksWidth + 1;
-        }
-        else
-        {
-            OutputWidth = 0;
-        }
+        if (consoleWidth > 100) OutputWidth = (consoleWidth) / 2 - (TitleWidth / 2) - ThanksWidth + 1;
+        else OutputWidth = 0;
         OutputHeight = TopPadding + 1;
     }
 }

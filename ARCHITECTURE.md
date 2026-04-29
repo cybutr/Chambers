@@ -29,34 +29,50 @@ Generates and simulates living worlds with terrain, weather, animals, and persis
 ```
 Chambers/
 ├── Program.cs                        # Entry point, app lifecycle, threads, save/load, commands
-├── Species.cs                        # Animal base class + Crab, Turtle, Boids
-├── debug_console.cs                  # Debug utilities (minimal)
+├── Program/
+│   ├── Program.Serialization.cs      # JSON converters, SaveMap/LoadMap, binary format
+│   ├── Program.GUI.cs                # Save selection GUI, slot management
+│   └── Program.Tests.cs              # Test methods, Testing() runner
 │
 ├── MapGeneration/
 │   ├── Map.cs                        # Core Map entity, generation coordinator, partial class root
-│   ├── PerlinNoise.cs                # Perlin + Simplex noise generators
-│   ├── Cloud.cs                      # Cloud data model
-│   ├── Wave.cs                       # Wave data model
-│   ├── Weather.cs                    # Weather state + WeatherType/CloudType enums
+│   ├── Models/
+│   │   ├── PerlinNoise.cs            # Perlin + Simplex noise generators
+│   │   ├── Wave.cs                   # Wave data model
+│   │   └── Weather.cs                # Weather state + WeatherType/CloudType enums
 │   └── Components/
-│       ├── Map.Frame.cs              # Coastline/border generation (313 lines)
-│       ├── Map.Mountains.cs          # Mountain ranges, snow caps, forest integration (634 lines)
-│       ├── Map.WaterGen.cs           # Rivers, lakes, flow simulation (572 lines)
-│       ├── Map.Waves.cs              # Wave rendering and animation (385 lines)
-│       └── Map.Utils.cs              # Flood-fill, biome helpers, distance utils, A* wrappers (779 lines)
+│       ├── Map.Camera.cs             # Camera, framebuffer, InvalidateFramebuffer()
+│       ├── Map.Frame.cs              # Coastline/border generation
+│       ├── Map.Mountains.cs          # Mountain ranges, snow caps, forest integration
+│       ├── Map.WaterGen.cs           # Rivers, lakes, flow simulation
+│       ├── Map.Waves.cs              # Wave rendering and animation
+│       ├── Map.Clouds.cs             # Cloud spawning, movement, rendering, morph
+│       ├── Map.Weather.cs            # Weather state, wind, temperature, day/night cycle
+│       ├── Map.Display.cs            # DisplayMap(), framebuffer dirty renderer
+│       ├── Map.GUI.cs                # DisplayGUI(), widgets, config GUI
+│       ├── Map.Species.cs            # Species lists, InitializeSpecies, Update*
+│       └── Map.Utils.cs              # Flood-fill, biome helpers, distance utils, A* wrappers
+│
+├── Core/
+│   ├── TileId.cs                     # TileId enum (typed terrain)
+│   ├── EntityId.cs                   # EntityId enum (typed overlay)
+│   ├── TileRegistry.cs               # TileDefinition registry — color, cost, flags per tile
+│   └── Config.cs                     # Config class (70+ params), GUIConfig, Habitat enum
+│
+├── Species/
+│   └── Species.cs                    # Species base class + Crab, Turtle, Cow, Sheep
 │
 ├── Other/
-│   ├── Config.cs                     # Config class (70+ params), GUIConfig, Habitat enum, Biome class
 │   ├── GUI.cs                        # Thread-safe console rendering wrapper
 │   ├── Characters.cs                 # ASCII art sprites for A-Z, 0-9
 │   ├── ColorSpectrum.cs              # 100+ named RGB color constants
-│   └── AStar.cs                      # A* pathfinding with organic styling (763 lines)
+│   └── AStar.cs                      # A* pathfinding with organic styling
 │
-└── Saves/                            # JSON world persistence files
-    └── *.json                        # One file per world (named by Config.Name)
+└── Data/Saves/                       # World persistence files
+    └── *.chmb                        # Binary saves (primary); *.json legacy
 ```
 
-`Map` is a `partial class` split across `Map.cs` and all five `Components/` files — they all compile into one class.
+`Map` is a `partial class` split across `Map.cs` and all `Components/` files — they all compile into one class.
 
 ---
 
@@ -124,34 +140,41 @@ guiThread        ─── calls UpdateGUI()    → redraws screen every frame
 
 | Field | Type | Size | Purpose |
 |---|---|---|---|
-| `mapData` | `char[,]` | `width × height` | Primary terrain layer |
-| `overlayData` | `char[,]` | `width × height` | Animals/NPCs drawn on top |
-| `previousMapData` | `char[,]` | `width × height` | Last frame snapshot (dirty-checking) |
-| `previousOverlayData` | `char[,]` | `width × height` | Last frame overlay snapshot |
-| `cloudData` | `char[,]` | `cloudDataWidth × cloudDataHeight` | Cloud visual layer (3× map size) |
-| `previousCloudData` | `char[,]` | same | Last frame cloud snapshot |
+| `mapData` | `TileId[,]` | `width × height` | Primary terrain layer |
+| `overlayData` | `EntityId[,]` | `width × height` | Animals/NPCs drawn on top |
+| `cloudData` | `CloudType[,]` | `cloudDataWidth × cloudDataHeight` | Cloud visual layer (3× map size) |
 | `cloudDepthData` | `int[,]` | same | Visual depth per cloud tile |
-| `precipitationData` | `double[,]` | same | Rainfall intensity 0.0–1.0 |
-| `temperatureData` | `int[,]` | `width × height` | Temperature per tile (0–100) |
-| `humidityData` | `int[,]` | `width × height` | Humidity per tile (0–100) |
+| `_cloudDataSwap` | `CloudType[,]` | same | Pre-allocated swap buffer for cloud shift |
+| `_cloudDepthSwap` | `int[,]` | same | Pre-allocated swap buffer for depth shift |
+| `_framebuffer` | `((r,g,b),overlayId)[,]?` | viewport | Per-cell dirty cache; null = full redraw |
+| `darknessData` | `int[,]` | `width × height` | Day/night shadow intensity per tile |
+| `shadowData` | `double[,]` | `width × height` | Cloud shadow intensity per tile |
+| `precipitationData` | `double[,]` | `cloudDataWidth × cloudDataHeight` | Rainfall intensity 0.0–1.0 |
+| `temperatureData` | `int[,]` | `width × height` | Temperature per tile |
+| `humidityData` | `int[,]` | `width × height` | Humidity per tile |
 | `noise` | `double[,]` | `width × height` | Raw Perlin height values |
 | `tempatureNoise` | `double[,]` | `width × height` | Perlin temperature values |
 | `humidityNoise` | `double[,]` | `width × height` | Perlin humidity values |
 
-**Cloud data** is 3× the map size (`cloudDataWidth = width * 3`) so clouds can scroll off-screen and re-enter from the other side without being clipped.
+**Cloud data** is 3× the map size (`cloudDataWidth = width * 3`) so clouds can scroll continuously without clipping. Cloud presence is checked via `cloudData[x,y] != CloudType.None` — no position dictionary.
 
 ### Key Scalar Properties
 
 ```csharp
-public double time;                  // Simulation tick counter
+public double time;                  // Mirror of weather.TimeOfDay
 public bool shouldSimulationContinue;// Per-map pause flag
 public bool isCloudsRendering;
 public bool isCloudsShadowsRendering;
 public int cloudShadowOffsetX/Y;     // Shadow parallax offset
 public double avarageTempature;
 public double avarageHumidity;
+public double deltaTime;             // sleepTime/1000 * SimulationSpeed (set by weatherThread)
+public ulong tick;                   // Incremented each UpdateClouds() call [JsonIgnore]
+public int cloudMorphInterval;       // SmoothAndFluffClouds runs every N ticks (default 2)
+public double _cloudAccumX/Y;        // Sub-pixel cloud movement accumulators [JsonIgnore]
 public Config conf;                  // All generation parameters
 public Weather weather;              // Current climate state
+public Camera camera;                // Viewport dimensions
 public List<Cloud> clouds;           // Active cloud entities
 public List<Wave> waves;             // Active wave entities
 public List<string> actualOutputBuffer; // Per-map event log
@@ -161,37 +184,41 @@ public List<string> actualOutputBuffer; // Per-map event log
 
 ## Tile System
 
-All terrain is stored as a single `char` per cell. Uppercase = primary biome, lowercase = depth/variant.
+All terrain is stored as typed enums — never raw `char`. Properties (color, movement cost, water/land flags) are looked up via `TileRegistry.Get(TileId)` → `TileDefinition`.
 
-### Terrain Tiles (`mapData`)
+### Terrain Tiles (`mapData` — `TileId[,]`)
 
-| Char | Biome | A* Cost | Notes |
+| TileId | Biome | A* Cost | Notes |
 |---|---|---|---|
-| `'P'` | Plains | 0.8 | Default land |
-| `'F'` | Forest | 0.2 | Easiest to traverse |
-| `'M'` | Mountain peak | 10.0 | High cost |
-| `'m'` | Mountain depth | 15.0 | Interior mountain (8 mountain neighbors) |
-| `'O'` | Ocean deep | 5.0 | |
-| `'o'` | Ocean shallow | 6.0 | |
-| `'R'` | River | 4.0 | |
-| `'r'` | River shallow | 3.0 | |
-| `'L'` | Lake | 4.0 | |
-| `'l'` | Lake shallow | 3.0 | |
-| `'B'` | Beach | 0.5 | Transition land↔water |
-| `'b'` | Beach dark | 0.7 | |
-| `'S'` | Snow | 20.0 | Mountain tops |
-| `'s'` | Snow shallow | 3.0 | |
-| `'@'` | Border | blocked | Map edge, impassable |
-| `' '` | Empty | — | No render |
+| `TileId.Plains` | Plains | 0.8 | Default land |
+| `TileId.Forest` | Forest | 0.2 | Easiest to traverse |
+| `TileId.Mountain` | Mountain peak | 10.0 | |
+| `TileId.MountainDeep` | Mountain interior | 15.0 | Surrounded by 8 mountain neighbors |
+| `TileId.Ocean` | Ocean deep | 5.0 | |
+| `TileId.OceanShallow` | Ocean shallow | 6.0 | |
+| `TileId.River` | River | 4.0 | |
+| `TileId.RiverShallow` | River shallow | 3.0 | |
+| `TileId.Lake` | Lake | 4.0 | |
+| `TileId.LakeShallow` | Lake shallow | 3.0 | |
+| `TileId.Beach` | Beach | 0.5 | Land↔water transition |
+| `TileId.BeachDark` | Beach dark | 0.7 | |
+| `TileId.Snow` | Snow | 20.0 | Mountain tops |
+| `TileId.Stream` | Stream | 3.0 | |
+| `TileId.Border` | Border | blocked | Map edge, impassable |
+| `TileId.Empty` | Empty | — | No render |
 
-### Overlay Tiles (`overlayData`)
+### Overlay Tiles (`overlayData` — `EntityId[,]`)
 
-| Char | Entity |
+| EntityId | Entity |
 |---|---|
-| `'W'`/`'w'` | Wolf (predator) |
-| `'C'`/`'c'` | Cow (herbivore) |
-| `'S'`/`'s'` | Sheep (herbivore) |
-| Crab/Turtle | Rendered via species position |
+| `EntityId.None` | Empty tile |
+| `EntityId.Crab` | Crab |
+| `EntityId.Turtle` | Turtle |
+| `EntityId.Cow` | Cow |
+| `EntityId.Sheep` | Sheep |
+| `EntityId.Wolf` | Wolf |
+
+Tile properties come from `TileRegistry.Get(TileId)` → `TileDefinition`: `.IsWater`, `.IsLand`, `.MovementCost`, `.BaseColor`, `.CreatureCategories`.
 
 ---
 
@@ -432,7 +459,7 @@ Organic path style:
 
 ## Weather System
 
-### `Weather` class (`MapGeneration/Weather.cs:1`)
+### `Weather` class (`MapGeneration/Models/Weather.cs`)
 
 ```csharp
 WeatherType CurrentWeather   // active weather
@@ -440,14 +467,30 @@ WeatherType NextWeather      // transitioning to
 double Intensity             // 0.0–1.0 strength
 double IntensityTarget       // lerp target
 double IntensityChangeSpeed  // lerp rate
-double Temperature
-double Humidity
-double Pressure
-double WindSpeed
-double WindDirection
+double Temperature           // °C — driven by continuous formula (not lookup table)
+double Humidity              // 0–100
+double Pressure              // hPa ~1013
+double WindSpeed             // 0–40, includes gusts
+double WindDirection         // degrees 0–360, turns ±90° max per event
 double TimeOfDay             // 0.0–24.0
-double Season                // 0.0–4.0 (seasons)
+double Season                // 0.0–4.0 (0=spring, 1=summer, 2=autumn, 3=winter)
 ```
+
+### Temperature formula (`Map.Weather.cs: GetTemperature`)
+
+```
+baseRegionTemp = (avarageTempature - 0.5) * 50        // -25 to +25°C from map setting
+seasonalOffset = cos((season - 1.5) × π/2) × 15      // +15°C midsummer, -15°C midwinter
+dailyOffset    = sin((timeOfDay - 8) / 24 × 2π) × 8  // +8°C at 2pm, -8°C at 2am
+weatherOffset  = per-WeatherType constant (-3 to +1.5°C)
+```
+
+### Wind system (`Map.Weather.cs: UpdateWind`)
+
+- Direction turns ±90° per event (smooth, 2°/tick), driven by `WindChangeTimer`
+- Speed = `baseSpeed × timeOfDay × season × weatherFactor × 3 + gustStrength`
+- Season factor: smooth cosine — winter 1.2×, summer 0.6×, equinoxes 0.9×
+- Gusts: `_gustStrength` spikes 3–13 m/s, decays at 2/s; probability driven by weather type (thunderstorm 40%, sandstorm 50%, clear 5%)
 
 ### `WeatherType` enum
 
@@ -459,18 +502,13 @@ Hail=7, Sleet=8, Drizzle=9, BlowingSnow=10, Sandstorm=11
 ### `CloudType` enum
 
 ```
-Cumulus=1, Stratus=2, Cirrus=3, Cumulonimbus=4, Nimbostratus=5, Altocumulus=6
+None=0, Cumulus=1, Stratus=2, Cirrus=3, Cumulonimbus=4, Nimbostratus=5, Altocumulus=6
 ```
 
-### `Cloud` class (`MapGeneration/Cloud.cs`)
-
-Per-cloud data: position, speed, direction, precipitation intensity, `CloudType`.  
-Cloud layer is `3× map size` so clouds scroll continuously. Shadow offset (`cloudShadowOffsetX/Y`) creates a parallax shadow underneath each cloud.
-
-### `Wave` class (`MapGeneration/Wave.cs`)
+### `Wave` class (`MapGeneration/Models/Wave.cs`)
 
 Per-wave data: list of points, direction, speed, curvature, intensity.  
-Rendered in `Map.Waves.cs` — wave positions animate each tick, creating rolling ocean patterns.
+Rendered in `Map.Waves.cs`. Shoreline cache rebuilds lazily on first `AddNewWave` call after load.
 
 ---
 
@@ -528,13 +566,16 @@ Multi-line ASCII art definitions for A–Z, a–z, 0–9, plus an unknown fallba
 
 ```
 1. Static panels (title, stats, help, time) — redrawn on change
-2. Map grid — DrawGrid() with per-cell color from mapData tile type
-3. Overlay grid — animals from overlayData on top
-4. Cloud layer — cloudData with depth shading
-5. Shadow layer — cloud shadows if isCloudsShadowsRendering
-6. Wave animation — water surface patterns
-7. Event log — actualOutputBuffer scrolled at bottom
+2. DisplayMap() — framebuffer dirty renderer (Map.Display.cs):
+   a. Builds composite color per cell: tile base → temperature/humidity tint → darkness → cloud shadow
+   b. Compares against _framebuffer[sx, sy] cache
+   c. Only writes to console if (color, overlayId) changed
+   d. _framebuffer = null forces full redraw (set by InvalidateFramebuffer())
+3. Wave animation — water surface patterns drawn over ocean tiles
+4. Event log — actualOutputBuffer scrolled at bottom
 ```
+
+**Framebuffer invalidation:** Call `map.InvalidateFramebuffer()` on chamber switch, map load, or any bulk state change. It sets `_framebuffer = null`; next `DisplayMap` does a full console flush.
 
 **Platform detection:** `RuntimeInformation.IsOSPlatform(OSPlatform.Linux)` gates box-drawing character choice throughout `GUI.DrawBox()`.
 
@@ -542,46 +583,38 @@ Multi-line ASCII art definitions for A–Z, a–z, 0–9, plus an unknown fallba
 
 ## Save / Load System
 
-### Custom JSON Converters (`Program.cs:263+`)
+Two formats, controlled by `Program.SaveFormat` (`SerializationFormat` enum). Binary is the default.
 
-Standard `System.Text.Json` can't serialize 2D arrays or `(int,int)` tuple keys. Five custom converters handle this:
-
-| Converter | Handles | Encoding |
+| Format | Extension | Entry points |
 |---|---|---|
-| `Char2DArrayJsonConverter` | `char[,]` | Each row → one string in `List<string>` |
-| `Bool2DArrayJsonConverter` | `bool[,]` | Each row → string of `'1'`/`'0'` chars |
-| `Int2DArrayJsonConverter` | `int[,]` | Each row → string of `(value)` tuples |
-| `Double2DArrayJsonConverter` | `double[,]` | Similar encoding |
-| `ValueTupleIntKeyConverter` | `Dictionary<(int,int),T>` | Keys serialized as `"x,y"` strings |
+| Binary | `.chmb` | `SaveMapBinary` / `LoadMapBinary` in `Program.Serialization.cs` |
+| JSON | `.json` | `SaveMapJson` / `LoadMapJson` (legacy) |
 
-All converters are registered in `JsonSerializerOptions` before every `Serialize`/`Deserialize` call.
+`LoadMap(path)` auto-detects by extension. `LoadAllMapsFromFolder` prefers `.chmb` when both exist for the same name.
 
-### `SaveMap(Map map)` (`Program.cs:509`)
+### Binary format (`.chmb`)
 
-```csharp
-string path = Path.Combine("Saves", map.conf.Name + ".json");
-var options = new JsonSerializerOptions { WriteIndented = true };
-// register all 5 converters
-string json = JsonSerializer.Serialize(map, options);
-File.WriteAllText(path, json);
-```
+- 5-byte header: `CHMB` + version byte, then GZip-compressed `BinaryWriter` stream
+- 2D arrays written as raw bytes/ints/doubles; enum arrays cast to `byte`
+- Complex objects (`Config`, `Weather`, `Wave`, species lists) embedded as length-prefixed JSON strings
+- `noise`, `tempatureNoise`, `humidityNoise` — **not saved**, regenerated via `RegenerateNoise()` on load
+- `rng` — **not saved**, reconstructed as `new Random(map.seed)` on load
+- `[JsonIgnore]` fields (`_framebuffer`, `tick`, swap buffers, gust state) — **not saved**
 
-**Triggers:** On `exit` command, on `Ctrl+C` (`OnExit` handler), and when `conf.ShouldSave == true` after slot operations.
+### JSON format (legacy)
 
-### `LoadAllMapsFromFolder(string folder)` (`Program.cs:707`)
+Custom converters handle 2D arrays and typed enums:
 
-```csharp
-foreach .json file in folder:
-    string json = File.ReadAllText(file)
-    Map map = JsonSerializer.Deserialize<Map>(json, options)
-    allChambers.Add(map)
-```
+| Converter | Handles |
+|---|---|
+| `TileIdArrayJsonConverter` | `TileId[,]` — rows as legacy char strings |
+| `EntityIdArrayJsonConverter` | `EntityId[,]` |
+| `CloudTypeArrayJsonConverter` | `CloudType[,]` |
+| `Bool2DArrayJsonConverter` | `bool[,]` |
+| `Int2DArrayJsonConverter` | `int[,]` |
+| `Double2DArrayJsonConverter` | `double[,]` |
 
-After loading, `SynchronizeAllChamberFiles()` renames any files whose names don't match their `conf.Name`.
-
-### What is persisted
-
-Every field on `Map` marked as a property with `{ get; set; }` is serialized — this includes all 2D arrays, all scalars, `conf` (full Config), `weather`, `wavePositions`, `actualOutputBuffer`, and all boolean flags.
+`RegenerateNoise()` is called on JSON load too — noise arrays in old saves are ignored.
 
 ---
 

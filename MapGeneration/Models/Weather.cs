@@ -10,8 +10,6 @@ public class Weather
     public double Pressure { get; set; }
     public double WindSpeed { get; set; }
     public double WindDirection { get; set; }
-    public double TimeOfDay { get; set; }
-    public double Season { get; set; }
 }
 public enum WeatherType
 {

@@ -1,6 +1,6 @@
 {
-  "Width": 128,
-  "Height": 40,
+  "Width": 118,
+  "Height": 39,
   "NoiseScale": 10,
   "ErosionFactor": 0.2,
   "MinBiomeSize": 12,
@@ -28,7 +28,7 @@
   "EnableVillages": false,
   "EnableCities": false,
   "EnableDungeons": false,
-  "GenerateAnimals": true,
+  "GenerateAnimals": false,
   "EnablePredators": true,
   "EnableAnimalMovement": true,
   "EnableAnimalBreeding": false,

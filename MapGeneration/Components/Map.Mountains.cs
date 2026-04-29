@@ -13,18 +13,18 @@ public partial class Map
         if (rng.NextDouble() < 1)
         {
             GenerateMountainRanges();
-            if (debug) GUI.WriteLine("Generated mountain ranges");
+            if (debug) WriteLine("Generated mountain ranges");
             MountainDepth();
-            if (debug) GUI.WriteLine("Added mountain depth");
+            if (debug) WriteLine("Added mountain depth");
             //ErodeMountainRanges();
-            if (debug) GUI.WriteLine("Eroded mountain ranges");
+            if (debug) WriteLine("Eroded mountain ranges");
             GenerateSnowPeaks();
-            if (debug) GUI.WriteLine("Generated snow peaks");
+            if (debug) WriteLine("Generated snow peaks");
             //DeleteBadSnowPeaks();
-            if (debug) GUI.WriteLine("Deleted bad snow peaks");
+            if (debug) WriteLine("Deleted bad snow peaks");
             ForestMountains();
             RemoveObscureMountains();
-            if (debug) GUI.WriteLine("Added Mountain Forests");
+            if (debug) WriteLine("Added Mountain Forests");
         }
     }
     private void GenerateMountainRanges()
@@ -32,21 +32,18 @@ public partial class Map
         int maxMountains = 2;
         int maxAdditionalMountains = 4;
 
-        List<(int x, int y)> validTiles = new List<(int x, int y)>();
+        List<(int x, int y)> validTiles = [];
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
             {
-                if (mapData[x, y] == TileId.Plains || mapData[x, y] == TileId.Forest)
-                {
-                    validTiles.Add((x, y));
-                }
+                if (mapData[x, y] == TileId.Plains || mapData[x, y] == TileId.Forest) validTiles.Add((x, y));
             }
         }
 
         if (validTiles.Count < maxMountains * 2)
         {
-            if (debug) GUI.WriteLine("Insufficient valid tiles for mountain generation");
+            if (debug) WriteLine("Insufficient valid tiles for mountain generation");
             return;
         }
 
@@ -71,10 +68,7 @@ public partial class Map
             (int candidateX, int candidateY) = validTiles[endIndex];
 
             double distance = GetDistance(startX, startY, candidateX, candidateY);
-            if (distance >= 10 && distance <= 80)
-            {
-                return (candidateX, candidateY);
-            }
+            if (distance >= 10 && distance <= 80) return (candidateX, candidateY);
         }
 
         double angle = rng.NextDouble() * 2 * Math.PI;
@@ -120,10 +114,8 @@ public partial class Map
 
                 if (nx >= 0 && nx < width && ny >= 0 && ny < height)
                 {
-                    if (Math.Abs(i) <= halfWidth && y >= 0 && y < height)
-                        mapData[nx, y] = TileId.Mountain;
-                    if (Math.Abs(i) <= halfWidth && x >= 0 && x < width)
-                        mapData[x, ny] = TileId.Mountain;
+                    if (Math.Abs(i) <= halfWidth && y >= 0 && y < height) mapData[nx, y] = TileId.Mountain;
+                    if (Math.Abs(i) <= halfWidth && x >= 0 && x < width) mapData[x, ny] = TileId.Mountain;
                 }
             }
 
@@ -135,10 +127,8 @@ public partial class Map
 
             if (direction < 60)
             {
-                if (Math.Abs(dx) > Math.Abs(dy))
-                    x += dx > 0 ? 1 : -1;
-                else
-                    y += dy > 0 ? 1 : -1;
+                if (Math.Abs(dx) > Math.Abs(dy)) x += dx > 0 ? 1 : -1;
+                else y += dy > 0 ? 1 : -1;
             }
             else
             {
@@ -157,10 +147,7 @@ public partial class Map
             for (int y = 1; y < height - 1; y++)
             {
                 if ((mapData[x, y] == TileId.Mountain || mapData[x, y] == TileId.MountainDeep) &&
-                    CountSurroundingBiomesAny(x, y, TileId.Mountain, TileId.MountainDeep) == 8)
-                {
-                    mapData[x, y] = TileId.MountainDeep;
-                }
+                    CountSurroundingBiomesAny(x, y, TileId.Mountain, TileId.MountainDeep) == 8) mapData[x, y] = TileId.MountainDeep;
             }
         }
 
@@ -206,20 +193,16 @@ public partial class Map
                     foreach ((int nx, int ny) in GetNeighbors(x, y))
                     {
                         TileId neighbor = mapData[nx, ny];
-                        if (neighbor == TileId.Plains || neighbor == TileId.Forest)
-                            totalErosion += windFactor;
-                        if (neighbor == TileId.Ocean || neighbor == TileId.Lake || neighbor == TileId.River)
-                            totalErosion += waterFactor;
+                        if (neighbor == TileId.Plains || neighbor == TileId.Forest) totalErosion += windFactor;
+                        if (neighbor == TileId.Ocean || neighbor == TileId.Lake || neighbor == TileId.River) totalErosion += waterFactor;
                     }
 
                     totalErosion += rng.NextDouble() * tempFactor;
 
                     if (totalErosion > erosionThreshold)
                     {
-                        if (totalErosion > 0.5)
-                            mapData[x, y] = GetMostSurroundedBiome(x, y);
-                        else if (totalErosion > 0.2)
-                            mapData[x, y] = TileId.MountainDeep;
+                        if (totalErosion > 0.5) mapData[x, y] = GetMostSurroundedBiome(x, y);
+                        else if (totalErosion > 0.2) mapData[x, y] = TileId.MountainDeep;
                         changed = true;
                     }
                 }
@@ -230,10 +213,7 @@ public partial class Map
                 noChangeCounter++;
                 if (noChangeCounter >= maxNoChange) break;
             }
-            else
-            {
-                noChangeCounter = 0;
-            }
+            else noChangeCounter = 0;
         }
 
         SmoothMountainEdges();
@@ -244,17 +224,14 @@ public partial class Map
         {
             for (int y = 1; y < height - 1; y++)
             {
-                if (mapData[x, y] == TileId.Mountain && CountSurroundingBiomes(x, y, TileId.Mountain) < 5)
-                {
-                    mapData[x, y] = TileId.Plains;
-                }
+                if (mapData[x, y] == TileId.Mountain && CountSurroundingBiomes(x, y, TileId.Mountain) < 5) mapData[x, y] = TileId.Plains;
             }
         }
     }
     private void ForestMountains()
     {
-        List<(int, int)> startPositions = new List<(int, int)>();
-        List<(int, int)> forestPositions = new List<(int, int)>();
+        List<(int, int)> startPositions = [];
+        List<(int, int)> forestPositions = [];
         int numberOfForests = rng.Next(2, 5);
         for (int i = 0; i < numberOfForests; i++)
         {
@@ -274,7 +251,7 @@ public partial class Map
             }
         }
         forestPositions.AddRange(SpreadMountainForests(forestPositions));
-        var obscuredForests = new List<(int, int)>();
+        List<(int, int)> obscuredForests = [];
         for (int x = 0; x <= 3; x++) obscuredForests.AddRange(FillObscureForests(forestPositions));
         var obscuredSet = new HashSet<(int, int)>(obscuredForests);
         forestPositions.RemoveAll(p => obscuredSet.Contains(p));
@@ -284,7 +261,7 @@ public partial class Map
         RemoveObscurePlainsNearMountains();
         forestPositions.AddRange(FillEncosedMountainPlains());
         forestPositions.AddRange(MakeMountainForestOpenings(forestPositions));
-        var harshForests = new List<(int, int)>();
+        List<(int, int)> harshForests = [];
         for (int x = 0; x <= 2; x++) harshForests.AddRange(RemoveHarshForests(0.65));
         var harshSet = new HashSet<(int, int)>(harshForests);
         forestPositions.RemoveAll(p => harshSet.Contains(p));
@@ -298,19 +275,16 @@ public partial class Map
             var (x, y) = GetRandomPointInBiome(TileId.Mountain);
             if (x == -1) return (-1, -1);
 
-            if (CountSurroundingBiomesAny(x, y, TileId.Plains, TileId.Forest) >= 5)
-            {
-                return (x, y);
-            }
+            if (CountSurroundingBiomesAny(x, y, TileId.Plains, TileId.Forest) >= 5) return (x, y);
         }
         return (-1, -1);
     }
     private List<(int, int)> SpreadMountainForests(List<(int, int)> forestPositions)
     {
-        if (forestPositions.Count == 0) return new List<(int, int)>();
+        if (forestPositions.Count == 0) return new();
 
-        HashSet<(int, int)> newForests = new HashSet<(int, int)>();
-        HashSet<(int, int)> processed = new HashSet<(int, int)>(forestPositions);
+        HashSet<(int, int)> newForests = [];
+        HashSet<(int, int)> processed = [.. forestPositions];
 
         foreach ((int x, int y) in forestPositions)
         {
@@ -333,9 +307,9 @@ public partial class Map
     }
     private List<(int, int)> FillObscureForests(List<(int, int)> forestPositions)
     {
-        if (forestPositions.Count == 0) return new List<(int, int)>();
+        if (forestPositions.Count == 0) return new();
 
-        HashSet<(int, int)> removedForests = new HashSet<(int, int)>();
+        HashSet<(int, int)> removedForests = [];
 
         foreach ((int x, int y) in forestPositions)
         {
@@ -347,28 +321,25 @@ public partial class Map
             }
         }
 
-        return removedForests.ToList();
+        return [.. removedForests];
     }
     private List<(int, int)> SmoothMountainForests(List<(int, int)> forestPositions)
     {
-        if (forestPositions.Count == 0) return new List<(int, int)>();
+        if (forestPositions.Count == 0) return new();
 
-        HashSet<(int, int)> allForests = new HashSet<(int, int)>(forestPositions);
-        HashSet<(int, int)> newForests = new HashSet<(int, int)>();
+        HashSet<(int, int)> allForests = [.. forestPositions];
+        HashSet<(int, int)> newForests = [];
         const int maxIterations = 10;
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
-            HashSet<(int, int)> candidates = new HashSet<(int, int)>();
+            HashSet<(int, int)> candidates = [];
 
             foreach ((int x, int y) in allForests)
             {
                 foreach ((int nx, int ny) in GetNeighbors(x, y))
                 {
-                    if (mapData[nx, ny] == TileId.Plains && !allForests.Contains((nx, ny)))
-                    {
-                        candidates.Add((nx, ny));
-                    }
+                    if (mapData[nx, ny] == TileId.Plains && !allForests.Contains((nx, ny))) candidates.Add((nx, ny));
                 }
             }
 
@@ -396,9 +367,9 @@ public partial class Map
     }
     private List<(int, int)> CarveOutMountainForests(List<(int, int)> forestPositions)
     {
-        if (forestPositions.Count == 0) return new List<(int, int)>();
+        if (forestPositions.Count == 0) return new();
 
-        HashSet<(int, int)> removedForests = new HashSet<(int, int)>();
+        HashSet<(int, int)> removedForests = [];
 
         foreach ((int x, int y) in forestPositions)
         {
@@ -420,16 +391,13 @@ public partial class Map
                 if (mapData[x, y] != TileId.Mountain && mapData[x, y] != TileId.MountainDeep) continue;
 
                 int nonMountainCount = CountSurroundingBiomesAny(x, y, TileId.Plains, TileId.Forest);
-                if (nonMountainCount == 8)
-                {
-                    mapData[x, y] = GetMostSurroundedBiome(x, y);
-                }
+                if (nonMountainCount == 8) mapData[x, y] = GetMostSurroundedBiome(x, y);
             }
         }
     }
     private List<(int, int)> MakeMountainForestOpenings(List<(int, int)> forestPositions)
     {
-        var newForestPositions = new List<(int, int)>();
+        List<(int, int)> newForestPositions = [];
         foreach ((int x, int y) in forestPositions)
         {
             var neighbors = GetNeighbors(x, y);
@@ -446,7 +414,7 @@ public partial class Map
     }
     private List<(int, int)> RemoveHarshForests(double removalChance)
     {
-        var removedForests = new List<(int, int)>();
+        List<(int, int)> removedForests = [];
         bool type = rng.NextDouble() > removalChance;
         for (int x = 1; x < width - 1; x++)
         {
@@ -465,10 +433,7 @@ public partial class Map
                     var neighbors = GetCardinalNeighbors(x, y);
                     foreach ((int nx, int ny) in neighbors)
                     {
-                        if (mapData[nx, ny] == TileId.MountainDeep)
-                        {
-                            mapData[nx, ny] = TileId.Mountain;
-                        }
+                        if (mapData[nx, ny] == TileId.MountainDeep) mapData[nx, ny] = TileId.Mountain;
                     }
                 }
             }
@@ -485,18 +450,15 @@ public partial class Map
 
                 int surroundingCount = CountSurroundingBiomesAny(x, y, TileId.Mountain, TileId.MountainDeep, TileId.Forest);
 
-                if (surroundingCount >= 8)
-                {
-                    mapData[x, y] = TileId.Mountain;
-                }
+                if (surroundingCount >= 8) mapData[x, y] = TileId.Mountain;
             }
         }
     }
     private List<(int, int)> FillEncosedMountainPlains()
     {
         const int enclosedSizeThreshold = 50;
-        HashSet<(int, int)> processed = new HashSet<(int, int)>();
-        List<(int, int)> filledPositions = new List<(int, int)>();
+        HashSet<(int, int)> processed = [];
+        List<(int, int)> filledPositions = [];
 
         for (int x = 1; x < width - 1; x++)
         {
@@ -525,9 +487,9 @@ public partial class Map
     }
     private List<(int, int)> GetConnectedRegion(int startX, int startY, TileId targetBiome, HashSet<(int, int)> processedRegions)
     {
-        List<(int, int)> region = new List<(int, int)>();
-        Queue<(int, int)> queue = new Queue<(int, int)>();
-        HashSet<(int, int)> visited = new HashSet<(int, int)>();
+        List<(int, int)> region = [];
+        Queue<(int, int)> queue = [];
+        HashSet<(int, int)> visited = [];
 
         queue.Enqueue((startX, startY));
         visited.Add((startX, startY));
@@ -563,10 +525,7 @@ public partial class Map
                 if (mapData[x, y] == TileId.Plains || mapData[x, y] == TileId.Forest)
                 {
                     int surroundingMountains = CountSurroundingBiomesAny(x, y, TileId.Mountain, TileId.MountainDeep);
-                    if (surroundingMountains >= 5)
-                    {
-                        mapData[x, y] = TileId.Mountain;
-                    }
+                    if (surroundingMountains >= 5) mapData[x, y] = TileId.Mountain;
                 }
             }
         }
@@ -586,16 +545,13 @@ public partial class Map
                 if (tile != TileId.MountainDeep && tile != TileId.Snow) continue;
 
                 int surrounding = CountSurroundingBiomesAny(x, y, TileId.MountainDeep, TileId.Snow);
-                if (surrounding >= 7 && rng.NextDouble() < snowPeakChance)
-                {
-                    SpreadSnowPeaks(x, y, visited);
-                }
+                if (surrounding >= 7 && rng.NextDouble() < snowPeakChance) SpreadSnowPeaks(x, y, visited);
             }
         }
     }
     private void SpreadSnowPeaks(int startX, int startY, bool[,] visited)
     {
-        Queue<(int, int)> queue = new Queue<(int, int)>();
+        Queue<(int, int)> queue = [];
         queue.Enqueue((startX, startY));
         visited[startX, startY] = true;
         int processed = 0;
@@ -626,10 +582,7 @@ public partial class Map
             for (int y = 1; y < height - 1; y++)
             {
                 if (mapData[x, y] == TileId.Snow &&
-                    CountSurroundingBiomesAny(x, y, TileId.Mountain, TileId.MountainDeep) < 8)
-                {
-                    mapData[x, y] = TileId.Mountain;
-                }
+                    CountSurroundingBiomesAny(x, y, TileId.Mountain, TileId.MountainDeep) < 8) mapData[x, y] = TileId.Mountain;
             }
         }
     }

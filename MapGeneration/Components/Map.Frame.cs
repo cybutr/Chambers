@@ -31,15 +31,14 @@ public partial class Map
         (int, int) topRight = (width - 1, 0);
         (int, int) bottomLeft = (0, height - 1);
 
-        List<(int x, int y)> startingPoints = new List<(int x, int y)>
-        {
+        List<(int x, int y)> startingPoints = [
             GetRandomPointOnPath(GetPath(topLeft, bottomRight), 10, 55),
             GetRandomPointOnPath(GetPath(topRight, bottomLeft), 10, 55),
             GetRandomPointOnPath(GetPath(bottomRight, topLeft), 10, 55),
             GetRandomPointOnPath(GetPath(bottomLeft, topRight), 10, 55)
-        };
+        ];
 
-        List<(int x, int y)> points = new List<(int x, int y)>(startingPoints);
+        List<(int x, int y)> points = [.. startingPoints];
 
         // Generate additional random points on each line
         int maxAdditionalLinePoints = 4;
@@ -60,10 +59,7 @@ public partial class Map
         {
             for (int x = 0; x < width; x++)
             {
-                if (mapData[x, y] == TileId.Border)
-                {
-                    FillCircle(x, y, TileId.Ocean, 2, 4);
-                }
+                if (mapData[x, y] == TileId.Border) FillCircle(x, y, TileId.Ocean, 2, 4);
             }
         }
     }
@@ -87,7 +83,7 @@ public partial class Map
     {
         if (IsOceanTile(startX, startY)) return;
 
-        Queue<(int, int)> queue = new Queue<(int, int)>();
+        Queue<(int, int)> queue = [];
         queue.Enqueue((startX, startY));
         bool[,] visited = new bool[width, height];
         visited[startX, startY] = true;
@@ -101,10 +97,7 @@ public partial class Map
             {
                 if (nx >= 0 && nx < width && ny >= 0 && ny < height && !visited[nx, ny])
                 {
-                    if (!IsOceanTile(nx, ny))
-                    {
-                        queue.Enqueue((nx, ny));
-                    }
+                    if (!IsOceanTile(nx, ny)) queue.Enqueue((nx, ny));
                     visited[nx, ny] = true;
                 }
             }
@@ -112,15 +105,15 @@ public partial class Map
     }
     private (int x, int y) GetRandomPointOnPath(List<(int x, int y)> path, int minRange, int maxRange)
     {
-        Random rng = new Random(seed);
+        Random rng = new(seed);
         int index = rng.Next(minRange, Math.Min(maxRange, path.Count));
         return path[index];
     }
     private List<(int x, int y)> GenerateRandomPointsOnLineWithDistance((int x, int y) start, (int x, int y) end, int minRange, int maxRange, int minDistanceFromStart, int maxAdditionalPoints)
     {
-        List<(int x, int y)> points = new List<(int x, int y)>();
+        List<(int x, int y)> points = [];
         List<(int x, int y)> path = GetPath(start, end);
-        Random rng = new Random(seed);
+        Random rng = new(seed);
         int additionalPointsCount = 0;
 
         for (int i = minRange; i < path.Count - minRange && additionalPointsCount < maxAdditionalPoints; i++)
@@ -140,14 +133,14 @@ public partial class Map
     }
     private void ConnectPointsNearestNeighbor(List<(int x, int y)> points)
     {
-        List<(int x, int y)> remainingPoints = new List<(int x, int y)>(points);
-        List<(int x, int y)> connectedPoints = new List<(int x, int y)> { remainingPoints[0] };
+        List<(int x, int y)> remainingPoints = [.. points];
+        List<(int x, int y)> connectedPoints = [remainingPoints[0]];
         remainingPoints.RemoveAt(0);
 
         while (remainingPoints.Count > 0)
         {
-            (int x, int y) lastPoint = connectedPoints[connectedPoints.Count - 1];
-            (int x, int y) nearestPoint = remainingPoints.OrderBy(p => GetDistance(lastPoint.x, lastPoint.y, p.x, p.y)).First();
+            (int x, int y) = connectedPoints[^1];
+            (int x, int y) nearestPoint = remainingPoints.OrderBy(p => GetDistance(x, y, p.x, p.y)).First();
             connectedPoints.Add(nearestPoint);
             remainingPoints.Remove(nearestPoint);
         }
@@ -158,23 +151,20 @@ public partial class Map
             ConnectPoints(connectedPoints[i], connectedPoints[i + 1]);
         }
         // Connect the last point to the first to close the loop
-        ConnectPoints(connectedPoints[connectedPoints.Count - 1], connectedPoints[0]);
+        ConnectPoints(connectedPoints[^1], connectedPoints[0]);
     }
     private List<(int x, int y)> GenerateRandomPointsOnLine((int x, int y) start, (int x, int y) end, int minRange, int maxRange, int minDistanceFromStart)
     {
-        List<(int x, int y)> points = new List<(int x, int y)>();
+        List<(int x, int y)> points = [];
         List<(int x, int y)> path = GetPath(start, end);
-        Random rng = new Random(seed);
+        Random rng = new(seed);
 
         for (int i = minRange; i < path.Count - minRange; i++)
         {
             if (rng.NextDouble() < 0.1) // Small chance to generate a point
             {
                 (int x, int y) point = path[i];
-                if (GetDistance(start.x, start.y, point.x, point.y) >= minDistanceFromStart && GetDistance(end.x, end.y, point.x, point.y) >= minDistanceFromStart)
-                {
-                    points.Add(point);
-                }
+                if (GetDistance(start.x, start.y, point.x, point.y) >= minDistanceFromStart && GetDistance(end.x, end.y, point.x, point.y) >= minDistanceFromStart) points.Add(point);
             }
         }
 
@@ -182,14 +172,12 @@ public partial class Map
     }
     private TileId GetMostSurroundingBiome(int x, int y)
     {
-        Dictionary<TileId, int> biomeCounts = new Dictionary<TileId, int>();
+        Dictionary<TileId, int> biomeCounts = [];
         foreach ((int nx, int ny) in GetNeighbors(x, y))
         {
             TileId biome = mapData[nx, ny];
-            if (biomeCounts.ContainsKey(biome))
-                biomeCounts[biome]++;
-            else
-                biomeCounts[biome] = 1;
+            if (biomeCounts.ContainsKey(biome)) biomeCounts[biome]++;
+            else biomeCounts[biome] = 1;
         }
         return biomeCounts.OrderByDescending(b => b.Value).First().Key;
     }
@@ -206,18 +194,9 @@ public partial class Map
                     int surroundingPlains = CountSurroundingBiomes(x, y, TileId.Plains);
                     int surroundingForest = CountSurroundingBiomes(x, y, TileId.Forest);
 
-                    if (surroundingWater > surroundingPlains + surroundingForest)
-                    {
-                        mapData[x, y] = TileId.Ocean;
-                    }
-                    else if (surroundingForest > surroundingPlains)
-                    {
-                        mapData[x, y] = TileId.Forest;
-                    }
-                    else if (surroundingPlains > surroundingForest)
-                    {
-                        mapData[x, y] = TileId.Plains;
-                    }
+                    if (surroundingWater > surroundingPlains + surroundingForest) mapData[x, y] = TileId.Ocean;
+                    else if (surroundingForest > surroundingPlains) mapData[x, y] = TileId.Forest;
+                    else if (surroundingPlains > surroundingForest) mapData[x, y] = TileId.Plains;
                 }
             }
         }
@@ -233,18 +212,9 @@ public partial class Map
                     int surroundingPlains = CountSurroundingBiomes(x, y, TileId.Plains);
                     int surroundingForest = CountSurroundingBiomes(x, y, TileId.Forest);
 
-                    if (surroundingWater > surroundingPlains + surroundingForest)
-                    {
-                        mapData[x, y] = TileId.Ocean;
-                    }
-                    else if (surroundingForest > surroundingPlains)
-                    {
-                        mapData[x, y] = TileId.Forest;
-                    }
-                    else if (surroundingPlains > surroundingForest)
-                    {
-                        mapData[x, y] = TileId.Plains;
-                    }
+                    if (surroundingWater > surroundingPlains + surroundingForest) mapData[x, y] = TileId.Ocean;
+                    else if (surroundingForest > surroundingPlains) mapData[x, y] = TileId.Forest;
+                    else if (surroundingPlains > surroundingForest) mapData[x, y] = TileId.Plains;
                 }
             }
         }
@@ -260,25 +230,16 @@ public partial class Map
                     int surroundingPlains = CountSurroundingBiomes(x, y, TileId.Plains);
                     int surroundingForest = CountSurroundingBiomes(x, y, TileId.Forest);
 
-                    if (surroundingWater > surroundingPlains + surroundingForest)
-                    {
-                        mapData[x, y] = TileId.Ocean;
-                    }
-                    else if (surroundingForest > surroundingPlains)
-                    {
-                        mapData[x, y] = TileId.Forest;
-                    }
-                    else if (surroundingPlains > surroundingForest)
-                    {
-                        mapData[x, y] = TileId.Plains;
-                    }
+                    if (surroundingWater > surroundingPlains + surroundingForest) mapData[x, y] = TileId.Ocean;
+                    else if (surroundingForest > surroundingPlains) mapData[x, y] = TileId.Forest;
+                    else if (surroundingPlains > surroundingForest) mapData[x, y] = TileId.Plains;
                 }
             }
         }
     }
     private List<(int x, int y)> GetPath((int x, int y) start, (int x, int y) end)
     {
-        List<(int x, int y)> path = new List<(int x, int y)>();
+        List<(int x, int y)> path = [];
         int dx = end.x - start.x;
         int dy = end.y - start.y;
         int steps = Math.Max(Math.Abs(dx), Math.Abs(dy));
@@ -297,12 +258,9 @@ public partial class Map
     private void ConnectPoints((int x, int y) start, (int x, int y) end)
     {
         List<(int x, int y)> path = GetPath(start, end);
-        foreach ((int x, int y) point in path)
+        foreach ((int x, int y) in path)
         {
-            if (point.x >= 0 && point.x < width && point.y >= 0 && point.y < height)
-            {
-                mapData[point.x, point.y] = TileId.Border;
-            }
+            if (x >= 0 && x < width && y >= 0 && y < height) mapData[x, y] = TileId.Border;
         }
     }
     #endregion

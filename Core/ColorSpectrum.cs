@@ -141,4 +141,14 @@ public static class ColorSpectrum
     public static readonly (int r, int g, int b) VIOLET = (238, 130, 238); // Violet
     public static readonly (int r, int g, int b) WHEAT = (245, 222, 179); // Wheat
     public static readonly (int r, int g, int b) YELLOW_GREEN = (154, 205, 50); // Yellow Green
+
+    public static (int r, int g, int b) DarkenColor((int r, int g, int b) color, int amount) =>
+        (Math.Max(0, color.r - amount),
+         Math.Max(0, color.g - amount),
+         Math.Max(0, color.b - amount));
+
+    public static (int r, int g, int b) BlendColor((int r, int g, int b) a, (int r, int g, int b) b, double t) =>
+        (Math.Clamp((int)(a.r + (b.r - a.r) * t), 0, 255),
+         Math.Clamp((int)(a.g + (b.g - a.g) * t), 0, 255),
+         Math.Clamp((int)(a.b + (b.b - a.b) * t), 0, 255));
 }

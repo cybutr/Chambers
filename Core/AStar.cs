@@ -111,25 +111,20 @@ public class AStar
         int width = mapData.GetLength(0);
         int height = mapData.GetLength(1);
 
-        if (!IsValidCoordinate(startX, startY, width, height) || 
-            !IsValidCoordinate(goalX, goalY, width, height))
-            return null;
+        if (!IsValidCoordinate(startX, startY, width, height) || !IsValidCoordinate(goalX, goalY, width, height)) return null;
 
-        if (_terrainConfig.IsTerrainBlocked(mapData[startX, startY]) || 
-            _terrainConfig.IsTerrainBlocked(mapData[goalX, goalY]))
-            return null;
+        if (_terrainConfig.IsTerrainBlocked(mapData[startX, startY]) || _terrainConfig.IsTerrainBlocked(mapData[goalX, goalY])) return null;
 
         // Pre-compute obstacle distance map for avoidance
-        if (_terrainConfig.EnableObstacleAvoidance)
-            _obstacleDistanceMap = ComputeObstacleDistanceMap(mapData, width, height);
+        if (_terrainConfig.EnableObstacleAvoidance) _obstacleDistanceMap = ComputeObstacleDistanceMap(mapData, width, height);
 
         PathNode[,] nodeGrid = new PathNode[width, height];
         for (int x = 0; x < width; x++)
             for (int y = 0; y < height; y++)
                 nodeGrid[x, y] = new PathNode(x, y, mapData[x, y]);
 
-        List<PathNode> openList = new List<PathNode>();
-        HashSet<PathNode> closedSet = new HashSet<PathNode>();
+        List<PathNode> openList = [];
+        HashSet<PathNode> closedSet = [];
         PathNode startNode = nodeGrid[startX, startY];
         PathNode goalNode = nodeGrid[goalX, goalY];
         openList.Add(startNode);
@@ -138,31 +133,25 @@ public class AStar
         {
             PathNode currentNode = openList[0];
             for (int i = 1; i < openList.Count; i++)
-                if (openList[i].FCost < currentNode.FCost || 
-                    (openList[i].FCost == currentNode.FCost && openList[i].HCost < currentNode.HCost))
-                    currentNode = openList[i];
+                if (openList[i].FCost < currentNode.FCost || (openList[i].FCost == currentNode.FCost && openList[i].HCost < currentNode.HCost)) currentNode = openList[i];
 
             openList.Remove(currentNode);
             closedSet.Add(currentNode);
 
-            if (currentNode == goalNode)
-                return RetracePath(startNode, goalNode);
+            if (currentNode == goalNode) return RetracePath(startNode, goalNode);
 
             foreach (PathNode neighbor in GetNeighbors(currentNode, nodeGrid, width, height))
             {
-                if (_terrainConfig.IsTerrainBlocked(neighbor.TerrainType) || closedSet.Contains(neighbor))
-                    continue;
+                if (_terrainConfig.IsTerrainBlocked(neighbor.TerrainType) || closedSet.Contains(neighbor)) continue;
 
                 bool isDiagonal = (currentNode.X != neighbor.X) && (currentNode.Y != neighbor.Y);
                 
                 // Skip diagonals if cardinal connectivity required
-                if (isDiagonal && _terrainConfig.RequireCardinalConnectivity)
-                    continue;
+                if (isDiagonal && _terrainConfig.RequireCardinalConnectivity) continue;
 
                 float moveCost = isDiagonal ? 1.414f : 1.0f;
                 
-                if (isDiagonal && _terrainConfig.DiagonalPenalty > 1.0f)
-                    moveCost *= _terrainConfig.DiagonalPenalty;
+                if (isDiagonal && _terrainConfig.DiagonalPenalty > 1.0f) moveCost *= _terrainConfig.DiagonalPenalty;
                 
                 float terrainCost = _terrainConfig.GetTerrainCost(neighbor.TerrainType);
                 float randomnessFactor = 1.0f + (_terrainConfig.PathRandomness > 0 ? 
@@ -182,10 +171,7 @@ public class AStar
                     neighbor.HCost = GetDistance(neighbor, goalNode);
                     neighbor.Parent = currentNode;
 
-                    if (!openList.Contains(neighbor))
-                    {
-                        openList.Add(neighbor);
-                    }
+                    if (!openList.Contains(neighbor)) openList.Add(neighbor);
                 }
             }
         }
@@ -199,7 +185,7 @@ public class AStar
     /// </summary>
     private List<PathNode> GetNeighbors(PathNode node, PathNode[,] nodeGrid, int width, int height)
     {
-        List<PathNode> neighbors = new List<PathNode>();
+        List<PathNode> neighbors = [];
 
         // Check 8 directions: up, down, left, right, and 4 diagonals
         // Order: N, S, W, E, NW, NE, SW, SE
@@ -211,14 +197,12 @@ public class AStar
             int checkX = node.X + dx[i];
             int checkY = node.Y + dy[i];
 
-            if (!IsValidCoordinate(checkX, checkY, width, height))
-                continue;
+            if (!IsValidCoordinate(checkX, checkY, width, height)) continue;
 
             PathNode neighbor = nodeGrid[checkX, checkY];
 
             // Skip if the neighbor itself is blocked
-            if (_terrainConfig.IsTerrainBlocked(neighbor.TerrainType))
-                continue;
+            if (_terrainConfig.IsTerrainBlocked(neighbor.TerrainType)) continue;
 
             // For diagonal moves (indices 4-7), check if adjacent tiles are passable
             // This prevents "cutting corners" through impassable terrain
@@ -230,10 +214,7 @@ public class AStar
                 int adjacentY2 = node.Y + dy[i];
 
                 if (_terrainConfig.IsTerrainBlocked(nodeGrid[adjacentX1, adjacentY1].TerrainType) ||
-                    _terrainConfig.IsTerrainBlocked(nodeGrid[adjacentX2, adjacentY2].TerrainType))
-                {
-                    continue;
-                }
+                    _terrainConfig.IsTerrainBlocked(nodeGrid[adjacentX2, adjacentY2].TerrainType)) continue;
             }
 
             neighbors.Add(neighbor);
@@ -266,8 +247,7 @@ public class AStar
         {
             var (x, y, dist) = queue.Dequeue();
             
-            if (dist >= _terrainConfig.AvoidanceDistance)
-                continue;
+            if (dist >= _terrainConfig.AvoidanceDistance) continue;
 
             for (int i = 0; i < 4; i++)
             {
@@ -291,8 +271,7 @@ public class AStar
 
     private float CalculateObstacleAvoidancePenalty(PathNode node)
     {
-        if (!_terrainConfig.EnableObstacleAvoidance || _obstacleDistanceMap == null)
-            return 0f;
+        if (!_terrainConfig.EnableObstacleAvoidance || _obstacleDistanceMap == null) return 0f;
 
         if (_obstacleDistanceMap.TryGetValue((node.X, node.Y), out float distance))
         {
@@ -328,13 +307,11 @@ public class AStar
             int currDx = neighbor.X - currentNode.X;
             int currDy = neighbor.Y - currentNode.Y;
             
-            if (prevDx != currDx || prevDy != currDy)
-                totalPenalty += _terrainConfig.DirectionChangePenalty;
+            if (prevDx != currDx || prevDy != currDy) totalPenalty += _terrainConfig.DirectionChangePenalty;
         }
 
         // NEW: Biome change penalty
-        if (_terrainConfig.BiomeChangePenalty > 0 && currentNode.TerrainType != neighbor.TerrainType)
-            totalPenalty += _terrainConfig.BiomeChangePenalty;
+        if (_terrainConfig.BiomeChangePenalty > 0 && currentNode.TerrainType != neighbor.TerrainType) totalPenalty += _terrainConfig.BiomeChangePenalty;
 
         // NEW: Biome stickiness (prefer staying in same biome, reward being surrounded by low-cost terrain)
         if (_terrainConfig.BiomeStickiness > 0)
@@ -353,10 +330,7 @@ public class AStar
             }
             
             // Additional penalty for changing biomes frequently
-            if (currentNode.Parent != null && neighbor.TerrainType != currentNode.TerrainType)
-            {
-                totalPenalty += _terrainConfig.BiomeStickiness * 0.5f;
-            }
+            if (currentNode.Parent != null && neighbor.TerrainType != currentNode.TerrainType) totalPenalty += _terrainConfig.BiomeStickiness * 0.5f;
         }
 
         // NEW: Backtracking avoidance
@@ -364,8 +338,7 @@ public class AStar
         {
             float distToGoal = GetDistance(neighbor, goalNode);
             float parentDistToGoal = GetDistance(currentNode.Parent, goalNode);
-            if (distToGoal > parentDistToGoal)
-                totalPenalty += _terrainConfig.BacktrackingPenalty;
+            if (distToGoal > parentDistToGoal) totalPenalty += _terrainConfig.BacktrackingPenalty;
         }
 
         // Wandering bias
@@ -405,8 +378,7 @@ public class AStar
             int dx3 = neighbor.X - currentNode.X;
             int dy3 = neighbor.Y - currentNode.Y;
             
-            if (dx1 == dx2 && dy1 == dy2 && dx2 == dx3 && dy2 == dy3)
-                totalPenalty += _terrainConfig.StraightLineAvoidance * 0.5f;
+            if (dx1 == dx2 && dy1 == dy2 && dx2 == dx3 && dy2 == dy3) totalPenalty += _terrainConfig.StraightLineAvoidance * 0.5f;
         }
 
         // Direction inertia
@@ -444,9 +416,7 @@ public class AStar
             int nx = node.X + dx[i];
             int ny = node.Y + dy[i];
             
-            if (IsValidCoordinate(nx, ny, nodeGrid.GetLength(0), nodeGrid.GetLength(1)) &&
-                nodeGrid[nx, ny].TerrainType == terrainType)
-                count++;
+            if (IsValidCoordinate(nx, ny, nodeGrid.GetLength(0), nodeGrid.GetLength(1)) && nodeGrid[nx, ny].TerrainType == terrainType) count++;
         }
         
         return count;
@@ -454,8 +424,7 @@ public class AStar
 
     private float CalculateTransitionPenalty(PathNode currentNode, PathNode neighbor, PathNode[,] nodeGrid)
     {
-        if (currentNode.TerrainType == neighbor.TerrainType)
-            return 0f;
+        if (currentNode.TerrainType == neighbor.TerrainType) return 0f;
 
         float costDiff = Math.Abs(_terrainConfig.GetTerrainCost(currentNode.TerrainType) - 
                                     _terrainConfig.GetTerrainCost(neighbor.TerrainType));
@@ -477,8 +446,7 @@ public class AStar
         float dx = lineEnd.X - lineStart.X;
         float dy = lineEnd.Y - lineStart.Y;
         
-        if (dx == 0 && dy == 0)
-            return GetDistance(point, lineStart);
+        if (dx == 0 && dy == 0) return GetDistance(point, lineStart);
         
         float numerator = Math.Abs(dy * point.X - dx * point.Y + lineEnd.X * lineStart.Y - lineEnd.Y * lineStart.X);
         float denominator = (float)Math.Sqrt(dx * dx + dy * dy);
@@ -495,7 +463,7 @@ public class AStar
 
     private List<(int x, int y)> RetracePath(PathNode startNode, PathNode endNode)
     {
-        List<(int x, int y)> path = new List<(int x, int y)>();
+        List<(int x, int y)> path = [];
         PathNode currentNode = endNode;
 
         while (currentNode != startNode)
@@ -509,10 +477,7 @@ public class AStar
         return path;
     }
 
-    private bool IsValidCoordinate(int x, int y, int width, int height)
-    {
-        return x >= 0 && x < width && y >= 0 && y < height;
-    }
+    private bool IsValidCoordinate(int x, int y, int width, int height) => x >= 0 && x < width && y >= 0 && y < height;
 
     public TerrainConfig GetTerrainConfig() => _terrainConfig;
 

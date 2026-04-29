@@ -7,72 +7,20 @@ using static Internal.GUI;
 public partial class Map
 {
     #region update funcstions
-    public List<Crab> crabs {get; set;} = new List<Crab>();
-    public List<Turtle> turtles {get; set;} = new List<Turtle>();
-    public List<Cow> cows {get; set;} = new List<Cow>();
-    public List<Sheep> sheeps {get; set;} = new List<Sheep>();
+    public List<Crab> crabs {get; set;} = [];
+    public List<Turtle> turtles {get; set;} = [];
+    public List<Cow> cows {get; set;} = [];
+    public List<Sheep> sheeps {get; set;} = [];
+
     public void InitializeSpecies(int minSpecies, int maxSpecies, Species species)
     {
-        List<TileId> allowedTiles = new List<TileId> { };
-
-        if (species is Crab or Turtle)
-        {
-            allowedTiles.Add(TileId.Beach);
-            allowedTiles.Add(TileId.BeachDark);
-        }
-        else if (species is Wolf or Bear)
-        {
-            allowedTiles.Add(TileId.Forest);
-        }
-        else if (species is Sheep or Cow)
-        {
-            allowedTiles.Add(TileId.Plains);
-        }
-        else if (species is Goat)
-        {
-            allowedTiles.Add(TileId.Mountain);
-            allowedTiles.Add(TileId.MountainDeep);
-        }
-        else if (species is Fish)
-        {
-            allowedTiles.Add(TileId.Ocean);
-            allowedTiles.Add(TileId.OceanShallow);
-            allowedTiles.Add(TileId.Lake);
-            allowedTiles.Add(TileId.LakeShallow);
-            allowedTiles.Add(TileId.River);
-            allowedTiles.Add(TileId.RiverShallow);
-        }
-        else if (species is Bird)
-        {
-            allowedTiles.Add(TileId.Forest);
-            allowedTiles.Add(TileId.Plains);
-            allowedTiles.Add(TileId.Beach);
-            allowedTiles.Add(TileId.BeachDark);
-            allowedTiles.Add(TileId.Ocean);
-            allowedTiles.Add(TileId.OceanShallow);
-            allowedTiles.Add(TileId.Lake);
-            allowedTiles.Add(TileId.LakeShallow);
-            allowedTiles.Add(TileId.River);
-            allowedTiles.Add(TileId.RiverShallow);
-            allowedTiles.Add(TileId.Mountain);
-            allowedTiles.Add(TileId.MountainDeep);
-            allowedTiles.Add(TileId.Snow);
-        }
+        var allowedTiles = species.allowedTiles;
 
         int habitatTiles = 0;
-        foreach (TileId tile in allowedTiles)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int y = 0; y < height; y++)
-                {
-                    if (mapData[x, y] == tile)
-                    {
-                        habitatTiles++;
-                    }
-                }
-            }
-        }
+        for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
+                if (allowedTiles.Contains(mapData[x, y])) habitatTiles++;
+
         if (habitatTiles < maxSpecies)
         {
             maxSpecies = (int)Math.Round((double)habitatTiles / rng.Next(1, 3));
@@ -93,7 +41,6 @@ public partial class Map
                 }
                 catch (InvalidOperationException)
                 {
-                    // Handle case where no beach biomes are available
                     outputBuffer.Add("No beach biomes available to place crabs.");
                     break;
                 }
@@ -112,133 +59,91 @@ public partial class Map
                 }
                 catch (InvalidOperationException)
                 {
-                    // Handle case where no beach biomes are available
                     outputBuffer.Add("No beach biomes available to place turtles.");
                     break;
                 }
             }
         }
     }
-    private void InitializeCows(int minGroups, int maxGroups, int minPerGroup, int maxPerGroup)
+
+    private void InitializeHerd<T>(int minGroups, int maxGroups, int minPerGroup, int maxPerGroup,
+        List<T> list, Func<int, int, int, T> factory) where T : Species
     {
         int numberOfGroups = rng.Next(minGroups, maxGroups);
         for (int i = 0; i < numberOfGroups; i++)
         {
-            int numberOfCows = rng.Next(minPerGroup, maxPerGroup);
+            int numberOfAnimals = rng.Next(minPerGroup, maxPerGroup);
             bool validPointFound = false;
             (int startX, int startY) = (0, 0);
             int attempts = 0;
 
             while (!validPointFound && attempts < 100)
             {
-                (startX, startY) = GetRandomPointInAllowedTiles(new List<TileId> { TileId.Plains });
-                if (IsAtLeastDistanceFromMountains(startX, startY, 5))
-                {
-                    validPointFound = true;
-                }
+                (startX, startY) = GetRandomPointInAllowedTiles(new HashSet<TileId> { TileId.Plains });
+                if (IsAtLeastDistanceFromMountains(startX, startY, 5)) validPointFound = true;
                 attempts++;
             }
 
             if (!validPointFound)
             {
-                outputBuffer.Add("Failed to find a valid starting point for cow group.");
+                outputBuffer.Add($"Failed to find a valid starting point for {typeof(T).Name} group.");
                 continue;
             }
 
-            for (int j = 0; j < numberOfCows; j++)
+            for (int j = 0; j < numberOfAnimals; j++)
             {
                 try
                 {
                     int iterations = 0;
                     (int x, int y) = (0, 0);
-                    bool placedCows = false;
-                    while (!placedCows && iterations < 100)
+                    bool placed = false;
+                    while (!placed && iterations < 100)
                     {
                         (x, y) = GetRandomPointInRange(startX, startY, 1, 3);
                         if (mapData[x, y] == TileId.Plains)
                         {
-                            Cow cow = new Cow(x, y, rng.Next());
-                            cows.Add(cow);
-                            overlayData[x, y] = EntityId.Cow;
-                            placedCows = true;
+                            T animal = factory(x, y, rng.Next());
+                            list.Add(animal);
+                            overlayData[x, y] = animal.EntityId;
+                            placed = true;
                         }
                         iterations++;
                     }
                     if (iterations >= 100)
                     {
-                        outputBuffer.Add("Failed to place cows.");
+                        outputBuffer.Add($"Failed to place {typeof(T).Name}.");
                         break;
                     }
                 }
                 catch (InvalidOperationException)
                 {
-                    // Handle case where no plains biomes are available
-                    outputBuffer.Add("No plains biomes available to place cows.");
+                    outputBuffer.Add($"No plains biomes available to place {typeof(T).Name}.");
                     break;
                 }
             }
         }
     }
-    private void InitializeSheeps(int minGroups, int maxGroups, int minPerGroup, int maxPerGroup)
+
+    private void UpdateSpecies<T>(List<T> species) where T : Species
     {
-        int numberOfGroups = rng.Next(minGroups, maxGroups);
-        for (int i = 0; i < numberOfGroups; i++)
+        foreach (T animal in species)
         {
-            int numberOfSheeps = rng.Next(minPerGroup, maxPerGroup);
-            bool validPointFound = false;
-            (int startX, int startY) = (0, 0);
-            int attempts = 0;
-
-            while (!validPointFound && attempts < 100)
+            animal.SetTime(dayNight.TimeOfDay, dayNight.SunriseTime, dayNight.SunsetTime);
+            int oldX = animal.X, oldY = animal.Y;
+            animal.Behave(mapData, overlayData);
+            if (overlayData[animal.X, animal.Y] != EntityId.None)
             {
-                (startX, startY) = GetRandomPointInAllowedTiles(new List<TileId> { TileId.Plains });
-                if (IsAtLeastDistanceFromMountains(startX, startY, 5))
-                {
-                    validPointFound = true;
-                }
-                attempts++;
+                animal.X = oldX;
+                animal.Y = oldY;
             }
-
-            if (!validPointFound)
+            else
             {
-                outputBuffer.Add("Failed to find a valid starting point for sheep group.");
-                continue;
-            }
-
-            for (int j = 0; j < numberOfSheeps; j++)
-            {
-                try
-                {
-                    int iterations = 0;
-                    (int x, int y) = (0, 0);
-                    bool placedCows = false;
-                    while (!placedCows && iterations < 100)
-                    {
-                        (x, y) = GetRandomPointInRange(startX, startY, 1, 3);
-                        if (mapData[x, y] == TileId.Plains)
-                        {
-                            Sheep sheep = new Sheep(x, y, rng.Next());
-                            sheeps.Add(sheep);
-                            overlayData[x, y] = EntityId.Sheep;
-                            placedCows = true;
-                        }
-                        iterations++;
-                    }
-                    if (iterations >= 100)
-                    {
-                        outputBuffer.Add("Failed to place sheeps.");
-                        break;
-                    }
-                }
-                catch (InvalidOperationException)
-                {
-                    // Handle case where no plains biomes are available
-                    outputBuffer.Add("No plains biomes available to place sheeps.");
-                    break;
-                }
+                overlayData[oldX, oldY] = EntityId.None;
+                if (!IsTileUnderCloud(animal.X, animal.Y)) overlayData[animal.X, animal.Y] = animal.EntityId;
             }
         }
     }
+
     private bool IsAtLeastDistanceFromMountains(int x, int y, int minDistance)
     {
         for (int dx = -minDistance; dx <= minDistance; dx++)
@@ -249,16 +154,14 @@ public partial class Map
                 int checkY = y + dy;
                 if (checkX >= 0 && checkX < conf.Width && checkY >= 0 && checkY < conf.Height)
                 {
-                    if (mapData[checkX, checkY] == TileId.Mountain || mapData[checkX, checkY] == TileId.MountainDeep)
-                    {
-                        return false;
-                    }
+                    if (mapData[checkX, checkY] == TileId.Mountain || mapData[checkX, checkY] == TileId.MountainDeep) return false;
                 }
             }
         }
         return true;
     }
-    private (int x, int y) GetRandomPointInAllowedTiles(List<TileId> allowedTiles)
+
+    private (int x, int y) GetRandomPointInAllowedTiles(HashSet<TileId> allowedTiles)
     {
         int maxAttempts = 1000;
         int attempts = 0;
@@ -270,13 +173,11 @@ public partial class Map
             attempts++;
         } while (!allowedTiles.Contains(mapData[x, y]) && attempts < maxAttempts);
 
-        if (attempts >= maxAttempts)
-        {
-            outputBuffer.Add("Failed to find a valid point.");
-        }
+        if (attempts >= maxAttempts) outputBuffer.Add("Failed to find a valid point.");
 
         return (x, y);
     }
+
     public void UpdateCrabs()
     {
         foreach (Crab crab in crabs)
@@ -301,10 +202,7 @@ public partial class Map
                 overlayData[oldX, oldY] = EntityId.None;
 
                 // Draw new position on overlayData if not under a cloud
-                if (!IsTileUnderCloud(crab.X, crab.Y))
-                {
-                    overlayData[crab.X, crab.Y] = EntityId.Crab;
-                }
+                if (!IsTileUnderCloud(crab.X, crab.Y)) overlayData[crab.X, crab.Y] = EntityId.Crab;
             }
         }
     }
@@ -332,10 +230,7 @@ public partial class Map
                 overlayData[oldX, oldY] = EntityId.None;
 
                 // Draw new position on overlayData if not under a cloud
-                if (!IsTileUnderCloud(turtle.X, turtle.Y))
-                {
-                    overlayData[turtle.X, turtle.Y] = EntityId.Turtle;
-                }
+                if (!IsTileUnderCloud(turtle.X, turtle.Y)) overlayData[turtle.X, turtle.Y] = EntityId.Turtle;
             }
         }
     }
@@ -344,8 +239,8 @@ public partial class Map
         foreach (Cow cow in cows)
         {
             // Set time values before behaving
-            cow.SetTime(weather.TimeOfDay, sunriseTime, sunsetTime);
-            
+            cow.SetTime(dayNight.TimeOfDay, dayNight.SunriseTime, dayNight.SunsetTime);
+
             // Store old position
             int oldX = cow.X;
             int oldY = cow.Y;
@@ -366,10 +261,7 @@ public partial class Map
                 overlayData[oldX, oldY] = EntityId.None;
 
                 // Draw new position on overlayData if not under a cloud
-                if (!IsTileUnderCloud(cow.X, cow.Y))
-                {
-                    overlayData[cow.X, cow.Y] = EntityId.Cow;
-                }
+                if (!IsTileUnderCloud(cow.X, cow.Y)) overlayData[cow.X, cow.Y] = EntityId.Cow;
             }
         }
     }
@@ -378,8 +270,8 @@ public partial class Map
         foreach (Sheep sheep in sheeps)
         {
             // Set time values before behaving
-            sheep.SetTime(weather.TimeOfDay, sunriseTime, sunsetTime);
-            
+            sheep.SetTime(dayNight.TimeOfDay, dayNight.SunriseTime, dayNight.SunsetTime);
+
             // Store old position
             int oldX = sheep.X;
             int oldY = sheep.Y;
@@ -400,12 +292,18 @@ public partial class Map
                 overlayData[oldX, oldY] = EntityId.None;
 
                 // Draw new position on overlayData if not under a cloud
-                if (!IsTileUnderCloud(sheep.X, sheep.Y))
-                {
-                    overlayData[sheep.X, sheep.Y] = EntityId.Sheep;
-                }
+                if (!IsTileUnderCloud(sheep.X, sheep.Y)) overlayData[sheep.X, sheep.Y] = EntityId.Sheep;
             }
         }
+    }
+
+    private void InitializeCows(int minGroups, int maxGroups, int minPerGroup, int maxPerGroup)
+    {
+        InitializeHerd(minGroups, maxGroups, minPerGroup, maxPerGroup, cows, (x, y, seed) => new Cow(x, y, seed));
+    }
+    private void InitializeSheeps(int minGroups, int maxGroups, int minPerGroup, int maxPerGroup)
+    {
+        InitializeHerd(minGroups, maxGroups, minPerGroup, maxPerGroup, sheeps, (x, y, seed) => new Sheep(x, y, seed));
     }
     #endregion
 }

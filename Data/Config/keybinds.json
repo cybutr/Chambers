@@ -1,0 +1,224 @@
+[
+  {
+    "Context": 0,
+    "Key": 80,
+    "Modifiers": 0,
+    "CommandId": "ToggleUpdate"
+  },
+  {
+    "Context": 0,
+    "Key": 32,
+    "Modifiers": 0,
+    "CommandId": "ToggleUpdate"
+  },
+  {
+    "Context": 0,
+    "Key": 67,
+    "Modifiers": 0,
+    "CommandId": "ToggleCommandMode"
+  },
+  {
+    "Context": 0,
+    "Key": 81,
+    "Modifiers": 0,
+    "CommandId": "ToggleClouds"
+  },
+  {
+    "Context": 0,
+    "Key": 71,
+    "Modifiers": 0,
+    "CommandId": "ToggleGUI"
+  },
+  {
+    "Context": 0,
+    "Key": 37,
+    "Modifiers": 0,
+    "CommandId": "ChamberPrev"
+  },
+  {
+    "Context": 0,
+    "Key": 39,
+    "Modifiers": 0,
+    "CommandId": "ChamberNext"
+  },
+  {
+    "Context": 0,
+    "Key": 40,
+    "Modifiers": 0,
+    "CommandId": "ChamberFirst"
+  },
+  {
+    "Context": 0,
+    "Key": 38,
+    "Modifiers": 0,
+    "CommandId": "ChamberLast"
+  },
+  {
+    "Context": 0,
+    "Key": 49,
+    "Modifiers": 0,
+    "CommandId": "Jump0"
+  },
+  {
+    "Context": 0,
+    "Key": 97,
+    "Modifiers": 0,
+    "CommandId": "Jump0"
+  },
+  {
+    "Context": 0,
+    "Key": 50,
+    "Modifiers": 0,
+    "CommandId": "Jump1"
+  },
+  {
+    "Context": 0,
+    "Key": 98,
+    "Modifiers": 0,
+    "CommandId": "Jump1"
+  },
+  {
+    "Context": 0,
+    "Key": 51,
+    "Modifiers": 0,
+    "CommandId": "Jump2"
+  },
+  {
+    "Context": 0,
+    "Key": 99,
+    "Modifiers": 0,
+    "CommandId": "Jump2"
+  },
+  {
+    "Context": 0,
+    "Key": 52,
+    "Modifiers": 0,
+    "CommandId": "Jump3"
+  },
+  {
+    "Context": 0,
+    "Key": 100,
+    "Modifiers": 0,
+    "CommandId": "Jump3"
+  },
+  {
+    "Context": 0,
+    "Key": 53,
+    "Modifiers": 0,
+    "CommandId": "Jump4"
+  },
+  {
+    "Context": 0,
+    "Key": 101,
+    "Modifiers": 0,
+    "CommandId": "Jump4"
+  },
+  {
+    "Context": 0,
+    "Key": 54,
+    "Modifiers": 0,
+    "CommandId": "Jump5"
+  },
+  {
+    "Context": 0,
+    "Key": 102,
+    "Modifiers": 0,
+    "CommandId": "Jump5"
+  },
+  {
+    "Context": 0,
+    "Key": 55,
+    "Modifiers": 0,
+    "CommandId": "Jump6"
+  },
+  {
+    "Context": 0,
+    "Key": 103,
+    "Modifiers": 0,
+    "CommandId": "Jump6"
+  },
+  {
+    "Context": 0,
+    "Key": 56,
+    "Modifiers": 0,
+    "CommandId": "Jump7"
+  },
+  {
+    "Context": 0,
+    "Key": 104,
+    "Modifiers": 0,
+    "CommandId": "Jump7"
+  },
+  {
+    "Context": 0,
+    "Key": 57,
+    "Modifiers": 0,
+    "CommandId": "Jump8"
+  },
+  {
+    "Context": 0,
+    "Key": 105,
+    "Modifiers": 0,
+    "CommandId": "Jump8"
+  },
+  {
+    "Context": 0,
+    "Key": 48,
+    "Modifiers": 0,
+    "CommandId": "Jump9"
+  },
+  {
+    "Context": 0,
+    "Key": 96,
+    "Modifiers": 0,
+    "CommandId": "Jump9"
+  },
+  {
+    "Context": 0,
+    "Key": 34,
+    "Modifiers": 0,
+    "CommandId": "SpeedDown"
+  },
+  {
+    "Context": 0,
+    "Key": 33,
+    "Modifiers": 0,
+    "CommandId": "SpeedUp"
+  },
+  {
+    "Context": 0,
+    "Key": 84,
+    "Modifiers": 2,
+    "CommandId": "ToggleTempLayer"
+  },
+  {
+    "Context": 0,
+    "Key": 72,
+    "Modifiers": 2,
+    "CommandId": "ToggleHumLayer"
+  },
+  {
+    "Context": 0,
+    "Key": 87,
+    "Modifiers": 0,
+    "CommandId": "PanUp"
+  },
+  {
+    "Context": 0,
+    "Key": 65,
+    "Modifiers": 0,
+    "CommandId": "PanLeft"
+  },
+  {
+    "Context": 0,
+    "Key": 83,
+    "Modifiers": 0,
+    "CommandId": "PanDown"
+  },
+  {
+    "Context": 0,
+    "Key": 68,
+    "Modifiers": 0,
+    "CommandId": "PanRight"
+  }
+]

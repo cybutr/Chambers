@@ -312,6 +312,160 @@ partial class Program
 
             GUI.WriteLine("\nThe config GUI is now fully functional! 🎯");
         }
+        private static void TestGUILayout()
+        {
+            EnableVirtualTerminalProcessing();
+            GUI.SetCursorVisible(false);
+            GUI.Clear();
+
+            Map map = new();
+            map.weather = new Weather
+            {
+                CurrentWeather = WeatherType.Clear,
+                NextWeather   = WeatherType.Rain,
+                Temperature   = 22.4,
+                Humidity      = 0.65,
+                Pressure      = 1013.2,
+                WindSpeed     = 12.3,
+                WindDirection = 45.0
+            };
+            map.dayNight.TimeOfDay = 8.5;
+            map.dayNight.Season    = 1.3;
+            map.DayCount       = 42;
+            map.cloudFormations = 7;
+            map.cloudTileCount  = 234;
+            map.actualOutputBuffer.AddRange([
+                "Simulation started.",
+                "Wolf spotted near eastern forest.",
+                "River eroded 3 tiles downstream.",
+                "Sheep population stable at 14.",
+                "Cumulonimbus forming over mountains.",
+                "Temperature dropped to 14°C.",
+                "Bear moved into lake region.",
+                "Heavy rain began.",
+                "Cloud cover at 78%.",
+                "Day 42 began.",
+            ]);
+            Map.eventBuffer.Add("Wolf attack on sheep near river");
+            chambers.Add(map);
+            currentChamberIndex = 0;
+            displayGUI = true;
+
+            void redraw()
+            {
+                map._guiBuf.Invalidate();
+                GUI.Clear();
+                map.DisplayGUI();
+                map._guiBuf.Flush();
+            }
+
+            redraw();
+
+            int lastW = Console.WindowWidth, lastH = Console.WindowHeight;
+            while (true)
+            {
+                int w = Console.WindowWidth, h = Console.WindowHeight;
+                if (w != lastW || h != lastH) { lastW = w; lastH = h; redraw(); }
+                if (!Console.KeyAvailable) { Thread.Sleep(50); continue; }
+                var key = Console.ReadKey(true).Key;
+                if (key == ConsoleKey.Escape) break;
+                if (key == ConsoleKey.R) redraw();
+                if (key == ConsoleKey.T)
+                {
+                    map.dayNight.TimeOfDay = (map.dayNight.TimeOfDay + 2.0) % 24.0;
+                    redraw();
+                }
+            }
+
+            GUI.Clear();
+            GUI.SetCursorVisible(true);
+        }
+        private static void TestCamera()
+        {
+            int viewW = Math.Max(20, Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding);
+            int viewH = Math.Max(15, Console.WindowHeight - GUIConfig.BottomPadding);
+            int mapW  = Math.Min(viewW * 3, 300);
+            int mapH  = Math.Min(viewH * 3, 150);
+
+            var testConfig = new Config(mapW, mapH, 10.0, "CAMTEST") { Name = "CAMERA_TEST" };
+
+            Map testChamber = new Map();
+            testChamber.conf   = testConfig;
+            testChamber.width  = mapW;
+            testChamber.height = mapH;
+
+            testChamber.mapData           = new TileId[mapW, mapH];
+            testChamber.overlayData       = new EntityId[mapW, mapH];
+            testChamber.temperatureData   = new int[mapW, mapH];
+            testChamber.humidityData      = new int[mapW, mapH];
+            testChamber.noise             = new double[mapW, mapH];
+            testChamber.tempatureNoise    = new double[mapW, mapH];
+            testChamber.humidityNoise     = new double[mapW, mapH];
+            testChamber.darknessData      = new int[mapW, mapH];
+            testChamber.shadowData        = new double[mapW, mapH];
+            testChamber.waveIntensityData = new double[mapW, mapH];
+
+            int cw = Math.Max(1, Math.Min(mapW * 3, 10000));
+            int ch = Math.Max(1, Math.Min(mapH * 3, 10000));
+            testChamber.cloudData                 = new CloudType[cw, ch];
+            testChamber.cloudDepthData            = new int[cw, ch];
+            testChamber.precipitationData         = new double[cw, ch];
+            testChamber.previousPrecipitationData = new double[cw, ch];
+
+            testChamber.HandleTestGen();
+            testChamber.camera = new Camera(viewW, viewH);
+
+            chambers.Add(testChamber);
+            currentChamberIndex = 0;
+            displayGUI = false;
+
+            void redraw(bool full = false)
+            {
+                if (full) { testChamber.InvalidateFramebuffer(); GUI.Clear(); }
+                DisplayCurrentChamber();
+                var c = testChamber.camera!;
+                GUI.SetCursorPosition(0, 0);
+                GUI.Write($" Camera ({c.X},{c.Y}) | Map {mapW}x{mapH} | View {viewW}x{viewH} | WASD pan | R regen | ESC exit ");
+            }
+
+            redraw(true);
+
+            while (continueSimulating)
+            {
+                if (CheckAndApplyResize(testChamber))
+                {
+                    viewW = testChamber.camera!.Width;
+                    viewH = testChamber.camera!.Height;
+                    redraw(true);
+                }
+
+                if (!Console.KeyAvailable) { Thread.Sleep(50); continue; }
+                var keyInfo = Console.ReadKey(true);
+                var key     = keyInfo.Key;
+                var cam     = testChamber.camera!;
+
+                if (key == ConsoleKey.Escape) break;
+                else if (key == ConsoleKey.R)
+                {
+                    testChamber.HandleTestGen();
+                    testChamber.camera = new Camera(viewW, viewH);
+                    cam = testChamber.camera;
+                    cam.X = 0; cam.Y = 0;
+                    redraw(true);
+                }
+                else if (key == ConsoleKey.W || key == ConsoleKey.UpArrow)
+                { cam.Y = Math.Max(0, cam.Y - 3); redraw(); }
+                else if (key == ConsoleKey.S || key == ConsoleKey.DownArrow)
+                { cam.Y = Math.Min(Math.Max(0, mapH - viewH), cam.Y + 3); redraw(); }
+                else if (key == ConsoleKey.A || key == ConsoleKey.LeftArrow)
+                { cam.X = Math.Max(0, cam.X - 5); redraw(); }
+                else if (key == ConsoleKey.D || key == ConsoleKey.RightArrow)
+                { cam.X = Math.Min(Math.Max(0, mapW - viewW), cam.X + 5); redraw(); }
+            }
+
+            GUI.Clear();
+            GUI.WriteLine("Camera test ended.");
+        }
         #endregion
         private static void Testing()
         {
@@ -338,13 +492,9 @@ partial class Program
 
             // Reinitialize all arrays with correct dimensions
             testChamber.mapData = new TileId[testConfig.Width, testConfig.Height];
-            testChamber.previousMapData = new TileId[testConfig.Width, testConfig.Height];
             testChamber.overlayData = new EntityId[testConfig.Width, testConfig.Height];
-            testChamber.previousOverlayData = new EntityId[testConfig.Width, testConfig.Height];
             testChamber.temperatureData = new int[testConfig.Width, testConfig.Height];
             testChamber.humidityData = new int[testConfig.Width, testConfig.Height];
-            testChamber.cloudIsNight = new bool[testConfig.Width, testConfig.Height];
-            testChamber.cloudIsDarkening = new bool[testConfig.Width, testConfig.Height];
             testChamber.noise = new double[testConfig.Width, testConfig.Height];
             testChamber.tempatureNoise = new double[testConfig.Width, testConfig.Height];
             testChamber.humidityNoise = new double[testConfig.Width, testConfig.Height];
@@ -353,7 +503,6 @@ partial class Program
             int cloudWidth = Math.Max(1, Math.Min(testConfig.Width * 3, 10000));
             int cloudHeight = Math.Max(1, Math.Min(testConfig.Height * 3, 10000));
             testChamber.cloudData = new CloudType[cloudWidth, cloudHeight];
-            testChamber.previousCloudData = new CloudType[cloudWidth, cloudHeight];
             testChamber.cloudDepthData = new int[cloudWidth, cloudHeight];
             testChamber.precipitationData = new double[cloudWidth, cloudHeight];
             testChamber.previousPrecipitationData = new double[cloudWidth, cloudHeight];
@@ -395,10 +544,7 @@ partial class Program
                         GUI.SetCursorPosition(0, testChamber.height + GUIConfig.TopPadding + 2);
                         GUI.Write(">> ");
                         string? command = Console.ReadLine();
-                        if (command?.ToLower() == "exit")
-                        {
-                            break;
-                        }
+                        if (command?.ToLower() == "exit") break;
                         isCommandInputMode = false;
                         GUI.Clear();
                         DisplayCurrentChamber();

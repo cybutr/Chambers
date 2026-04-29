@@ -5,22 +5,14 @@ namespace Internal
     public static class GUI
     {
         private static readonly object _consoleLock = new object();
+        internal static object ConsoleLock => _consoleLock;
         private static readonly bool _isLinux = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux);
 
-        public static string SetBackgroundColor(int r, int g, int b)
-        {
-            return $"\u001b[48;2;{r};{g};{b}m";
-        }
+        public static string SetBackgroundColor(int r, int g, int b) => $"\u001b[48;2;{r};{g};{b}m";
 
-        public static string SetForegroundColor(int r, int g, int b)
-        {
-            return $"\u001b[38;2;{r};{g};{b}m";
-        }
+        public static string SetForegroundColor(int r, int g, int b) => $"\u001b[38;2;{r};{g};{b}m";
 
-        public static string ResetColor()
-        {
-            return "\u001b[0m";
-        }
+        public static string ResetColor() => "\u001b[0m";
 
         public static void SetCursorPosition(int x, int y)
         {
@@ -240,10 +232,7 @@ namespace Internal
             bool isLinux = _isLinux;
 
             // Safety check - ensure box fits within console bounds
-            if (x < 0 || y < 0 || x + width > Console.WindowWidth || y + height > Console.WindowHeight)
-            {
-                return; // Don't draw if box would be outside console bounds
-            }
+            if (x < 0 || y < 0 || x + width > Console.WindowWidth || y + height > Console.WindowHeight) return; // Don't draw if box would be outside console bounds
             
             // Define box drawing characters
             string topLeft = "╔";
@@ -258,10 +247,8 @@ namespace Internal
 
             // Draw top border with double lines
             SetCursorPosition(x, y);
-            if (!isLinux)
-                Write(SetForegroundColor(color.r, color.g, color.b) + topLeft + new string(doubleHorizontal[0], width - 2) + topRight + ResetColor());
-            else
-                Write(SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + ResetColor());
+            if (!isLinux) Write(SetForegroundColor(color.r, color.g, color.b) + topLeft + new string(doubleHorizontal[0], width - 2) + topRight + ResetColor());
+            else Write(SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + ResetColor());
 
             // Draw sides and content area
             for (int i = 1; i < height - 1; i++)
@@ -269,10 +256,8 @@ namespace Internal
                 if (y + i >= 0 && y + i < Console.WindowHeight)
                 {
                     SetCursorPosition(x, y + i);
-                    if (!isLinux)
-                        Write(SetForegroundColor(color.r, color.g, color.b) + doubleVertical + new string(' ', width - 2) + doubleVertical + ResetColor());
-                    else
-                        Write(SetForegroundColor(color.r, color.g, color.b) + vertical + new string(' ', width - 2) + vertical + ResetColor());
+                    if (!isLinux) Write(SetForegroundColor(color.r, color.g, color.b) + doubleVertical + new string(' ', width - 2) + doubleVertical + ResetColor());
+                    else Write(SetForegroundColor(color.r, color.g, color.b) + vertical + new string(' ', width - 2) + vertical + ResetColor());
                 }
             }
 
@@ -280,10 +265,8 @@ namespace Internal
             if (y + height - 1 >= 0 && y + height - 1 < Console.WindowHeight)
             {
                 SetCursorPosition(x, y + height - 1);
-                if (!isLinux)
-                    Write(SetForegroundColor(color.r, color.g, color.b) + bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight + ResetColor());
-                else
-                    Write(SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + ResetColor());
+                if (!isLinux) Write(SetForegroundColor(color.r, color.g, color.b) + bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight + ResetColor());
+                else Write(SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + ResetColor());
             }
 
             // Write the decorated title in the middle of the top of the box if not empty or whitespace
@@ -371,10 +354,7 @@ namespace Internal
             int startY = y - height / 2;
 
             // Safety check - don't draw if text would be outside console bounds
-            if (startX + 1 < 0 || startY < 0 || startX + width >= Console.WindowWidth || startY + height >= Console.WindowHeight)
-            {
-                return;
-            }
+            if (startX + 1 < 0 || startY < 0 || startX + width >= Console.WindowWidth || startY + height >= Console.WindowHeight) return;
 
             for (int i = 0; i < lines.Length; i++)
             {

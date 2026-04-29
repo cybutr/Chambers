@@ -8,210 +8,94 @@ public partial class Map
 {
     public void DisplayMap(bool displayGUI = true)
     {
-        // Adjust padding based on GUI state
-        int effectiveLeftPadding = displayGUI ? leftPadding : 0;
-        int effectiveTopPadding = displayGUI ? topPadding : 2;
+        if (camera == null) InitializeCamera();
+        int lp = displayGUI ? leftPadding : 0;
+        int tp = displayGUI ? topPadding  : 2;
 
-        // Don't clear console, just move cursor to start position
-        GUI.SetCursorPosition(effectiveLeftPadding, effectiveTopPadding);
+        int actualVw = Math.Min(camera!.Width,  width  - camera.X);
+        int actualVh = Math.Min(camera!.Height, height - camera.Y);
 
-        for (int y = 0; y < height; y++)
+        if (displayGUI)
         {
-            // Set cursor position at start of each line
-            GUI.SetCursorPosition(effectiveLeftPadding, y + effectiveTopPadding);
-            
-            for (int x = 0; x < width; x++)
+            int fullW  = Console.WindowWidth;
+            int availH = Math.Max(0, Console.WindowHeight - GUIConfig.BottomPadding - topPadding);
+            if (actualVw * 2 < fullW)  lp += (fullW  - actualVw * 2) / 2;
+            if (actualVh     < availH) tp += (availH  - actualVh)     / 2;
+        }
+
+        _fb.Render(camera!, lp, tp, (wx, wy) =>
+        {
+            if (wx < 0 || wx >= width || wy < 0 || wy >= height) return null;
+            if (displayGUI)
             {
-                (int r, int g, int b) color = GetColor(mapData[x, y], x, y);
-                GUI.Write(GUI.SetBackgroundColor(color.r, color.g, color.b) + "  " + GUI.ResetColor());
+                int sx = wx - camera.X;
+                int sy = wy - camera.Y;
+                if (sx == 0 || sy == 0 || sx == actualVw - 1 || sy == actualVh - 1)
+                    return null;
             }
-        }
-        DisplayDarkenedTiles(displayGUI);
-        // Continue with overlay tile rendering...
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
-                {
-                    continue;
-                }
+            var color      = CompositeColor(wx, wy);
+            var entity     = overlayData[wx, wy];
+            bool showEntity = entity != EntityId.None && !IsTileUnderCloud(wx, wy);
+            if (showEntity)
+                return (color, (int)entity, GetSpeciesIcon(entity), GetOverlayColor(entity));
+            return (color, 0, "  ", null);
+        });
 
-                if (overlayData[x, y] != EntityId.None)
-                {
-                    GUI.SetCursorPosition(effectiveLeftPadding + x * 2, y + effectiveTopPadding);
-                    (int r, int g, int b) bgColor = GetDarkenedColor(x, y);
-                    (int r, int g, int b) fgColor = GetOverlayColor(overlayData[x, y]);
-                    string bg = GUI.SetBackgroundColor(bgColor.r, bgColor.g, bgColor.b);
-                    string fg = GUI.SetForegroundColor(fgColor.r, fgColor.g, fgColor.b);
-                    GUI.Write(bg + fg + GetSpeciesIcon(overlayData[x, y]) + GUI.ResetColor());
-                }
-            }
-        }
-        GUI.ResetColor();
-        //Update();
-        
-        // Only run animations and updates when simulation is active
-        if (Program.isUpdating)
+        if (displayGUI)
         {
-            AnimateWater(displayGUI);
-            DisplayCloudShadows(displayGUI);
-            if (isCloudsRendering) RenderClouds(displayGUI);
+            DrawViewportBorder(actualVw, actualVh, lp, tp);
+            DisplayGUI();
         }
-        else
-        {
-            // When paused, draw current state without updating
-            DrawCurrentDarkness(displayGUI);
-            DrawCurrentWaves(displayGUI);
-            DrawCurrentCloudShadows(displayGUI);
-            DrawCurrentClouds(displayGUI);
-        }
-
-        if (displayGUI) DisplayGUI();
     }
+
+    private void DrawViewportBorder(int vw, int vh, int lp, int tp)
+    {
+        var color = TileRegistry.Get(TileId.Border).BaseColor;
+        string block = SetBackgroundColor(color.r, color.g, color.b) + "  ";
+        string row = string.Concat(Enumerable.Repeat(block, vw)) + ResetColor();
+
+        SetCursorPosition(lp, tp);
+        Write(row);
+        SetCursorPosition(lp, tp + vh - 1);
+        Write(row);
+
+        string cell = block + ResetColor();
+        for (int sy = 1; sy < vh - 1; sy++)
+        {
+            SetCursorPosition(lp, tp + sy);
+            Write(cell);
+            SetCursorPosition(lp + (vw - 1) * 2, tp + sy);
+            Write(cell);
+        }
+    }
+
+    private (int r, int g, int b) CompositeColor(int wx, int wy)
+    {
+        var color = GetColor(mapData[wx, wy], wx, wy);
+        int darkness = darknessData[wx, wy];
+        if (darkness > 0) color = ColorSpectrum.DarkenColor(color, darkness);
+        double shadow = shadowData[wx, wy];
+        if (shadow > 0 && isCloudsShadowsRendering && !IsTileUnderCloud(wx, wy))
+            color = ColorSpectrum.DarkenColor(color, (int)(shadowIntensityFactor * shadow));
+        double waveI = waveIntensityData[wx, wy];
+        if (waveI > 0)
+        {
+            var waveColor = GetColor(TileId.Ocean, wx, wy);
+            if (darkness > 0) waveColor = ColorSpectrum.DarkenColor(waveColor, darkness);
+            if (shadow > 0 && isCloudsShadowsRendering && !IsTileUnderCloud(wx, wy))
+                waveColor = ColorSpectrum.DarkenColor(waveColor, (int)(shadowIntensityFactor * shadow));
+            color = ColorSpectrum.BlendColor(color, waveColor, waveI);
+        }
+        if (isCloudsRendering)
+        {
+            (int cloudX, int cloudY) = MapDataCordsToCloudData(wx, wy);
+            if (IsInCloudBounds(cloudX, cloudY) && cloudData[cloudX, cloudY] != CloudType.None && !IsThereBorderTile(wx, wy))
+                color = GetCloudColor(cloudX, cloudY);
+        }
+        return color;
+    }
+
     #region display functions
-    private (int r, int g, int b) GetOceanColor(double avgTemp, double avgHumidity)
-    {
-        if (avgTemp > 0.7)
-        {
-            // Warm climate ocean
-            return (64, 164, 223); // Caribbean Blue
-        }
-        else if (avgTemp < 0.3)
-        {
-            // Cold climate ocean
-            return (25, 25, 112); // Midnight Blue
-        }
-        else
-        {
-            // Temperate climate ocean
-            return (70, 130, 180); // Steel Blue
-        }
-    }
-    public bool HasMapChanged()
-    {
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                if (mapData[x, y] != previousMapData[x, y])
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-    public bool HasTileChanged(int x, int y)
-    {
-        return mapData[x, y] != previousMapData[x, y];
-    }
-    public bool HasOverlayTileChanged(int x, int y)
-    {
-        return overlayData[x, y] != previousOverlayData[x, y];
-    }
-    public void UpdatePreviousMapData()
-    {
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                previousMapData[x, y] = mapData[x, y];
-                previousOverlayData[x, y] = overlayData[x, y];
-            }
-        }
-    }
-    public void UpdatePreviousOverlayData()
-    {
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                previousOverlayData[x, y] = overlayData[x, y];
-            }
-        }
-    }
-    public void UpdateTile(int x, int y, bool displayGUI = true)
-    {
-        int effectiveLeftPadding = displayGUI ? leftPadding : 0;
-        int effectiveTopPadding = displayGUI ? topPadding : 2;
-        GUI.SetCursorPosition(effectiveLeftPadding + x * 2, y + effectiveTopPadding);
-        (int r, int g, int b) bgColor = GetColor(mapData[x, y], x, y); // Retrieve background color from ColorSpectrum
-        string background = GUI.SetBackgroundColor(bgColor.r, bgColor.g, bgColor.b);
-        GUI.Write(background + "  " + GUI.ResetColor());
-    }
-    public void UpdateOverlayTile(int x, int y, bool displayGUI = true)
-    {
-        int effectiveLeftPadding = displayGUI ? leftPadding : 0;
-        int effectiveTopPadding = displayGUI ? topPadding : 2;
-        // Prevent overlay data from being displayed on the edges
-        if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
-        {
-            return;
-        }
-        UpdateTile(x, y, displayGUI);
-
-        bool isNight = false;
-        bool isDarkening = false;
-        if (GetDarkenedTileIntensity(x, y) > 10)
-        {
-            isDarkening = true;
-        }
-        if (GetDarkenedTileIntensity(x, y) > 45)
-        {
-            isNight = true;
-            isDarkening = false;
-        }
-        else if (GetDarkenedTileIntensity(x, y) < 5)
-        {
-            isNight = false;
-        }
-        (int r, int g, int b) bgColor = GetColor(mapData[x, y], x, y); // Background color based on current chamber's mapData
-        (int r, int g, int b) fgColor = GetOverlayColor(overlayData[x, y]); // Foreground color based on current chamber's overlayData
-        int darkenedIntensity = isDarkening ? (int)Math.Round(GetDarkenedTileIntensity(x, y)) : 0;
-        // Apply shadow if the tile is under a cloud shadow
-        if (currentShadowPositions.TryGetValue((x, y), out double shadowIntensity) && isCloudsShadowsRendering)
-        {
-            int shadowFactor = (int)(shadowIntensityFactor * shadowIntensity); // Adjust shadow intensity as needed
-            bgColor = (
-                Math.Max(0, bgColor.r - shadowFactor),
-                Math.Max(0, bgColor.g - shadowFactor),
-                Math.Max(0, bgColor.b - shadowFactor)
-            );
-        }
-        if (isDarkening)
-        {
-            bgColor = (
-                Math.Max(0, bgColor.r - darkenedIntensity),
-                Math.Max(0, bgColor.g - darkenedIntensity),
-                Math.Max(0, bgColor.b - darkenedIntensity)
-            );
-        }
-        else if (isNight)
-        {
-            bgColor = (
-                Math.Max(0, bgColor.r - 50),
-                Math.Max(0, bgColor.g - 50),
-                Math.Max(0, bgColor.b - 50)
-            );
-        }
-
-        string background = GUI.SetBackgroundColor(bgColor.r, bgColor.g, bgColor.b);
-        string foreground = GUI.SetForegroundColor(fgColor.r, fgColor.g, fgColor.b);
-
-        if (!isCloudsRendering || (isCloudsRendering && !IsTileUnderCloud(x, y)))
-        {
-            // Write the background color first
-            GUI.SetCursorPosition(effectiveLeftPadding + x * 2, y + effectiveTopPadding);
-            GUI.Write(background + "  " + GUI.ResetColor());
-
-            // Write the overlay character with the correct background and foreground colors
-            GUI.SetCursorPosition(effectiveLeftPadding + x * 2, y + effectiveTopPadding);
-            GUI.Write(background + "  " + GUI.ResetColor());
-            GUI.SetCursorPosition(effectiveLeftPadding + x * 2, y + effectiveTopPadding);
-            GUI.Write(background + foreground + GetSpeciesIcon(overlayData[x, y]) + GUI.ResetColor());
-        }
-    }
     public string GetSpeciesIcon(EntityId species)
     {
         return species switch
@@ -223,35 +107,21 @@ public partial class Map
             _ => "  "
         };
     }
-    private bool IsThereAnOverlayTile(int x, int y)
-    {
-        return overlayData[x, y] != EntityId.None;
-    }
-    public void DisplayCharacterOnTile(int x, int y, char character, string characterColor, bool displayGUI = true)
-    {
-        int effectiveLeftPadding = displayGUI ? leftPadding : 0;
-        int effectiveTopPadding = displayGUI ? topPadding : 2;
-        // Move cursor to position
-        GUI.SetCursorPosition(effectiveLeftPadding + x * 2, y + effectiveTopPadding);
-
-        // Get RGB color based on characterColor using ColorSpectrum
-        (int r, int g, int b) rgb = GetRGBFromColorCode(characterColor);
-        string fg = GUI.SetForegroundColor(rgb.r, rgb.g, rgb.b);
-        GUI.Write(fg + character + GUI.ResetColor());
-    }
+    private bool IsThereAnOverlayTile(int x, int y) => overlayData[x, y] != EntityId.None;
+    private bool IsThereBorderTile(int x, int y) => mapData[x, y] == TileId.Border;
     public (int r, int g, int b) GetRGBFromColorCode(string colorCode)
     {
         return colorCode switch
         {
-            "red" => ColorSpectrum.RED,
-            "green" => ColorSpectrum.GREEN,
-            "blue" => ColorSpectrum.BLUE,
-            "yellow" => ColorSpectrum.YELLOW,
-            "cyan" => ColorSpectrum.CYAN,
+            "red"     => ColorSpectrum.RED,
+            "green"   => ColorSpectrum.GREEN,
+            "blue"    => ColorSpectrum.BLUE,
+            "yellow"  => ColorSpectrum.YELLOW,
+            "cyan"    => ColorSpectrum.CYAN,
             "magenta" => ColorSpectrum.MAGENTA,
-            "white" => ColorSpectrum.WHITE,
-            "black" => ColorSpectrum.BLACK,
-            _ => ColorSpectrum.WHITE
+            "white"   => ColorSpectrum.WHITE,
+            "black"   => ColorSpectrum.BLACK,
+            _         => ColorSpectrum.WHITE
         };
     }
     private (int r, int g, int b) GetColor(TileId tile, int x, int y)
@@ -288,22 +158,22 @@ public partial class Map
         {
             switch (temperatureData[x, y])
             {
-                case 1: rAdj -= 20; bAdj -= 20; break; // Very Cold
-                case 2: gAdj -=  5; bAdj -= 15; break; // Cold
-                case 3: gAdj +=  5; bAdj += 10; break; // Cool
-                case 4: rAdj +=  5; gAdj += 10; break; // Temperate
-                case 5: rAdj += 10; gAdj += 15; break; // Warm
+                case 1: rAdj -= 20; bAdj -= 20; break;
+                case 2: gAdj -=  5; bAdj -= 15; break;
+                case 3: gAdj +=  5; bAdj += 10; break;
+                case 4: rAdj +=  5; gAdj += 10; break;
+                case 5: rAdj += 10; gAdj += 15; break;
             }
         }
         if (conf.EnableHumidityBiomeChanges)
         {
             switch (humidityData[x, y])
             {
-                case 1: gAdj -= 15; bAdj -=  5; break; // Very Dry
-                case 2: gAdj -= 10;              break; // Dry
-                case 3:                           break; // Moderate
-                case 4: gAdj += 15; bAdj += 10; break; // Humid
-                case 5: gAdj += 20; bAdj +=  5; break; // Very Humid
+                case 1: gAdj -= 15; bAdj -=  5; break;
+                case 2: gAdj -= 10;              break;
+                case 3:                           break;
+                case 4: gAdj += 15; bAdj += 10; break;
+                case 5: gAdj += 20; bAdj +=  5; break;
             }
         }
         return (
@@ -329,36 +199,27 @@ public partial class Map
             _                 => ColorSpectrum.BLACK,
         };
     }
-
     #endregion
     #region temperature and humidity noise
     public void RenderTemperatureNoise()
     {
-        GUI.DrawGrid(width, height, leftPadding, topPadding, (x, y) => {
-            int tempValue = temperatureData[x, y];
-            return TemperatureZoneToColor(tempValue);
+        if (camera == null) InitializeCamera();
+        _fb.Render(camera!, leftPadding, topPadding, (wx, wy) =>
+        {
+            if (wx < 0 || wx >= width || wy < 0 || wy >= height) return null;
+            int v = temperatureData[wx, wy];
+            return (TemperatureZoneToColor(v), v, "  ", null);
         });
     }
     public void RenderHumidityNoise()
     {
-        GUI.DrawGrid(width, height, leftPadding, topPadding, (x, y) => {
-            int humidityValue = humidityData[x, y];
-            return HumidityZoneToColor(humidityValue);
+        if (camera == null) InitializeCamera();
+        _fb.Render(camera!, leftPadding, topPadding, (wx, wy) =>
+        {
+            if (wx < 0 || wx >= width || wy < 0 || wy >= height) return null;
+            int v = humidityData[wx, wy];
+            return (HumidityZoneToColor(v), v, "  ", null);
         });
-    }
-    private (int r, int g, int b) TemperatureToColor(double value)
-    {
-        int r = (int)(value * 255);
-        int g = 0;
-        int b = (int)((1 - value) * 255);
-        return (r, g, b);
-    }
-    private (int r, int g, int b) HumidityToColor(double value)
-    {
-        int r = 0;
-        int g = (int)(value * 255);
-        int b = (int)((1 - value) * 255);
-        return (r, g, b);
     }
     private (int r, int g, int b) TemperatureZoneToColor(int zone)
     {

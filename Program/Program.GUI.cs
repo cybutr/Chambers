@@ -20,21 +20,21 @@ partial class Program
  $%\
  ##$%}
  $%/";
-        static List<(int r, int g, int b)> colors = new List<(int r, int g, int b)>
-        {
+        static List<(int r, int g, int b)> colors =
+        [
             ColorSpectrum.ANTIQUE_WHITE,
             ColorSpectrum.BEIGE
-        };
+        ];
         public static void DrawSaveSelectionGUI()
         {
             GUI.Clear();
             var folderPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
             Directory.CreateDirectory(folderPath);
             GUI.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
-            GUI.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
-            string[] files = Directory.GetFiles(Path.Combine(Environment.CurrentDirectory, "Data/Saves"), "*.json")
-                .Select(f => Path.GetFileName(f))
-                .ToArray();
+            GUI.DisplayCenteredTextAtCords(Map.Title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
+            string[] files = [.. Directory.GetFiles(Path.Combine(Environment.CurrentDirectory, "Data/Saves"), "*.chmb")
+                .Concat(Directory.GetFiles(Path.Combine(Environment.CurrentDirectory, "Data/Saves"), "*.json"))
+                .Select(f => Path.GetFileName(f))];
 
             for (int i = 0; i < numberOfRows; i++)
             {
@@ -89,14 +89,8 @@ partial class Program
                     GUI.Write(GUI.SetForegroundColor(ColorSpectrum.LIGHT_GREEN.r, ColorSpectrum.LIGHT_GREEN.g, ColorSpectrum.LIGHT_GREEN.b) + selectLines[i] + GUI.ResetColor());
                 }
             }
-            if (typedLettersBuffer != null)
-            {
-                DisplayCustomLetters(index, typedLettersBuffer);
-            }
-            else if (slots[index].name != null)
-            {
-                DisplayCustomLetters(index, ConvertStringToList(slots[index].name ?? ""));
-            }
+            if (typedLettersBuffer != null) DisplayCustomLetters(index, typedLettersBuffer);
+            else if (slots[index].name != null) DisplayCustomLetters(index, ConvertStringToList(slots[index].name ?? ""));
             if (currentSelection == 5)
             {
                 for (int i = 0; i < 3; i++)
@@ -109,21 +103,15 @@ partial class Program
         }
         private static List<string> ConvertStringToList(string str)
         {
-            List<string> list = new List<string>();
+            List<string> list = [];
             foreach (char c in str)
             {
-                if (c == ' ')
-                {
-                    list.Add("Spacebar");
-                }
+                if (c == ' ') list.Add("Spacebar");
                 else if (char.IsDigit(c))
                 {
                     list.Add($"D{c}");
                 }
-                else
-                {
-                    list.Add(char.ToUpper(c).ToString());
-                }
+                else list.Add(char.ToUpper(c).ToString());
             }
             return list;
         }
@@ -134,7 +122,7 @@ partial class Program
             bool isTyping = false;
             bool isLoad = false;
             bool shouldMenu = true;
-            List<string> typedLettersBuffer = new List<string>();
+            List<string> typedLettersBuffer = [];
             string previousBuffer = "";
 
             void RedrawSaveUI(bool isSelected, int currentSelection, List<string>? typedLettersBuffer = null)
@@ -212,21 +200,19 @@ partial class Program
                                     }
                                 }
                                 // Only exit typing mode if the name contains non-space characters.
-                                if (!nonSpaceFound || string.IsNullOrWhiteSpace(name) || typedLettersBuffer.Count < 1)
-                                {
-                                    break;
-                                }
+                                if (!nonSpaceFound || string.IsNullOrWhiteSpace(name) || typedLettersBuffer.Count < 1) break;
                                 isTyping = false;
 
                                 // Ensure unique name to avoid conflicts
                                 var existingNames = slots.Where(s => s.name != null && s != slots[currentIndex])
-                                                         .Select(s => s.name!)
-                                                         .ToList();
+                                                        .Select(s => s.name!)
+                                                        .ToList();
                                 string uniqueName = GetUniqueChamberName(name, existingNames);
 
                                 // Get old file path
                                 string oldName = slots[currentIndex].name ?? "NEW CHAMBER";
-                                string oldPath = Path.Combine("Data/Saves", oldName + ".json");
+                                string oldExt = File.Exists(Path.Combine("Data/Saves", oldName + ".chmb")) ? ".chmb" : ".json";
+                                string oldPath = Path.Combine("Data/Saves", oldName + oldExt);
 
                                 // Use helper method to rename file and update config
                                 string? newFilePath = RenameChamberFile(oldPath, uniqueName, slots[currentIndex].chamber);
@@ -234,7 +220,7 @@ partial class Program
                                 // Update slot with the final unique name
                                 slots[currentIndex] = (slots[currentIndex].chamber, uniqueName, false, false, false);
 
-                                typedLettersBuffer = new List<string>();
+                                typedLettersBuffer = [];
                                 RedrawSaveUI(slots[currentIndex].isSelected, currentSection);
                                 break;
                             case ConsoleKey.Escape:
@@ -390,7 +376,9 @@ partial class Program
                             {
                                 if (!slots[currentIndex].isEmpty || slots[currentIndex].name != null)
                                 {
-                                    DeleteMap(Path.Combine(Environment.CurrentDirectory, "Saves", slots[currentIndex].name ?? "") + ".json");
+                                    string chmbDel = Path.Combine(Environment.CurrentDirectory, "Data/Saves", (slots[currentIndex].name ?? "") + ".chmb");
+                                    string jsonDel = Path.Combine(Environment.CurrentDirectory, "Data/Saves", (slots[currentIndex].name ?? "") + ".json");
+                                    DeleteMap(File.Exists(chmbDel) ? chmbDel : jsonDel);
                                     slots[currentIndex] = (new Map(), null, false, true, true);
                                     RedrawSaveUI(slots[currentIndex].isSelected, 1);
                                     RedrawSaveUI(slots[currentIndex].isSelected, 2);
@@ -398,10 +386,7 @@ partial class Program
                             }
                             else if (currentSection == 2)
                             {
-                                if (slots[currentIndex].chamber.seed == 0)
-                                {
-                                    slots[currentIndex] = AddNewChamber(slots[currentIndex]);
-                                }
+                                if (slots[currentIndex].chamber.seed == 0) slots[currentIndex] = AddNewChamber(slots[currentIndex]);
                                 else
                                 {
                                     var slot = slots[currentIndex];
@@ -430,10 +415,7 @@ partial class Program
             int y = terminalCentre.y - menuHeight / 2 + heightOffset + 9 + currentIndex * 5 + 1;
 
             // Safety check - don't draw if position would be outside console bounds
-            if (x < 0 || y < 0 || x >= Console.WindowWidth || y >= Console.WindowHeight)
-            {
-                return;
-            }
+            if (x < 0 || y < 0 || x >= Console.WindowWidth || y >= Console.WindowHeight) return;
 
             int currentX = x;
 
@@ -476,123 +458,71 @@ partial class Program
         }
         public static string GetLetter(string letter)
         {
-            switch (letter)
-            {
-                case "A":
-                    return Characters.A;
-                case "B":
-                    return Characters.B;
-                case "C":
-                    return Characters.C;
-                case "D":
-                    return Characters.D;
-                case "E":
-                    return Characters.E;
-                case "F":
-                    return Characters.F;
-                case "G":
-                    return Characters.G;
-                case "H":
-                    return Characters.H;
-                case "I":
-                    return Characters.I;
-                case "J":
-                    return Characters.J;
-                case "K":
-                    return Characters.K;
-                case "L":
-                    return Characters.L;
-                case "M":
-                    return Characters.M;
-                case "N":
-                    return Characters.N;
-                case "O":
-                    return Characters.O;
-                case "P":
-                    return Characters.P;
-                case "Q":
-                    return Characters.Q;
-                case "R":
-                    return Characters.R;
-                case "S":
-                    return Characters.S;
-                case "T":
-                    return Characters.T;
-                case "U":
-                    return Characters.U;
-                case "V":
-                    return Characters.V;
-                case "W":
-                    return Characters.W;
-                case "X":
-                    return Characters.X;
-                case "Y":
-                    return Characters.Y;
-                case "Z":
-                    return Characters.Z;
-                case "D0":
-                    return Characters.Zero;
-                case "D1":
-                    return Characters.One;
-                case "D2":
-                    return Characters.Two;
-                case "D3":
-                    return Characters.Three;
-                case "D4":
-                    return Characters.Four;
-                case "D5":
-                    return Characters.Five;
-                case "D6":
-                    return Characters.Six;
-                case "D7":
-                    return Characters.Seven;
-                case "D8":
-                    return Characters.Eight;
-                case "D9":
-                    return Characters.Nine;
-                default:
-                    return Characters.Unknown;
-            }
-        }
+        return letter switch
+        {
+            "A" => Characters.A,
+            "B" => Characters.B,
+            "C" => Characters.C,
+            "D" => Characters.D,
+            "E" => Characters.E,
+            "F" => Characters.F,
+            "G" => Characters.G,
+            "H" => Characters.H,
+            "I" => Characters.I,
+            "J" => Characters.J,
+            "K" => Characters.K,
+            "L" => Characters.L,
+            "M" => Characters.M,
+            "N" => Characters.N,
+            "O" => Characters.O,
+            "P" => Characters.P,
+            "Q" => Characters.Q,
+            "R" => Characters.R,
+            "S" => Characters.S,
+            "T" => Characters.T,
+            "U" => Characters.U,
+            "V" => Characters.V,
+            "W" => Characters.W,
+            "X" => Characters.X,
+            "Y" => Characters.Y,
+            "Z" => Characters.Z,
+            "D0" => Characters.Zero,
+            "D1" => Characters.One,
+            "D2" => Characters.Two,
+            "D3" => Characters.Three,
+            "D4" => Characters.Four,
+            "D5" => Characters.Five,
+            "D6" => Characters.Six,
+            "D7" => Characters.Seven,
+            "D8" => Characters.Eight,
+            "D9" => Characters.Nine,
+            _ => Characters.Unknown,
+        };
+    }
         public static string ConvertConsoleKeyToLetter(string key)
         {
-            switch (key)
-            {
-                case "Spacebar":
-                    return " ";
-                case "D0":
-                    return "0";
-                case "D1":
-                    return "1";
-                case "D2":
-                    return "2";
-                case "D3":
-                    return "3";
-                case "D4":
-                    return "4";
-                case "D5":
-                    return "5";
-                case "D6":
-                    return "6";
-                case "D7":
-                    return "7";
-                case "D8":
-                    return "8";
-                case "D9":
-                    return "9";
-                default:
-                    return key;
-            }
-        }
+        return key switch
+        {
+            "Spacebar" => " ",
+            "D0" => "0",
+            "D1" => "1",
+            "D2" => "2",
+            "D3" => "3",
+            "D4" => "4",
+            "D5" => "5",
+            "D6" => "6",
+            "D7" => "7",
+            "D8" => "8",
+            "D9" => "9",
+            _ => key,
+        };
+    }
         public static int GetTypedLettersListLenght(List<string> list)
         {
             int length = 0;
             foreach (var letter in list)
             {
-                if (letter == "Spacebar" || letter == " ")
-                {
-                    length += 4;
-                }
+                if (letter == "Spacebar" || letter == " ") length += 4;
                 else
                 {
                     string letterRepresentation = GetLetter(letter);
@@ -614,10 +544,7 @@ partial class Program
         public static void DrawSelectableBox(int x, int y, int width, int height, bool isSelected, bool isFullySelected, (int r, int g, int b) color)
         {
             // Safety check - ensure box fits within console bounds
-            if (x < 0 || y < 0 || x + width > Console.WindowWidth || y + height > Console.WindowHeight)
-            {
-                return; // Don't draw if box would be outside console bounds
-            }
+            if (x < 0 || y < 0 || x + width > Console.WindowWidth || y + height > Console.WindowHeight) return; // Don't draw if box would be outside console bounds
 
             // Define box drawing characters
             string topLeft = "╔";
@@ -644,8 +571,7 @@ partial class Program
             GUI.SetCursorPosition(x, y);
             if (!isLinux)
                 GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + topLeft + new string(doubleHorizontal[0], width - 2) + topRight + GUI.ResetColor());
-            else
-                GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + GUI.ResetColor());
+            else GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + GUI.ResetColor());
 
             // Draw sides and content area
             for (int i = 1; i < height - 1; i++)
@@ -677,12 +603,10 @@ partial class Program
             GUI.SetCursorPosition(x, y + height - 1);
             if (!isLinux)
                 GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + bottomLeft + new string(doubleHorizontal[0], width - 2) + bottomRight + GUI.ResetColor());
-            else
-                GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + GUI.ResetColor());
+            else GUI.Write(background + GUI.SetForegroundColor(color.r, color.g, color.b) + corner + new string(horizontal[0], width - 2) + corner + GUI.ResetColor());
 
             // Reset background color
-            if (isSelected)
-                GUI.Write(GUI.ResetColor());
+            if (isSelected) GUI.Write(GUI.ResetColor());
         }
         public static (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) AddNewChamber((Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) chamber)
         {
@@ -690,11 +614,7 @@ partial class Program
 
             // Only get config if not already configured (for testing purposes)
             bool shouldSave;
-            if (chamber.chamber.conf.ShouldSave == false && chamber.chamber.conf.Name != "NEW CHAMBER")
-            {
-                // Already configured for testing - skip config dialog
-                shouldSave = false;
-            }
+            if (chamber.chamber.conf.ShouldSave == false && chamber.chamber.conf.Name != "NEW CHAMBER") shouldSave = false;
             else
             {
                 isConfiguring = chamber.chamber.GetConfig();
@@ -706,17 +626,14 @@ partial class Program
             // Use the name that was already set (which should already be unique from the typing logic)
             // Only apply uniqueness logic if no name was set
             string finalName;
-            if (!string.IsNullOrWhiteSpace(chamber.name))
-            {
-                // Name was already set during typing - use it as-is (it should already be unique)
-                finalName = chamber.name;
-            }
+            if (!string.IsNullOrWhiteSpace(chamber.name)) finalName = chamber.name;
             else
             {
                 // No name was set, use default and make it unique
                 string baseName = "NEW CHAMBER";
                 var savePath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
-                var existingNames = Directory.GetFiles(savePath, "*.json")
+                var existingNames = Directory.GetFiles(savePath, "*.chmb")
+                                            .Concat(Directory.GetFiles(savePath, "*.json"))
                                             .Select(Path.GetFileNameWithoutExtension)
                                             .Where(name => name != null)
                                             .Cast<string>()
@@ -732,7 +649,7 @@ partial class Program
             (Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty) newSlot = shouldSave ? (chamber.chamber, chamber.name, chamber.isSelected, chamber.isTyping, false) : (new Map(), null, false, true, true);
             GUI.Clear();
             GUI.DrawColoredBox(terminalCentre.x - menuWidth / 2, terminalCentre.y - menuHeight / 2 + heightOffset, menuWidth, 10, "", ColorSpectrum.LIGHT_CYAN);
-            GUI.DisplayCenteredTextAtCords(Map.title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
+            GUI.DisplayCenteredTextAtCords(Map.Title, terminalCentre.x, terminalCentre.y - menuHeight / 2 + heightOffset + 5, ColorSpectrum.CYAN);
             for (int i = 0; i < numberOfRows; i++)
             {
                 int index = colors.Count > i ? i : i % colors.Count;
@@ -745,12 +662,11 @@ partial class Program
         {
             isConfiguring = false;
             isMenu = false;
-            foreach (var slot in slots)
+            foreach (var (chamber, _, isSelected, _, _) in slots)
             {
-                if (slot.isSelected)
-                {
-                    chambers.Add(slot.chamber);
-                }
+                if (!isSelected) continue;
+                chamber.InvalidateFramebuffer();
+                chambers.Add(chamber);
             }
         }
         #endregion

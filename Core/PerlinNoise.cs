@@ -86,15 +86,9 @@ public static class Perlin
         return (y1 + 1) / 2; // Normalize to 0.0 - 1.0
     }
 
-    private static double Fade(double t)
-    {
-        return t * t * t * (t * (t * 6 - 15) + 10);
-    }
+    private static double Fade(double t) => t * t * t * (t * (t * 6 - 15) + 10);
 
-    private static double Lerp(double a, double b, double t)
-    {
-        return a + t * (b - a);
-    }
+    private static double Lerp(double a, double b, double t) => a + t * (b - a);
 
     private static double Grad(int hash, double x, double y)
     {
@@ -137,8 +131,7 @@ public static class Perlin
                     frequency *= lacunarity;
                 }
                 
-                if (noiseHeight > maxNoiseHeight)
-                    maxNoiseHeight = noiseHeight;
+                if (noiseHeight > maxNoiseHeight) maxNoiseHeight = noiseHeight;
                 
                 noiseMap[x, y] = noiseHeight;
             }
@@ -218,13 +211,7 @@ public static class Perlin
         return 70.0 * (n0 + n1 + n2);
     }
     
-    private static int FastFloor(double x)
-    {
-        return x > 0 ? (int)x : (int)x - 1;
-    }
+    private static int FastFloor(double x) => x > 0 ? (int)x : (int)x - 1;
     
-    private static double Dot(int[] g, double x, double y)
-    {
-        return g[0] * x + g[1] * y;
-    }
+    private static double Dot(int[] g, double x, double y) => g[0] * x + g[1] * y;
 }

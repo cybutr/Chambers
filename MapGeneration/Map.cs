@@ -2,20 +2,22 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json.Serialization;
 using Internal;
 using static Internal.GUI;
 public partial class Map
 {
     private static bool isLinux { get; set; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-    public static List<string> outputBuffer { get; set; } = new List<string>();
-    public List<string> actualOutputBuffer { get; set; } = new List<string>();
-    public static List<string> eventBuffer { get; set; } = new List<string>();
+    public static List<string> outputBuffer { get; set; } = [];
+    public List<string> actualOutputBuffer { get; set; } = [];
+    public static List<string> eventBuffer { get; set; } = [];
     public int cloudShadowOffsetX { get; set; }
     public int cloudShadowOffsetY { get; set; }            
-    private double sunriseTime { get; set; }
-    private double sunsetTime { get; set; }
-    public double time { get; set; }
+    public DayNightCycle dayNight { get; set; } = new();
+    public int DayCount { get => dayNight.DayCount; set => dayNight.DayCount = value; }
+    public double time { get => dayNight.TimeOfDay; set => dayNight.TimeOfDay = value; }
+    public GradientDirection CurrentGradientDirection { get => dayNight.CurrentGradientDirection; set => dayNight.CurrentGradientDirection = value; }
     public bool isCloudsRendering { get; set; }
     public bool isCloudsShadowsRendering { get; set; }
     public bool shouldSimulationContinue { get; set; } = true;
@@ -30,9 +32,25 @@ public partial class Map
     public TileId[,] mapData { get; set; }
     public EntityId[,] overlayData { get; set; }
     public CloudType[,] cloudData { get; set; }
-    [JsonIgnore] public EntityId[,] previousOverlayData { get; set; }
-    [JsonIgnore] public TileId[,] previousMapData { get; set; }
-    [JsonIgnore] public CloudType[,] previousCloudData { get; set; }
+    [JsonIgnore] public int[,] darknessData { get; set; }
+    [JsonIgnore] public double[,] shadowData { get; set; }
+    [JsonIgnore] public double[,] waveIntensityData { get; set; }
+    public void ReinitializeTransientData()
+    {
+        darknessData      = new int[width, height];
+        shadowData        = new double[width, height];
+        waveIntensityData = new double[width, height];
+    }
+    [JsonIgnore] private Framebuffer _fb { get; set; } = new();
+    [JsonIgnore] public GuiBuffer _guiBuf { get; set; } = new();
+    [JsonIgnore] public ulong tick { get; set; }
+    [JsonIgnore] private double _cloudAccumX { get; set; }
+    [JsonIgnore] private double _cloudAccumY { get; set; }
+    [JsonIgnore] private CloudType[,] _cloudDataSwap { get; set; }
+    [JsonIgnore] private int[,] _cloudDepthSwap { get; set; }
+    [JsonIgnore] private int[,] _radarCache { get; set; } = new int[0, 0];
+    [JsonIgnore] private ulong _radarCacheTick { get; set; }
+    public Camera? camera { get; set; }
     public int[,] cloudDepthData { get; set; }
     public double[,] precipitationData { get; set; }
     public double[,] previousPrecipitationData { get; set; }
@@ -50,7 +68,7 @@ public partial class Map
     public int rightPadding { get; set; }
     public int seed { get; set; } = 0;
     public Config conf { get; set; }
-    private static int numberOfWaves { get; set; }
+    private int numberOfWaves { get; set; }
     public int SavedConsoleWidth { get; set; }
     public int SavedConsoleHeight { get; set; }
 
@@ -74,8 +92,8 @@ public partial class Map
             safeHeight = 25;
         }
         
-        var _r = new Random();
-        conf = new Config(safeWidth, safeHeight, 10.0, Math.Round(_r.Next() * ((_r.NextDouble() - 0.5) * 2)).ToString());
+        Random r = new();
+        conf = new Config(safeWidth, safeHeight, 10.0, Math.Round(r.Next() * ((r.NextDouble() - 0.5) * 2)).ToString());
         rng = new Random(seed);
         topPadding = GUIConfig.TopPadding;
         bottomPadding = GUIConfig.BottomPadding;
@@ -92,18 +110,18 @@ public partial class Map
         
         // Create arrays with safety checks
         mapData = new TileId[width, height];
-        previousMapData = new TileId[width, height];
         overlayData = new EntityId[width, height];
-        previousOverlayData = new EntityId[width, height];
         cloudData = new CloudType[cloudDataWidth, cloudDataHeight];
-        previousCloudData = new CloudType[cloudDataWidth, cloudDataHeight];
         cloudDepthData = new int[cloudDataWidth, cloudDataHeight];
+        _cloudDataSwap = new CloudType[cloudDataWidth, cloudDataHeight];
+        _cloudDepthSwap = new int[cloudDataWidth, cloudDataHeight];
+        darknessData = new int[width, height];
+        shadowData = new double[width, height];
+        waveIntensityData = new double[width, height];
         precipitationData = new double[cloudDataWidth, cloudDataHeight];
         previousPrecipitationData = new double[cloudDataWidth, cloudDataHeight];
         temperatureData = new int[width, height];
         humidityData = new int[width, height];
-        cloudIsNight = new bool[width, height];
-        cloudIsDarkening = new bool[width, height];
         noise = new double[width, height];
         tempatureNoise = new double[width, height];
         humidityNoise = new double[width, height];
@@ -119,6 +137,8 @@ public partial class Map
         humidityNoise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 12, rng.Next());
         if (debug) HandleDebugGen();
         else HandleGen();
+        InitializeCamera();
+        InitializeFramebuffer();
     }
     public void HandleGen()
     {
@@ -152,79 +172,79 @@ public partial class Map
     public void HandleDebugGen()
     {
         SetAvarageTempatureHumidity();
-        GUI.WriteLine(1);
+        WriteLine(1);
         AssignTempAndHumData();
-        GUI.WriteLine(2);
+        WriteLine(2);
         SmoothOutTempatureHumidity();
-        GUI.WriteLine(3);
+        WriteLine(3);
         AssignBiomes(noise);
-        GUI.WriteLine(4);
+        WriteLine(4);
         EnsureMinimumBiomeSize();
-        GUI.WriteLine(5);
+        WriteLine(5);
         ReplaceBiome(TileId.Mountain, TileId.Plains);
-        GUI.WriteLine(6);
+        WriteLine(6);
         if (conf.EnableMountainRanges) CreateMountains();
-        GUI.WriteLine(7);
+        WriteLine(7);
         if (conf.EnableRivers) CreateRiver();
-        GUI.WriteLine(8);
+        WriteLine(8);
         if (conf.EnableLakes) CreateLakes();
-        GUI.WriteLine(9);
+        WriteLine(9);
         CreateComplexFrame();
-        GUI.WriteLine(10);
+        WriteLine(10);
         SingleTileCheckPF(TileId.Plains, TileId.Forest, 2);
-        GUI.WriteLine(11);
+        WriteLine(11);
         CreateBeaches();
-        GUI.WriteLine(12);
+        WriteLine(12);
         //CreateStreams();
         WaterDepth();
-        GUI.WriteLine(13);
+        WriteLine(13);
         FrameMap(TileId.Border);
-        GUI.WriteLine(14);
+        WriteLine(14);
         RemoveSeperatedOceanTiles();
         if (conf.GenerateAnimals)
         {
             InitializeSpecies(3, 6, new Crab(0, 0, seed));
-            GUI.WriteLine(15);
+            WriteLine(15);
             InitializeSpecies(2, 4, new Turtle(0, 0, seed));
-            GUI.WriteLine(16);
+            WriteLine(16);
             InitializeCows(1, 2, 2, 4);
-            GUI.WriteLine(17);
+            WriteLine(17);
             InitializeSheeps(1, 2, 1, 3);
-            GUI.WriteLine(18);
+            WriteLine(18);
         }
         if (conf.DisplayWaves) InitializeWaves();
-        GUI.WriteLine(19);
+        WriteLine(19);
         if (conf.DoWeatherCycle) InitializeWeather();
-        GUI.WriteLine(20);
+        WriteLine(20);
         if (conf.DoWeatherCycle) InitializeClouds();
     }
     public void HandleTestGen()
     {
         seed = new Random().Next();
         rng = new Random(seed);
-        //noise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale, rng.Next());
+        noise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale, rng.Next());
         //tempatureNoise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 25, rng.Next());
         //humidityNoise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 12, rng.Next());
         avarageHumidity = 0.5f;
         avarageTempature = 0.5f;
-        if (debug) GUI.WriteLine("1");
-        GeneratePlainsOnly();
-        if (debug) GUI.WriteLine("2");
-        //AssignBiomes(noise);
-        //ReplaceBiome('M', 'P');
-        //EnsureMinimumBiomeSize();
-        //SingleTileCheckPF('F', 'P', 3);
+        if (debug) WriteLine("1");
+        //GeneratePlainsOnly();
+        if (debug) WriteLine("2");
+        AssignBiomes(noise);
+        ReplaceBiome(TileId.Mountain, TileId.Plains);
+        EnsureMinimumBiomeSize();
+        SingleTileCheckPF(TileId.Forest, TileId.Plains, 3);
         CreateMountains();
-        if (debug) GUI.WriteLine("3");
+        if (debug) WriteLine("3");
         CreateLakes();
-        if (debug) GUI.WriteLine("4");
+        if (debug) WriteLine("4");
         WaterDepth();
-        if (debug) GUI.WriteLine("5");
+        if (debug) WriteLine("5");
         //FillCircle(GetMapCenter().Item1, GetMapCenter().Item2, 'M', 16, 20);
         FrameMap(TileId.Border);
-        if (debug) GUI.WriteLine("6");
+        if (debug) WriteLine("6");
         CreateStreams();
-        if (debug) GUI.WriteLine("7");
+        if (debug) WriteLine("7");
     }
     public void GeneratePlainsOnly()
     {
@@ -236,21 +256,11 @@ public partial class Map
                 overlayData[x, y] = EntityId.None; // No overlay
                 temperatureData[x, y] = 20; // Neutral temperature
                 humidityData[x, y] = 50; // Neutral humidity
-                cloudIsNight[x, y] = false;
-                cloudIsDarkening[x, y] = false;
 
                 // Neutral noise values
                 noise[x, y] = 0.5;
                 tempatureNoise[x, y] = 0.5;
                 humidityNoise[x, y] = 0.5;
-            }
-        }
-        for (int x = 0; x < width; x++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                previousMapData[x, y] = TileId.Plains;
-                previousOverlayData[x, y] = EntityId.None;
             }
         }
     }
@@ -261,22 +271,10 @@ public partial class Map
         {
             for (int y = 0; y < height; y++)
             {
-                if (noise[x, y] < conf.ForestHeightThreshold)
-                {
-                    mapData[x, y] = TileId.Forest;
-                }
-                else if (noise[x, y] < conf.PlainsHeightThreshold)
-                {
-                    mapData[x, y] = TileId.Plains;
-                }
-                else if (noise[x, y] < conf.MountainHeightThreshold)
-                {
-                    mapData[x, y] = TileId.Mountain;
-                }
-                else
-                {
-                    mapData[x, y] = TileId.Empty;
-                }
+                if (noise[x, y] < conf.ForestHeightThreshold) mapData[x, y] = TileId.Forest;
+                else if (noise[x, y] < conf.PlainsHeightThreshold) mapData[x, y] = TileId.Plains;
+                else if (noise[x, y] < conf.MountainHeightThreshold) mapData[x, y] = TileId.Mountain;
+                else mapData[x, y] = TileId.Empty;
             }
         }
     }
@@ -292,16 +290,13 @@ public partial class Map
                 if (visited[x, y]) continue;
                 
                 TileId biomeType = mapData[x, y];
-                List<(int x, int y)> biomeRegion = new List<(int x, int y)>();
+                List<(int x, int y)> biomeRegion = [];
 
                 // Find all connected tiles of this biome type
                 FloodFillRegion(x, y, biomeType, visited, biomeRegion);
 
                 // If region is too small, expand it
-                if (biomeRegion.Count < minSize)
-                {
-                    ExpandSmallBiome(biomeRegion, biomeType);
-                }
+                if (biomeRegion.Count < minSize) ExpandSmallBiome(biomeRegion, biomeType);
             }
         }
     }
@@ -328,16 +323,14 @@ public partial class Map
     }
     private TileId GetMostSurroundedBiome(int x, int y)
     {
-        Dictionary<TileId, int> biomeCounts = new Dictionary<TileId, int>();
+        Dictionary<TileId, int> biomeCounts = new();
         foreach ((int nx, int ny) in GetNeighbors(x, y))
         {
             if (nx >= 0 && nx < width && ny >= 0 && ny < height)
             {
                 TileId neighborBiome = mapData[nx, ny];
-                if (biomeCounts.ContainsKey(neighborBiome))
-                    biomeCounts[neighborBiome]++;
-                else
-                    biomeCounts[neighborBiome] = 1;
+                if (biomeCounts.ContainsKey(neighborBiome)) biomeCounts[neighborBiome]++;
+                else biomeCounts[neighborBiome] = 1;
             }
         }
 
@@ -352,14 +345,13 @@ public partial class Map
     public void Update()
     {
         UpdateWeather();
-        UpdateGradientDirection(weather.TimeOfDay);
-        UpdateCloudProperties();
-        if (conf.EnableAnimalMovement) 
+        dayNight.UpdateGradientDirection();
+        if (conf.EnableAnimalMovement)
         {
-            UpdateCrabs();
-            UpdateTurtles();
-            UpdateCows();
-            UpdateSheeps();
+            UpdateSpecies(crabs);
+            UpdateSpecies(turtles);
+            UpdateSpecies(cows);
+            UpdateSpecies(sheeps);
         }
     }
 }

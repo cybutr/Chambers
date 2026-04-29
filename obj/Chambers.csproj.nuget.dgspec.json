@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "/home/chedda/csharp/Chambers/Chambers.csproj": {}
+    "/home/czeddaru/csharp/Chambers/Chambers.csproj": {}
   },
   "projects": {
-    "/home/chedda/csharp/Chambers/Chambers.csproj": {
+    "/home/czeddaru/csharp/Chambers/Chambers.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/chedda/csharp/Chambers/Chambers.csproj",
+        "projectUniqueName": "/home/czeddaru/csharp/Chambers/Chambers.csproj",
         "projectName": "Chambers",
-        "projectPath": "/home/chedda/csharp/Chambers/Chambers.csproj",
-        "packagesPath": "/home/chedda/.nuget/packages/",
-        "outputPath": "/home/chedda/csharp/Chambers/obj/",
+        "projectPath": "/home/czeddaru/csharp/Chambers/Chambers.csproj",
+        "packagesPath": "/home/czeddaru/.nuget/packages/",
+        "outputPath": "/home/czeddaru/csharp/Chambers/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "/home/chedda/.nuget/NuGet/NuGet.Config"
+          "/home/czeddaru/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net10.0"
@@ -57,7 +57,7 @@
           "downloadDependencies": [
             {
               "name": "Microsoft.AspNetCore.App.Ref",
-              "version": "[10.0.3, 10.0.3]"
+              "version": "[10.0.4, 10.0.4]"
             }
           ],
           "frameworkReferences": {
@@ -65,7 +65,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/10.0.103/PortableRuntimeIdentifierGraph.json",
+          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/10.0.104/PortableRuntimeIdentifierGraph.json",
           "packagesToPrune": {
             "Microsoft.CSharp": "(,4.7.32767]",
             "Microsoft.VisualBasic": "(,10.4.32767]",
