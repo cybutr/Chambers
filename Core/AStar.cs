@@ -189,8 +189,8 @@ public class AStar
 
         // Check 8 directions: up, down, left, right, and 4 diagonals
         // Order: N, S, W, E, NW, NE, SW, SE
-        int[] dx = { 0, 0, -1, 1, -1, 1, -1, 1 };
-        int[] dy = { -1, 1, 0, 0, -1, -1, 1, 1 };
+        int[] dx = [0, 0, -1, 1, -1, 1, -1, 1];
+        int[] dy = [-1, 1, 0, 0, -1, -1, 1, 1];
 
         for (int i = 0; i < 8; i++)
         {
@@ -240,8 +240,8 @@ public class AStar
             }
         }
 
-        int[] dx = { 0, 0, -1, 1 };
-        int[] dy = { -1, 1, 0, 0 };
+        int[] dx = [0, 0, -1, 1];
+        int[] dy = [-1, 1, 0, 0];
 
         while (queue.Count > 0)
         {
@@ -408,8 +408,8 @@ public class AStar
     private int CountNeighborsOfType(PathNode node, TileId terrainType, PathNode[,] nodeGrid)
     {
         int count = 0;
-        int[] dx = { 0, 0, -1, 1 };
-        int[] dy = { -1, 1, 0, 0 };
+        int[] dx = [0, 0, -1, 1];
+        int[] dy = [-1, 1, 0, 0];
         
         for (int i = 0; i < 4; i++)
         {
@@ -483,7 +483,7 @@ public class AStar
 
     public static TerrainConfig CreateAnimalConfig(string animalType)
     {
-        TerrainConfig config = new TerrainConfig();
+        TerrainConfig config = new();
 
         switch (animalType.ToLower())
         {
@@ -530,7 +530,7 @@ public class AStar
 
     public static TerrainConfig CreatePathStyle(string styleName)
     {
-        TerrainConfig config = new TerrainConfig();
+        TerrainConfig config = new();
 
         switch (styleName.ToLower())
         {

@@ -398,7 +398,7 @@ public partial class Map
     }
     private void FillCircle(int x, int y, TileId tile, int minRadius, int maxRadius)
     {
-        Random rng = new Random(seed);
+        Random rng = new(seed);
         int radius = rng.Next(minRadius, maxRadius + 1);
 
         for (int i = -radius; i <= radius; i++)

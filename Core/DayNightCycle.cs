@@ -9,6 +9,9 @@ public class DayNightCycle
     public int DayCount { get; set; }
     public GradientDirection CurrentGradientDirection { get; set; } = GradientDirection.TL_BR;
 
+    private double _prevTimeOfDay = -1;
+    private int _lastSeason = -1;
+
     public static readonly double EquinoxSunrise        = 6.0;
     public static readonly double EquinoxSunset         = 18.0;
     public static readonly double SummerSolsticeSunrise = 5.0;
@@ -18,16 +21,30 @@ public class DayNightCycle
 
     public void Advance(double deltaTime)
     {
+        _prevTimeOfDay = TimeOfDay;
         TimeOfDay += deltaTime * 24.0 / 720.0;
         if (TimeOfDay >= 24.0)
         {
             TimeOfDay -= 24.0;
             DayCount++;
+            EventBus.Emit(new DayStartedEvent(DayCount, Season));
         }
+
         int daysPerSeason = 10;
+        int prevSeason = (int)Season;
         Season += deltaTime / (daysPerSeason * 720.0);
         if (Season >= 4.0) Season -= 4.0;
+        int currentSeason = (int)Season;
+        if (_lastSeason >= 0 && currentSeason != prevSeason)
+            EventBus.Emit(new SeasonChangedEvent(currentSeason));
+        _lastSeason = currentSeason;
+
         UpdateSunTimes();
+
+        if (_prevTimeOfDay >= 0 && _prevTimeOfDay < SunriseTime && TimeOfDay >= SunriseTime)
+            EventBus.Emit(new SunriseEvent(DayCount));
+        if (_prevTimeOfDay >= 0 && _prevTimeOfDay < SunsetTime && TimeOfDay >= SunsetTime)
+            EventBus.Emit(new SunsetEvent(DayCount));
     }
 
     public void UpdateSunTimes()

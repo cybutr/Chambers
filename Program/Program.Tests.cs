@@ -389,7 +389,7 @@ partial class Program
 
             var testConfig = new Config(mapW, mapH, 10.0, "CAMTEST") { Name = "CAMERA_TEST" };
 
-            Map testChamber = new Map();
+            Map testChamber = new();
             testChamber.conf   = testConfig;
             testChamber.width  = mapW;
             testChamber.height = mapH;
@@ -483,7 +483,7 @@ partial class Program
             testConfig.Name = "TEST_CHAMBER";
 
             // Create test chamber with proper initialization
-            Map testChamber = new Map();
+            Map testChamber = new();
 
             // Set the config first, then reinitialize arrays with correct dimensions
             testChamber.conf = testConfig;
@@ -562,5 +562,14 @@ partial class Program
 
             GUI.Clear();
             GUI.WriteLine("Testing mode ended.");
+        }
+
+        public static void TestErrorBox()
+        {
+            EnableVirtualTerminalProcessing();
+            GUI.SetCursorVisible(false);
+            ShowErrorBox("Index was outside the bounds of the array.");
+            Console.ReadKey(true);
+            GUI.Clear();
         }
 }

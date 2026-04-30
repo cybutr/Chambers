@@ -18,10 +18,10 @@ partial class Program
 {
     #region map
     //public static int seed = DateTime.Now.Millisecond;
-    private static readonly Random _seedRng = new Random();
+    private static readonly Random _seedRng = new();
     public static string seedString = Math.Round(_seedRng.Next() * ((_seedRng.NextDouble() - 0.5) * 2)).ToString();
     public static int seed = ConvertStringToNumbers(seedString);
-    public Random rng = new Random(seed);
+    public Random rng = new(seed);
     public static List<Map> chambers = [];
     public static List<Map> allChambers = [];
     public static int currentChamberIndex;
@@ -39,7 +39,7 @@ partial class Program
     static KeybindRegistry keybinds = new();
     #endregion
     private static bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-    private static readonly object mapLock = new object();
+    private static readonly object mapLock = new();
     private static int _lastConsoleW = 0;
     private static int _lastConsoleH = 0;
     private static volatile bool _renderPending;
@@ -48,7 +48,7 @@ partial class Program
     public static List<string> outputBuffer = [];
     public static List<string> eventBuffer = [];
     public static List<(Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty)> slots = [];
-    public static Config config = new Config(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding,
+    public static Config config = new(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding,
     10.0, seedString);
     public static bool displayGUI = true;
     static Thread updateThread = null!;
@@ -100,6 +100,11 @@ partial class Program
             TestGUILayout();
             return;
         }
+        else if (args.Length > 0 && args[0] == "--test-error-box")
+        {
+            TestErrorBox();
+            return;
+        }
         EnableVirtualTerminalProcessing();
         RequestMinimumTerminalResize();
         _lastConsoleW = Console.WindowWidth;
@@ -121,10 +126,8 @@ partial class Program
         {
             if (Console.WindowHeight < 55 || Console.WindowWidth < 100)
             {
-                GUI.WriteLine("Note: Console window is smaller than recommended (100x60). Some UI elements may not display properly.");
-                GUI.WriteLine("Current size: {0}x{1}", Console.WindowWidth, Console.WindowHeight);
-                GUI.WriteLine("Press Enter to exit...");
-                Console.ReadLine();
+                ShowErrorBox($"Terminal too small. Minimum 100x55, current {Console.WindowWidth}x{Console.WindowHeight}.");
+                Console.ReadKey(true);
                 return;
             }
         }
@@ -147,9 +150,9 @@ partial class Program
             else slots.Add((new Map(), null, false, false, true));
         }
         // Main Loop
-        Program programInstance = new Program();
-        Random globalRandom = new Random(seed);
-        Map chamber1 = new Map();
+        Program programInstance = new();
+        Random globalRandom = new(seed);
+        Map chamber1 = new();
         GUI.Clear();
         DrawSaveSelectionGUI();
         GUI.Clear();
@@ -158,9 +161,14 @@ partial class Program
         GUI.Write(GUI.ResetColor());
 
         programInstance.RegisterKeybinds();
+        programInstance.RegisterAllCommands();
 
         // Start the map update thread
-        updateThread = new Thread(() => programInstance.UpdateMaps());
+        updateThread = new Thread(() =>
+        {
+            try { programInstance.UpdateMaps(); }
+            catch (Exception ex) { ShowErrorBox(ex.Message); Console.ReadKey(true); continueSimulating = false; }
+        });
         updateThread.Start();
 
         // Start the key listener thread
@@ -168,11 +176,19 @@ partial class Program
         keyListenerThread.Start();
 
         // Start the weather system thread
-        weatherThread = new Thread(() => programInstance.UpdateWeather());
+        weatherThread = new Thread(() =>
+        {
+            try { programInstance.UpdateWeather(); }
+            catch (Exception ex) { ShowErrorBox(ex.Message); Console.ReadKey(true); continueSimulating = false; }
+        });
         weatherThread.Start();
 
         // Start the GUI update thread
-        guiThread = new Thread(() => programInstance.UpdateGUI());
+        guiThread = new Thread(() =>
+        {
+            try { programInstance.UpdateGUI(); }
+            catch (Exception ex) { ShowErrorBox(ex.Message); Console.ReadKey(true); continueSimulating = false; }
+        });
         guiThread.Start();
         while (continueSimulating)
         {
@@ -183,7 +199,7 @@ partial class Program
                     GUI.Write(GUI.ResetColor()); // Reset color before reading commands
                     GUI.SetCursorPosition(0, chamber1.height + GUIConfig.TopPadding + 2);
                     GUI.Write(">> "); // Prompt for input
-                    string? command = ReadCommandWithAutocomplete(); // Read input
+                    string? command = programInstance.ReadCommandWithAutocomplete(); // Read input
                     if (command != null && !string.IsNullOrWhiteSpace(command))
                     {
                         if (command.ToLower() == "exit")
@@ -299,20 +315,6 @@ partial class Program
         }
     }
     #endregion
-    public static readonly List<string> Commands = new List<string>
-            {
-                "help",
-                "exit",
-                "addchamber",
-                "removechamber",
-                "regenerate",
-                "chamber",
-                "run",
-                "seed",
-                "avaragetemp",
-                "avaragehum",
-                "menu"
-            };
     public static int sleepTime = 100;
     public static double SimulationSpeed = 5.0;
     public int maxSleepTime = 3000;
@@ -448,24 +450,18 @@ partial class Program
             IsHumidityRendering = !IsHumidityRendering;
         });
         keybinds.Bind(InputContext.World, ConsoleKey.H, ConsoleModifiers.Shift, "ToggleHumLayer");
-        keybinds.RegisterCommand("PanUp", () => { if (!isCommandInputMode) PanCamera(0, -3); });
+        keybinds.RegisterCommand("PanUp", () => { if (!isCommandInputMode && (!IsTemperatureRendering || !IsHumidityRendering)) PanCamera(0, -3); });
         keybinds.Bind(InputContext.World, ConsoleKey.W, "PanUp");
-        keybinds.RegisterCommand("PanLeft", () => { if (!isCommandInputMode) PanCamera(-5, 0); });
+        keybinds.RegisterCommand("PanLeft", () => { if (!isCommandInputMode && (!IsTemperatureRendering || !IsHumidityRendering)) PanCamera(-5, 0); });
         keybinds.Bind(InputContext.World, ConsoleKey.A, "PanLeft");
-        keybinds.RegisterCommand("PanDown", () => { if (!isCommandInputMode) PanCamera(0,  3); });
+        keybinds.RegisterCommand("PanDown", () => { if (!isCommandInputMode && (!IsTemperatureRendering || !IsHumidityRendering)) PanCamera(0,  3); });
         keybinds.Bind(InputContext.World, ConsoleKey.S, "PanDown");
-        keybinds.RegisterCommand("PanRight", () => { if (!isCommandInputMode) PanCamera(5,  0); });
+        keybinds.RegisterCommand("PanRight", () => { if (!isCommandInputMode && (!IsTemperatureRendering || !IsHumidityRendering)) PanCamera(5,  0); });
         keybinds.Bind(InputContext.World, ConsoleKey.D, "PanRight");
         
         string bindsPath = "Data/Config/keybinds.json";
-        if (System.IO.File.Exists(bindsPath))
-        {
-            keybinds.LoadFromFile(bindsPath);
-        }
-        else
-        {
-            keybinds.SaveToFile(bindsPath);
-        }
+        if (File.Exists(bindsPath)) keybinds.LoadFromFile(bindsPath);
+        else keybinds.SaveToFile(bindsPath);
     }
     private void UpdateMaps()
         {
@@ -600,9 +596,9 @@ partial class Program
             map.DisplayMap(displayGUI);
             if (displayGUI) map._guiBuf.Flush();
         }
-        private static string? ReadCommandWithAutocomplete()
+        private string? ReadCommandWithAutocomplete()
         {
-            StringBuilder input = new StringBuilder();
+            StringBuilder input = new();
             int cursorPosition = 0;
 
             while (true)
@@ -623,7 +619,7 @@ partial class Program
                 else if (keyInfo.Key == ConsoleKey.Tab)
                 {
                     string prefix = input.ToString();
-                    string? suggestion = Commands.FirstOrDefault(cmd => cmd.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                    string? suggestion = commandRegistry.GetSuggestion(prefix);
                     if (suggestion != null)
                     {
                         // Clear the current input
@@ -641,143 +637,6 @@ partial class Program
                     GUI.Write(keyInfo.KeyChar);
                 }
             }
-        }
-        public bool ProcessCommand(string command)
-        {
-            string[] tokens = command.Split(' ');
-            switch (tokens[0])
-            {
-                case "menu":
-                    isMenu = true;
-                    isCloudsRendering = false;
-                    isCloudsShadowsRendering = false;
-                    IsTemperatureRendering = false;
-                    IsHumidityRendering = false;
-                    isUpdating = false;
-                    chambers.Clear();
-                    GUI.Clear();
-                    foreach (var slot in slots.Where(s => s.isSelected).ToList())
-                    {
-                        var updatedSlot = slot;
-                        updatedSlot.isSelected = false;
-                        slots[slots.IndexOf(slot)] = updatedSlot;
-                    }
-                    DrawSaveSelectionGUI();
-                    break;
-                case "chamber":
-                    if (tokens.Length > 1 && int.TryParse(tokens[1], out int chamberIndex))
-                    {
-                        chamberIndex--; // Adjust for 1-based index
-                        if (chamberIndex >= 0 && chamberIndex < chambers.Count) SwitchToChamber(chamberIndex);
-                        else outputBuffer.Add("Invalid chamber index");
-                    }
-                    else outputBuffer.Add("Please specify the chamber index");
-                    break;
-                case "exit":
-                    return false;
-                case "addchamber":
-                    if (tokens.Length > 1 && int.TryParse(tokens[1], out int numberOfChambers))
-                    {
-                        for (int i = 0; i < numberOfChambers; i++) AddChamber();
-                    }
-                    else AddChamber();
-                    break;
-                case "removechamber":
-                    if (tokens.Length > 1 && int.TryParse(tokens[1], out chamberIndex))
-                    {
-                        chamberIndex--; // Adjust for 1-based index
-                        if (chamberIndex >= 0 && chamberIndex < chambers.Count)
-                        {
-                            chambers.RemoveAt(chamberIndex);
-                            outputBuffer.Add($"Removed chamber {chamberIndex + 1}");
-                            if (chamberIndex == currentChamberIndex)
-                            {
-                                int newIndex = Math.Max(0, chamberIndex - 1);
-                                if (chambers.Count > 0) SwitchToChamber(newIndex);
-                                else currentChamberIndex = 0;
-                            }
-                            else if (chamberIndex < currentChamberIndex) currentChamberIndex--;
-                        }
-                        else outputBuffer.Add("Invalid chamber index");
-                    }
-                    else outputBuffer.Add("Please specify the chamber index to remove");
-                    break;
-                case "regenerate":
-                    if (tokens.Length > 1 && int.TryParse(tokens[1], out chamberIndex))
-                    {
-                        chamberIndex--; // Adjust for 1-based index
-                        if (chamberIndex >= 0 && chamberIndex < chambers.Count)
-                        {
-                            chambers[chamberIndex].Generate();
-                            outputBuffer.Add($"Regenerated chamber {chamberIndex + 1}");
-                        }
-                        else outputBuffer.Add("Invalid chamber index");
-                    }
-                    else outputBuffer.Add("Please specify the chamber index to regenerate");
-                    break;
-                case "run":
-                    if (tokens.Length > 1)
-                    {
-                        // Extract method name and parameters
-                        string fullCommand = string.Join(" ", tokens.Skip(1));
-                        int methodStart = fullCommand.IndexOf('(');
-                        string methodName = methodStart == -1 ? fullCommand : fullCommand.Substring(0, methodStart).Trim();
-
-                        // Parse parameters if they exist
-                        object[] parameters = [];
-                        if (methodStart != -1)
-                        {
-                            int methodEnd = fullCommand.LastIndexOf(')');
-                            if (methodEnd != -1)
-                            {
-                                string paramString = fullCommand.Substring(methodStart + 1, methodEnd - methodStart - 1);
-                                parameters = paramString.Split(',')
-                                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                                    .Select(p => Convert.ChangeType(p.Trim(), typeof(int)))
-                                    .ToArray();
-                            }
-                        }
-
-                        try
-                        {
-                            // Get method info with exact parameter count match
-                            var method = typeof(Program).GetMethod(methodName,
-                            BindingFlags.Public |
-                            BindingFlags.NonPublic |
-                            BindingFlags.Instance,
-                            null,
-                            CallingConventions.Any,
-                            parameters.Select(p => p.GetType()).ToArray(),
-                            null);
-
-                            if (method != null) method.Invoke(this, parameters);
-                            else
-                            {
-                                outputBuffer.Add($"Method '{methodName}' not found");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            outputBuffer.Add($"Error executing method '{methodName}': {ex.Message}");
-                        }
-                    }
-                    else outputBuffer.Add("Please specify the method to run");
-                    break;
-                case "seed":
-                    outputBuffer.Add($"Current seed: {chambers[currentChamberIndex].conf.Seed}");
-                    break;
-                case "avaragetemp":
-                    outputBuffer.Add($"Average temperature: {Math.Round(chambers[currentChamberIndex].avarageTempature, 2)}");
-                    break;
-                case "avaragehum":
-                    outputBuffer.Add($"Average humidity: {Math.Round(chambers[currentChamberIndex].avarageHumidity, 2)}");
-                    break;
-                default:
-                    outputBuffer.Add($"Unknown command: {tokens[0]}");
-                    break;
-            }
-            chambers[currentChamberIndex].DisplayMap(displayGUI);
-            return true;
         }
         public static string GetCommand()
         {
@@ -799,7 +658,7 @@ partial class Program
         {
             isConfiguring = true;
             seed = rng.Next();
-            Map newChamber = new Map(); 
+            Map newChamber = new(); 
             isConfiguring = newChamber.GetConfig();
             DisplayCenteredText(loadingAsciiArt);
             newChamber.Generate();

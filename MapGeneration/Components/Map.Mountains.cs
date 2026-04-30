@@ -303,7 +303,7 @@ public partial class Map
             }
         }
 
-        return newForests.ToList();
+        return [.. newForests];
     }
     private List<(int, int)> FillObscureForests(List<(int, int)> forestPositions)
     {
@@ -363,7 +363,7 @@ public partial class Map
             if (!addedAny) break;
         }
 
-        return newForests.ToList();
+        return [.. newForests];
     }
     private List<(int, int)> CarveOutMountainForests(List<(int, int)> forestPositions)
     {
@@ -380,7 +380,7 @@ public partial class Map
             }
         }
 
-        return removedForests.ToList();
+        return [.. removedForests];
     }
     private void RemoveObscureMountains()
     {

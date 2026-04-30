@@ -12,6 +12,31 @@ public partial class Map
     public List<Cow> cows {get; set;} = [];
     public List<Sheep> sheeps {get; set;} = [];
 
+    private Action<SunriseEvent>? _onSunrise;
+    private Action<SunsetEvent>? _onSunset;
+
+    public void SubscribeSpeciesEvents()
+    {
+        if (_onSunrise != null) EventBus.Unsubscribe(_onSunrise);
+        if (_onSunset  != null) EventBus.Unsubscribe(_onSunset);
+        _onSunrise = _ => SyncNightState(false);
+        _onSunset  = _ => SyncNightState(true);
+        EventBus.Subscribe(_onSunrise);
+        EventBus.Subscribe(_onSunset);
+        SyncNightState(dayNight.TimeOfDay < dayNight.SunriseTime || dayNight.TimeOfDay > dayNight.SunsetTime);
+    }
+
+    private void SyncNightState(bool isNight)
+    {
+        double rise = dayNight.SunriseTime, set = dayNight.SunsetTime;
+        foreach (Species e in crabs.Cast<Species>().Concat(turtles).Concat(cows).Concat(sheeps))
+        {
+            e.isNight = isNight;
+            e.sunriseTime = rise;
+            e.sunsetTime = set;
+        }
+    }
+
     public void InitializeSpecies(int minSpecies, int maxSpecies, Species species)
     {
         var allowedTiles = species.allowedTiles;
@@ -35,7 +60,7 @@ public partial class Map
                 try
                 {
                     (int x, int y) = GetRandomPointInAllowedTiles(allowedTiles);
-                    Crab crab = new Crab(x, y, rng.Next());
+                    Crab crab = new(x, y, rng.Next());
                     crabs.Add(crab);
                     overlayData[x, y] = EntityId.Crab;
                 }
@@ -53,7 +78,7 @@ public partial class Map
                 try
                 {
                     (int x, int y) = GetRandomPointInAllowedTiles(allowedTiles);
-                    Turtle turtle = new Turtle(x, y, rng.Next());
+                    Turtle turtle = new(x, y, rng.Next());
                     turtles.Add(turtle);
                     overlayData[x, y] = EntityId.Turtle;
                 }
@@ -128,7 +153,6 @@ public partial class Map
     {
         foreach (T animal in species)
         {
-            animal.SetTime(dayNight.TimeOfDay, dayNight.SunriseTime, dayNight.SunsetTime);
             int oldX = animal.X, oldY = animal.Y;
             animal.Behave(mapData, overlayData);
             if (overlayData[animal.X, animal.Y] != EntityId.None)

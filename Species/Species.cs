@@ -346,7 +346,6 @@ public class Sheep : Species
 
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData)
     {
-        if (rng.NextDouble() > 0.8 && !isHunted) isNight = time > sunsetTime || time < sunriseTime;
         if (rng.NextDouble() > 0.7 && !isHunted && !isNight) MoveInGroups(mapData, overlayData, EntityId.Cow, EntityId.Sheep);
         SearchForFood();
         if (isAggressive) Attack();
@@ -368,7 +367,6 @@ public class Cow : Species
 
     public override void Behave(TileId[,] mapData, EntityId[,] overlayData)
     {
-        if (rng.NextDouble() > 0.8 && !isHunted) isNight = time > sunsetTime || time < sunriseTime;
         if (rng.NextDouble() > 0.7 && !isHunted && !isNight) MoveInGroups(mapData, overlayData, EntityId.Cow, EntityId.Cow);
         SearchForFood();
         if (isAggressive) Attack();

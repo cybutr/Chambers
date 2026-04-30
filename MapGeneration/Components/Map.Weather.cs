@@ -42,10 +42,12 @@ public partial class Map
 
         if (ShouldChangeWeather())
         {
+            var previous = weather.CurrentWeather;
             weather.CurrentWeather = weather.NextWeather;
             weather.NextWeather = GetSeasonWeatherType();
             weather.IntensityTarget = rng.NextDouble();
             InitializeMinTimeBetweenChanges();
+            EventBus.Emit(new WeatherChangedEvent(previous, weather.CurrentWeather));
         }
 
         weather.Temperature = GetTemperature(dayNight.Season, dayNight.TimeOfDay, weather.CurrentWeather, avarageTempature);
@@ -53,8 +55,6 @@ public partial class Map
         weather.Pressure = GetPressure();
         UpdateWind();
         UpdateCloudShadows();
-        UpdateTime();
-        UpdateSeason();
     }
     public double TimeSinceLastWeatherChange {get; set;} = 0.0;
     public double MinTimeBetweenChanges {get; set;}

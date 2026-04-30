@@ -875,6 +875,8 @@ public partial class Map
     }
     public void DisplayMapConfig()
     {
+        HeightOffset = Math.Max(0, (Console.WindowHeight - (10 + GamerulesHeight + StructuresHeight + BottomHeight)) / 6);
+        TerminalCentre = (Console.WindowWidth / 2, Console.WindowHeight / 2);
         Clear();
         (int r, int g, int b) tColor = ColorSpectrum.CYAN;
         DrawColoredBox(TerminalCentre.x - ConfigWidth / 2, TerminalCentre.y - ConfigHeight / 2 + HeightOffset, ConfigWidth, 10, "", ColorSpectrum.LIGHT_CYAN); // Title

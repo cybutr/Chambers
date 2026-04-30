@@ -28,9 +28,7 @@ public partial class Map
         // Check console size
         if (consoleWidth < config.MinConsoleWidth || consoleHeight < config.MinConsoleHeight)
         {
-            Clear();
-            SetCursorPosition(0, 0);
-            Write("Please resize the console window to a larger size.");
+            Program.ShowErrorBox($"Terminal too small. Minimum {config.MinConsoleWidth}x{config.MinConsoleHeight}, current {consoleWidth}x{consoleHeight}.");
             shouldSimulationContinue = false;
             return;
         }
@@ -67,10 +65,7 @@ public partial class Map
         }
         else
         {
-            // Display message if the console is too small
-            Clear();
-            SetCursorPosition(0, 0);
-            Write("Please resize the console window to a larger size.");
+            Program.ShowErrorBox($"Terminal too small. Minimum {config.MinConsoleWidth}x{config.MinConsoleHeight}, current {consoleWidth}x{consoleHeight}.");
             shouldSimulationContinue = false;
         }
         if (rightMargin >= 20)

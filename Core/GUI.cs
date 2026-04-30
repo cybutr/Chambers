@@ -4,7 +4,7 @@ namespace Internal
 {
     public static class GUI
     {
-        private static readonly object _consoleLock = new object();
+        private static readonly object _consoleLock = new();
         internal static object ConsoleLock => _consoleLock;
         private static readonly bool _isLinux = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux);
 
@@ -345,7 +345,7 @@ namespace Internal
 
         public static void DisplayCenteredTextAtCords(string text, int x, int y, (int r, int g, int b) color)
         {
-            string[] lines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            string[] lines = text.Split(["\r\n", "\r", "\n"], StringSplitOptions.None);
             int maxLineWidth = lines.Max(l => l.Length);
             int width = maxLineWidth + 2;
             int height = lines.Length + 2;

@@ -96,7 +96,7 @@ public partial class Map
         CloudType[,] tempCloudData = (CloudType[,])cloudData.Clone();
         List<(int startX, int startY, int endX, int endY)> regions = GetCloudRegions();
         object lockObj = new();
-        Random localRng = new Random(seed);
+        Random localRng = new(seed);
 
         // Precompute cloud sizes
 
@@ -780,19 +780,14 @@ public partial class Map
             }
         }
     }
-    [System.Text.Json.Serialization.JsonIgnore] private double timeOfDay {get; set;}
-    [System.Text.Json.Serialization.JsonIgnore] private double season {get; set;}
-    private void UpdateTime() => timeOfDay = dayNight.TimeOfDay;
-    private void UpdateSeason() => season = dayNight.Season;
     private void UpdateCloudShadows()
     {
         // Calculate base shadow offset based on time of day
-        double angle = ((timeOfDay - 6.0) / 24.0) * 2 * Math.PI; // Shift timeOfDay by 6 hours
+        double angle = ((dayNight.TimeOfDay - 6.0) / 24.0) * 2 * Math.PI; // Shift dayNight.TimeOfDay by 6 hours
         int baseOffsetX = (int)(-Math.Cos(angle) * 12); // Invert cosine for desired shadow offset
         int baseOffsetY = Math.Abs((int)(Math.Sin(angle) * 12)); // Ensure y offset is always positive
 
-        // Apply seasonal variation
-        double seasonalVariation = Math.Sin((season / 4.0) * 2 * Math.PI) * 2; // Adjust the multiplier as needed
+        double seasonalVariation = Math.Sin((dayNight.Season / 4.0) * 2 * Math.PI) * 2;
         baseOffsetX += (int)seasonalVariation;
 
         // Ensure the shadow is always on a higher y-coordinate than the cloud itself
@@ -811,14 +806,14 @@ public partial class Map
         double adjustedSunriseTime = dayNight.SunriseTime + 2.0;
         double adjustedSunsetTime  = dayNight.SunsetTime  - 1.0;
 
-        if (timeOfDay < adjustedSunriseTime || timeOfDay > adjustedSunsetTime) return 0.0;
+        if (dayNight.TimeOfDay < adjustedSunriseTime || dayNight.TimeOfDay > adjustedSunsetTime) return 0.0;
 
         double noonTime = (adjustedSunriseTime + adjustedSunsetTime) / 2.0;
         double morningDuration = noonTime - adjustedSunriseTime;
         double eveningDuration = adjustedSunsetTime - noonTime;
 
-        if (timeOfDay <= noonTime) return peakShadowIntensity * (timeOfDay - adjustedSunriseTime) / morningDuration;
-        else return peakShadowIntensity * (adjustedSunsetTime - timeOfDay) / eveningDuration;
+        if (dayNight.TimeOfDay <= noonTime) return peakShadowIntensity * (dayNight.TimeOfDay - adjustedSunriseTime) / morningDuration;
+        else return peakShadowIntensity * (adjustedSunsetTime - dayNight.TimeOfDay) / eveningDuration;
     }
     private bool AreCloudCoordsInMapDataBounds(int x, int y) => x >= 0 && y >= 0 && x < width && y < height;
     #endregion
@@ -947,7 +942,7 @@ public partial class Map
     }
     private (int x, int y) FindValidCloudTargetPoint((int x, int y) startPoint, int minRadius, int maxRadius)
     {
-        Random rng = new Random(seed);
+        Random rng = new(seed);
         for (int attempts = 0; attempts < 100; attempts++)
         {
             int radius = rng.Next(minRadius, maxRadius + 1);

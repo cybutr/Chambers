@@ -27,6 +27,8 @@ partial class Program
         ];
         public static void DrawSaveSelectionGUI()
         {
+            terminalCentre = (Console.WindowWidth / 2, Console.WindowHeight / 2);
+            heightOffset = Math.Max(0, (Console.WindowHeight - (13 + (6 * numberOfRows))) / 4);
             GUI.Clear();
             var folderPath = Path.Combine(Environment.CurrentDirectory, "Data/Saves");
             Directory.CreateDirectory(folderPath);
@@ -668,6 +670,66 @@ partial class Program
                 chamber.InvalidateFramebuffer();
                 chambers.Add(chamber);
             }
+        }
+        #endregion
+
+        #region error box
+        public static void ShowErrorBox(string reason)
+        {
+            bool isLinux = Environment.OSVersion.Platform is PlatformID.Unix or PlatformID.MacOSX;
+            string[] errorLetters = ["E", "R", "R", "O", "R"];
+
+            int asciiW = 0;
+            foreach (var l in errorLetters)
+            {
+                var lines = GetLetter(l).Split('\n');
+                asciiW += lines.Max(ln => ln.Length) + 1;
+            }
+            asciiW -= 1;
+
+            int hPad   = 4;
+            int boxW   = asciiW + hPad * 2 + 2;
+            int topH   = 7;
+            int totalH = topH + 2;
+
+            int cx = Console.WindowWidth  / 2;
+            int cy = Console.WindowHeight / 2;
+            int bx = cx - boxW / 2;
+            int by = cy - totalH / 2;
+
+            var errorColor = ColorSpectrum.INDIAN_RED;
+            GUI.Clear();
+            GUI.DrawColoredBox(bx, by, boxW, totalH, "", errorColor);
+
+            int asciiX = bx + 1 + (boxW - 2 - asciiW) / 2;
+            int asciiY = by + 1;
+            int curX   = asciiX;
+            foreach (var l in errorLetters)
+            {
+                var lines = GetLetter(l).Split('\n');
+                int lw = lines.Max(ln => ln.Length);
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    if (curX >= 0 && asciiY + i >= 0 && curX < Console.WindowWidth && asciiY + i < Console.WindowHeight)
+                    {
+                        GUI.SetCursorPosition(curX, asciiY + i);
+                        GUI.Write(lines[i]);
+                    }
+                }
+                curX += lw + 1;
+            }
+
+            int divY = by + topH - 1;
+            if (divY >= 0 && divY < Console.WindowHeight)
+            {
+                GUI.SetCursorPosition(bx, divY);
+                string divLine = isLinux
+                    ? "+" + new string('-', boxW - 2) + "+"
+                    : "╠" + new string('═', boxW - 2) + "╣";
+                GUI.Write(GUI.SetForegroundColor(errorColor.r, errorColor.g, errorColor.b) + divLine + GUI.ResetColor());
+            }
+
+            GUI.DisplayCenteredTextAtCords(reason, cx, by + topH, errorColor);
         }
         #endregion
 }

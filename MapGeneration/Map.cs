@@ -40,6 +40,8 @@ public partial class Map
         darknessData      = new int[width, height];
         shadowData        = new double[width, height];
         waveIntensityData = new double[width, height];
+        _cloudDataSwap    = new CloudType[cloudDataWidth, cloudDataHeight];
+        _cloudDepthSwap   = new int[cloudDataWidth, cloudDataHeight];
     }
     [JsonIgnore] private Framebuffer _fb { get; set; } = new();
     [JsonIgnore] public GuiBuffer _guiBuf { get; set; } = new();
@@ -139,6 +141,8 @@ public partial class Map
         else HandleGen();
         InitializeCamera();
         InitializeFramebuffer();
+        SubscribeSpeciesEvents();
+        EventBus.Emit(new MapGeneratedEvent(seed, width, height));
     }
     public void HandleGen()
     {

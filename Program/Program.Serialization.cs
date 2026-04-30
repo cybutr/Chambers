@@ -711,6 +711,10 @@ partial class Program
         RegenerateNoise(map);
         map.ReinitializeTransientData();
         map.rng = new Random(map.seed);
+        map.topPadding    = GUIConfig.TopPadding;
+        map.bottomPadding = GUIConfig.BottomPadding;
+        map.leftPadding   = GUIConfig.LeftPadding;
+        map.rightPadding  = GUIConfig.RightPadding;
 
         return map;
     }
