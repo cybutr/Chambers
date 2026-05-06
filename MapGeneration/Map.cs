@@ -134,14 +134,50 @@ public partial class Map
         isCloudsShadowsRendering = conf.DisplayShadows;
         seed = Program.ConvertStringToNumbers(conf.Seed);
         rng = new Random(seed);
-        noise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale, rng.Next());
-        tempatureNoise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 25, rng.Next());
-        humidityNoise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 12, rng.Next());
-        if (debug) HandleDebugGen();
-        else HandleGen();
+
+        if (conf.GenType == 2)
+        {
+            GenerationContext ctx = new()
+            {
+                width           = width,
+                height          = height,
+                mapData         = new TileId[width, height],
+                elevation       = new double[width, height],
+                temperatureData = new int[width, height],
+                humidityData    = new int[width, height],
+                noise           = new double[width, height],
+                tempatureNoise  = new double[width, height],
+                humidityNoise   = new double[width, height],
+                rng             = rng,
+                conf            = conf,
+            };
+
+            GenerationPipeline pipeline = new();
+            pipeline.AddPass(new ElevationPass());
+            pipeline.AddPass(new ClimatePass());
+            pipeline.AddPass(new BiomePass());
+            pipeline.AddPass(new MountainPass());
+            pipeline.AddPass(new HydroPass());
+            pipeline.AddPass(new FeaturePass());
+            pipeline.AddPass(new FramePass());
+            pipeline.AddPass(new EntityPass());
+            pipeline.Run(ctx);
+
+            mapData         = ctx.mapData;
+            temperatureData = ctx.temperatureData;
+            humidityData    = ctx.humidityData;
+        }
+        else
+        {
+            noise          = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale, rng.Next());
+            tempatureNoise = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 25, rng.Next());
+            humidityNoise  = Perlin.GeneratePerlinNoise(width, height, conf.NoiseScale * 12, rng.Next());
+            if (debug) HandleDebugGen();
+            else HandleGen();
+        }
+
         InitializeCamera();
         InitializeFramebuffer();
-        SubscribeSpeciesEvents();
         EventBus.Emit(new MapGeneratedEvent(seed, width, height));
     }
     public void HandleGen()
@@ -163,12 +199,7 @@ public partial class Map
         FrameMap(TileId.Border);
         RemoveSeperatedOceanTiles();
         if (conf.GenerateAnimals)
-        {
-            InitializeSpecies(3, 6, new Crab(0, 0, seed));
-            InitializeSpecies(2, 4, new Turtle(0, 0, seed));
-            InitializeCows(1, 2, 2, 4);
-            InitializeSheeps(1, 2, 1, 3);
-        }
+            InitializeAllEntities();
         if (conf.DisplayWaves) InitializeWaves();
         if (conf.DoWeatherCycle) InitializeWeather();
         if (conf.DoWeatherCycle) InitializeClouds();
@@ -207,14 +238,8 @@ public partial class Map
         RemoveSeperatedOceanTiles();
         if (conf.GenerateAnimals)
         {
-            InitializeSpecies(3, 6, new Crab(0, 0, seed));
+            InitializeAllEntities();
             WriteLine(15);
-            InitializeSpecies(2, 4, new Turtle(0, 0, seed));
-            WriteLine(16);
-            InitializeCows(1, 2, 2, 4);
-            WriteLine(17);
-            InitializeSheeps(1, 2, 1, 3);
-            WriteLine(18);
         }
         if (conf.DisplayWaves) InitializeWaves();
         WriteLine(19);
@@ -351,11 +376,21 @@ public partial class Map
         UpdateWeather();
         dayNight.UpdateGradientDirection();
         if (conf.EnableAnimalMovement)
-        {
-            UpdateSpecies(crabs);
-            UpdateSpecies(turtles);
-            UpdateSpecies(cows);
-            UpdateSpecies(sheeps);
-        }
+            _species.UpdateAll(mapData, overlayData, BuildSimContext(), IsTileUnderCloud);
     }
+
+    private SimContext BuildSimContext() => new()
+    {
+        IsNight             = dayNight.TimeOfDay < dayNight.SunriseTime || dayNight.TimeOfDay > dayNight.SunsetTime,
+        Time                = dayNight.TimeOfDay,
+        SunriseTime         = dayNight.SunriseTime,
+        SunsetTime          = dayNight.SunsetTime,
+        Season              = (int)dayNight.Season,
+        FearMap             = _species.FearMap,
+        GetSpeciesAt        = _species.GetAt,
+        EnablePredators     = conf.EnablePredators,
+        EnableAnimalHunting = conf.EnableAnimalHunting,
+        EnableAnimalDeath   = conf.EnableAnimalDeath,
+        EnableAnimalBreeding = conf.EnableAnimalBreeding,
+    };
 }
