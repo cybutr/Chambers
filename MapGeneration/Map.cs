@@ -76,26 +76,20 @@ public partial class Map
 
     public Map()
     {
-        // Safe console dimension access with fallback values
-        int safeWidth, safeHeight;
         try
         {
-            int consoleWidth = Console.WindowWidth;
-            int consoleHeight = Console.WindowHeight;
-            safeWidth = Math.Max(1, consoleWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding);
-            safeHeight = Math.Max(1, consoleHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding);
-            SavedConsoleWidth = consoleWidth;
-            SavedConsoleHeight = consoleHeight;
+            SavedConsoleWidth  = Console.WindowWidth;
+            SavedConsoleHeight = Console.WindowHeight;
         }
         catch
         {
             // Fallback to reasonable defaults if console is not available
-            safeWidth = 80;
-            safeHeight = 25;
+            SavedConsoleWidth  = 80;
+            SavedConsoleHeight = 25;
         }
-        
+
         Random r = new();
-        conf = new Config(safeWidth, safeHeight, 10.0, Math.Round(r.Next() * ((r.NextDouble() - 0.5) * 2)).ToString());
+        conf = new Config(200, 100, 10.0, Math.Round(r.Next() * ((r.NextDouble() - 0.5) * 2)).ToString());
         rng = new Random(seed);
         topPadding = GUIConfig.TopPadding;
         bottomPadding = GUIConfig.BottomPadding;

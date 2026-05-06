@@ -48,8 +48,7 @@ partial class Program
     public static List<string> outputBuffer = [];
     public static List<string> eventBuffer = [];
     public static List<(Map chamber, string? name, bool isSelected, bool isTyping, bool isEmpty)> slots = [];
-    public static Config config = new(Console.WindowWidth / 2 - GUIConfig.LeftPadding - GUIConfig.RightPadding, Console.WindowHeight - GUIConfig.BottomPadding - GUIConfig.TopPadding,
-    10.0, seedString);
+    public static Config config = new(200, 100, 10.0, seedString);
     public static bool displayGUI = true;
     static Thread updateThread = null!;
     static Thread keyListenerThread = null!;
@@ -83,6 +82,16 @@ partial class Program
         else if (args.Length > 0 && args[0] == "--test-config")
         {
             TestConfigGUI();
+            return;
+        }
+        else if (args.Length > 0 && args[0] == "--test-colors")
+        {
+            TestColorDSL();
+            return;
+        }
+        else if (args.Length > 0 && args[0] == "--test-compare")
+        {
+            TestColorComparison();
             return;
         }
         else if (args.Length > 0 && args[0] == "--testing")
@@ -149,6 +158,7 @@ partial class Program
             }
             else slots.Add((new Map(), null, false, false, true));
         }
+
         // Main Loop
         Program programInstance = new();
         Random globalRandom = new(seed);
@@ -428,7 +438,7 @@ partial class Program
         keybinds.Bind(InputContext.World, [ConsoleKey.D0, ConsoleKey.NumPad0], "Jump9");
         keybinds.RegisterCommand("SpeedDown", () => SimulationSpeed = Math.Max(0.5,  SimulationSpeed - 0.5));
         keybinds.Bind(InputContext.World, ConsoleKey.PageDown, "SpeedDown");
-        keybinds.RegisterCommand("SpeedUp", () => SimulationSpeed = Math.Min(20.0, SimulationSpeed + 0.5));
+        keybinds.RegisterCommand("SpeedUp", () => SimulationSpeed = Math.Min(50.0, SimulationSpeed + 0.5));
         keybinds.Bind(InputContext.World, ConsoleKey.PageUp, "SpeedUp");
         keybinds.RegisterCommand("ToggleTempLayer", () =>
         {
@@ -666,7 +676,12 @@ partial class Program
             outputBuffer.Add("Added a new chamber");
         }
         #region run functions
-        public void SpawnMoreTurtles(int count) => chambers[currentChamberIndex].InitializeSpecies(count - 1, count, new Turtle(0, 0, seed));
+        public void SpawnMoreTurtles(int count)
+        {
+            var map = chambers[currentChamberIndex];
+            for (int i = 0; i < count; i++)
+                map._species.Spawn(EntityId.Turtle, map.rng.Next(0, map.width), map.rng.Next(0, map.height), map.rng.Next(), map.overlayData);
+        }
         public void SpawnCloud(int x, int y, CloudType type) => chambers[currentChamberIndex].SpawnCloud(x, y, type);
         #endregion
 }
