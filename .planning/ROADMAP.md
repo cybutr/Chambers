@@ -75,13 +75,18 @@ Plans:
 ### Phase 5: World Polish
 **Goal**: The generated world passes visual quality bar — beaches on coasts, snow on peaks, forests on moderate elevations, a clean border frame, and species seeded on valid terrain
 **Depends on**: Phase 4
-**Requirements**: FeaturePass implementation (v2 deferred), FramePass implementation (v2 deferred), EntityPass implementation (v2 deferred)
+**Requirements**: GEN-06-F, GEN-06-G, GEN-06-H
 **Success Criteria** (what must be TRUE):
   1. Beach tiles appear at land/water transitions — no land tile directly borders deep ocean without beach or shallow water
   2. Snow tiles appear at the tops of mountain ranges — not at sea level
   3. Border tiles form a clean unbroken frame around the world — no gaps or overwrites
   4. Species spawn on valid terrain (crabs on beaches, wolves in forests, fish in water) — no species on impassable or wrong-habitat tiles
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — FeaturePass: snow restoration, ocean shallow, beaches, beach dark (Wave 1)
+- [ ] 05-02-PLAN.md — FramePass: perimeter border stamp (Wave 2, depends on 05-01)
+- [ ] 05-03-PLAN.md — EntityPass + overlayData wiring: GenerationContext, Map.cs, entity seeding (Wave 2, depends on 05-01)
 
 ### Phase 6: Camera & World Size
 **Goal**: The camera scrolls over worlds larger than the console window — a 300x150 world renders correctly through a 120x40 viewport with camera panning
@@ -104,5 +109,5 @@ Plans:
 | 2. Elevation & Climate | 0/3 | Not started | - |
 | 3. Biome Assignment | 0/1 | Not started | - |
 | 4. Terrain Features | 0/0 | Not started | - |
-| 5. World Polish | 0/0 | Not started | - |
+| 5. World Polish | 0/3 | Not started | - |
 | 6. Camera & World Size | 0/0 | Not started | - |
