@@ -77,9 +77,8 @@ public class HydroPass : IGenerationPass
                 return;
             }
 
-            if (ctx.mapData[bestNx, bestNy] != TileId.Ocean && ctx.mapData[bestNx, bestNy] != TileId.Border)
-                ctx.mapData[bestNx, bestNy] = TileId.River;
-
+            if (ctx.mapData[bestNx, bestNy] == TileId.Ocean || ctx.mapData[bestNx, bestNy] == TileId.Border) break;
+            ctx.mapData[bestNx, bestNy] = TileId.River;
             cx = bestNx;
             cy = bestNy;
         }
@@ -100,7 +99,7 @@ public class HydroPass : IGenerationPass
         while (queue.Count > 0)
         {
             (int cx, int cy) = queue.Dequeue();
-            if (ctx.mapData[cx, cy] != TileId.Ocean && ctx.mapData[cx, cy] != TileId.Border)
+            if (ctx.mapData[cx, cy] != TileId.Ocean && ctx.mapData[cx, cy] != TileId.Border && ctx.mapData[cx, cy] != TileId.River)
                 ctx.mapData[cx, cy] = TileId.Lake;
 
             for (int i = 0; i < 4; i++)
