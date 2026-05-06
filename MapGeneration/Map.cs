@@ -160,6 +160,17 @@ public partial class Map
             mapData         = ctx.mapData;
             temperatureData = ctx.temperatureData;
             humidityData    = ctx.humidityData;
+
+            double tempSum = 0, humSum = 0;
+            for (int x = 0; x < width; x++)
+                for (int y = 0; y < height; y++)
+                {
+                    tempSum += temperatureData[x, y];
+                    humSum  += humidityData[x, y];
+                }
+            double tileCount = width * height;
+            avarageTempature = (tempSum / tileCount - 1.0) / 4.0;
+            avarageHumidity  = (humSum  / tileCount - 1.0) / 4.0;
         }
         else
         {
