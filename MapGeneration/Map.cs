@@ -168,7 +168,7 @@ public partial class Map
                     tempSum += temperatureData[x, y];
                     humSum  += humidityData[x, y];
                 }
-            double tileCount = width * height;
+            double tileCount = (double)width * height;
             avarageTempature = (tempSum / tileCount - 1.0) / 4.0;
             avarageHumidity  = (humSum  / tileCount - 1.0) / 4.0;
         }
