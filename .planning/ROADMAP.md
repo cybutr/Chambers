@@ -4,7 +4,7 @@
 
 - [ ] **Phase 1: Generator Pipeline Base** — Full infrastructure scaffold: folders, interfaces, context, pipeline runner, NoiseStack, pass stubs, Map.Generate() branch, camera decoupling
 - [ ] **Phase 2: Elevation & Climate** — Implement ElevationPass (multi-octave noise) and ClimatePass (latitude + coast distance)
-- [ ] **Phase 3: Biome Assignment** — Implement BiomePass with Whittaker-style (elevation, temperature, humidity) → TileId lookup
+- [x] **Phase 3: Biome Assignment** — Implement BiomePass with Whittaker-style (elevation, temperature, humidity) → TileId lookup (2026-05-06)
 - [ ] **Phase 4: Terrain Features** — Implement MountainPass (elevation peak detection) and HydroPass (gradient-following rivers, lakes, water depth)
 - [ ] **Phase 5: World Polish** — Implement FeaturePass (beaches, snow, forests, shallow water) and FramePass (coastline framing, border tiles) and EntityPass (species seeding on completed terrain)
 - [ ] **Phase 6: Camera & World Size** — Fully decouple world size from viewport; enable, test, and stabilize large worlds with scrolling camera
