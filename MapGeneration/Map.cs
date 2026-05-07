@@ -144,6 +144,7 @@ public partial class Map
                 humidityNoise   = new double[width, height],
                 rng             = rng,
                 conf            = conf,
+                overlayData     = new EntityId[width, height],
             };
 
             GenerationPipeline pipeline = new();
@@ -160,6 +161,7 @@ public partial class Map
             mapData         = ctx.mapData;
             temperatureData = ctx.temperatureData;
             humidityData    = ctx.humidityData;
+            overlayData     = ctx.overlayData;
 
             double tempSum = 0, humSum = 0;
             for (int x = 0; x < width; x++)

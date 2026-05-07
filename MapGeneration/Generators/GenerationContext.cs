@@ -12,5 +12,6 @@ public class GenerationContext
     public double[,] humidityNoise { get; set; }
     public Random rng { get; set; }
     public Config conf { get; set; }
+    public EntityId[,] overlayData { get; set; }
     #endregion
 }
