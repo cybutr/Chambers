@@ -2,8 +2,12 @@ public enum GradientDirection { TL_BR, BR_TL, BL_TR, TR_BL }
 
 public class DayNightCycle
 {
+    public const int DaysPerSeason = 10;
+    public const int TicksPerDay   = 24000;
+
     public double TimeOfDay { get; set; } = 8.0;
     public double Season { get; set; }
+    public double InitSeason { get; set; }
     public double SunriseTime { get; set; } = 6.0;
     public double SunsetTime { get; set; } = 18.0;
     public int DayCount { get; set; }
@@ -30,10 +34,8 @@ public class DayNightCycle
             EventBus.Emit(new DayStartedEvent(DayCount, Season));
         }
 
-        int daysPerSeason = 10;
         int prevSeason = (int)Season;
-        Season += deltaTime / (daysPerSeason * 720.0);
-        if (Season >= 4.0) Season -= 4.0;
+        Season = (InitSeason + DayCount / (double)DaysPerSeason) % 4.0;
         int currentSeason = (int)Season;
         if (_lastSeason >= 0 && currentSeason != prevSeason)
             EventBus.Emit(new SeasonChangedEvent(currentSeason));
@@ -46,7 +48,6 @@ public class DayNightCycle
         if (_prevTimeOfDay >= 0 && _prevTimeOfDay < SunsetTime && TimeOfDay >= SunsetTime)
             EventBus.Emit(new SunsetEvent(DayCount));
     }
-
     public void UpdateSunTimes()
     {
         double summerSolstice = 1.8;
@@ -73,7 +74,6 @@ public class DayNightCycle
             SunsetTime  = WinterSolsticeSunset;
         }
     }
-
     public double GetTransitionProgress()
     {
         double timeOfDay = TimeOfDay % 24.0;
@@ -102,7 +102,17 @@ public class DayNightCycle
 
         return Math.Clamp(transitionProgress, 0.0, 1.0);
     }
-
+    public string GetSeasonName()
+    {
+        return Season switch
+        {
+            >= 0 and < 1 => "Spring",
+            >= 1 and < 2 => "Summer",
+            >= 2 and < 3 => "Autumn",
+            _ => "Winter"
+        };
+    }
+    public double GetSeason(long ticks) => (InitSeason + ticks / (double)TicksPerDay / DaysPerSeason) % 4.0;
     private static bool IsTimeBetween(double time, double start, double end)
     {
         if (start <= end) return time >= start && time <= end;
@@ -114,7 +124,6 @@ public class DayNightCycle
         if (TimeOfDay > 0.0 && TimeOfDay < 6.0) CurrentGradientDirection = GradientDirection.BR_TL;
         else if (TimeOfDay > 12.0 && TimeOfDay < 18.0) CurrentGradientDirection = GradientDirection.TL_BR;
     }
-
     public static double EaseInOutQuad(double t)
     {
         if (t < 0.5) return 2 * t * t;

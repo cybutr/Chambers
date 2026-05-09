@@ -37,7 +37,19 @@ public partial class Map
             var entity     = overlayData[wx, wy];
             bool showEntity = entity != EntityId.None && !IsTileUnderCloud(wx, wy);
             if (showEntity)
-                return (color, (int)entity, GetSpeciesIcon(entity), GetOverlayColor(entity));
+            {
+                var def          = EntityRegistry.Get(entity);
+                var s            = _species.GetAt(wx, wy);
+                var (vr, vg, vb) = s?.colorVariation ?? (0, 0, 0);
+                var pulse        = s?.colorPulse ?? 0f;
+                var pt           = s?.colorPulseTarget ?? (255, 0, 0);
+                var fg           = ColorSpectrum.BlendColor(
+                                    (Math.Clamp(def.BaseColor.r + vr, 0, 255),
+                                    Math.Clamp(def.BaseColor.g + vg, 0, 255),
+                                    Math.Clamp(def.BaseColor.b + vb, 0, 255)),
+                                    pt, pulse);
+                return (color, HashCode.Combine((int)entity, color.r, color.g, color.b, vr, (int)(pulse * 20)), def.Icon, fg);
+            }
             return (color, 0, "  ", null);
         });
 
@@ -96,34 +108,8 @@ public partial class Map
     }
 
     #region display functions
-    public string GetSpeciesIcon(EntityId species)
-    {
-        return species switch
-        {
-            EntityId.Crab   => "󰃤 ",
-            EntityId.Turtle => "󰳗 ",
-            EntityId.Cow    => "󰆚 ",
-            EntityId.Sheep  => "󰳆 ",
-            _ => "  "
-        };
-    }
     private bool IsThereAnOverlayTile(int x, int y) => overlayData[x, y] != EntityId.None;
     private bool IsThereBorderTile(int x, int y) => mapData[x, y] == TileId.Border;
-    public (int r, int g, int b) GetRGBFromColorCode(string colorCode)
-    {
-        return colorCode switch
-        {
-            "red"     => ColorSpectrum.RED,
-            "green"   => ColorSpectrum.GREEN,
-            "blue"    => ColorSpectrum.BLUE,
-            "yellow"  => ColorSpectrum.YELLOW,
-            "cyan"    => ColorSpectrum.CYAN,
-            "magenta" => ColorSpectrum.MAGENTA,
-            "white"   => ColorSpectrum.WHITE,
-            "black"   => ColorSpectrum.BLACK,
-            _         => ColorSpectrum.WHITE
-        };
-    }
     private (int r, int g, int b) GetColor(TileId tile, int x, int y)
     {
         var def = TileRegistry.Get(tile);
@@ -176,28 +162,27 @@ public partial class Map
                 case 5: gAdj += 20; bAdj +=  5; break;
             }
         }
-        return (
+        var adjusted = (
             Math.Clamp(baseColor.r + rAdj, 0, 255),
             Math.Clamp(baseColor.g + gAdj, 0, 255),
             Math.Clamp(baseColor.b + bAdj, 0, 255)
         );
-    }
-    public (int r, int g, int b) GetOverlayColor(EntityId overlayTile)
-    {
-        return overlayTile switch
+        if (tile == TileId.Plains || tile == TileId.Forest)
         {
-            EntityId.Crab     => ColorSpectrum.BRIGHT_RED,
-            EntityId.Turtle   => ColorSpectrum.DARK_GREEN,
-            EntityId.Cow      => ColorSpectrum.BLACK,
-            EntityId.Sheep    => ColorSpectrum.BROWN,
-            EntityId.Wolf     => ColorSpectrum.GREY,
-            EntityId.Bear     => ColorSpectrum.BROWN,
-            EntityId.Goat     => ColorSpectrum.BROWN,
-            EntityId.Fish     => ColorSpectrum.BRIGHT_RED,
-            EntityId.Bird     => ColorSpectrum.BRIGHT_RED,
-            EntityId.Villager => ColorSpectrum.BROWN,
-            _                 => ColorSpectrum.BLACK,
-        };
+            double[] dh = [0,    -12,  -35,  20  ];
+            double[] ds = [0.10, -0.08, 0.05, -0.30];
+            double[] dv = [0.06,  0.03,-0.05, -0.12];
+            double sn = dayNight.Season % 4.0;
+            int    si = (int)sn;
+            double sf = sn - si;
+            int    ni = (si + 1) % 4;
+            double hA = dh[si] * (1 - sf) + dh[ni] * sf;
+            double sA = ds[si] * (1 - sf) + ds[ni] * sf;
+            double vA = dv[si] * (1 - sf) + dv[ni] * sf;
+            var (h, s, v) = ColorSpectrum.ToHsv(adjusted);
+            return ColorSpectrum.FromHsv((h + hA + 360) % 360, Math.Clamp(s + sA, 0, 1), Math.Clamp(v + vA, 0, 1));
+        }
+        return adjusted;
     }
     #endregion
     #region temperature and humidity noise

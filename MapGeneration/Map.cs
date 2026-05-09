@@ -89,7 +89,7 @@ public partial class Map
         }
 
         Random r = new();
-        conf = new Config(200, 100, 10.0, Math.Round(r.Next() * ((r.NextDouble() - 0.5) * 2)).ToString());
+        conf = new Config(1000, 500, 200.0, Math.Round(r.Next() * ((r.NextDouble() - 0.5) * 2)).ToString());
         rng = new Random(seed);
         topPadding = GUIConfig.TopPadding;
         bottomPadding = GUIConfig.BottomPadding;

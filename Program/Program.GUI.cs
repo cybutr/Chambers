@@ -698,6 +698,7 @@ partial class Program
             int by = cy - totalH / 2;
 
             var errorColor = ColorSpectrum.INDIAN_RED;
+            continueSimulating = false;
             GUI.Clear();
             GUI.DrawColoredBox(bx, by, boxW, totalH, "", errorColor);
 

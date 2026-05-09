@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Chambers")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5d937fc979b7427a5e86c1f8584ab9499774e108")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c9951f0034bd90b7b6e25c9948bfffe89ac3dfb8")]
 [assembly: System.Reflection.AssemblyProductAttribute("Chambers")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Chambers")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

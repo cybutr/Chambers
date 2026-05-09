@@ -523,7 +523,7 @@ partial class Program
         fileStream.WriteByte((byte)'H');
         fileStream.WriteByte((byte)'M');
         fileStream.WriteByte((byte)'B');
-        fileStream.WriteByte(3); // version
+        fileStream.WriteByte(5); // version
 
         using var gzip = new GZipStream(fileStream, CompressionLevel.Optimal, leaveOpen: true);
         using var w = new BinaryWriter(gzip, Encoding.UTF8, leaveOpen: false);
@@ -577,10 +577,8 @@ partial class Program
         WriteJsonSection(w, map.weather, jOpts);
         WriteJsonSection(w, map.dayNight, jOpts);
         WriteJsonSection(w, map.waves, jOpts);
-        WriteJsonSection(w, map.crabs, jOpts);
-        WriteJsonSection(w, map.turtles, jOpts);
-        WriteJsonSection(w, map.cows, jOpts);
-        WriteJsonSection(w, map.sheeps, jOpts);
+        WriteJsonSection(w, map._species.Species, jOpts);
+        WriteJsonSection(w, map._species.Herds, jOpts);
 
         // ── actualOutputBuffer ──
         w.Write(map.actualOutputBuffer.Count);
@@ -619,7 +617,7 @@ partial class Program
         if (magic[0] != 'C' || magic[1] != 'H' || magic[2] != 'M' || magic[3] != 'B')
             throw new InvalidDataException($"Not a valid .chmb file: {filePath}");
         int version = fileStream.ReadByte();
-        if (version != 3)
+        if (version < 3 || version > 5)
             throw new InvalidDataException($"Unsupported .chmb version {version}: {filePath}");
 
         using var gzip = new GZipStream(fileStream, CompressionMode.Decompress, leaveOpen: true);
@@ -675,10 +673,27 @@ partial class Program
         map.weather = ReadJsonSection<Weather>(r, jOpts)        ?? map.weather;
         map.dayNight = ReadJsonSection<DayNightCycle>(r, jOpts) ?? map.dayNight;
         map.waves   = ReadJsonSection<List<Wave>>(r, jOpts)     ?? map.waves;
-        map.crabs   = ReadJsonSection<List<Crab>>(r, jOpts)  ?? map.crabs;
-        map.turtles = ReadJsonSection<List<Turtle>>(r, jOpts) ?? map.turtles;
-        map.cows    = ReadJsonSection<List<Cow>>(r, jOpts)   ?? map.cows;
-        map.sheeps  = ReadJsonSection<List<Sheep>>(r, jOpts) ?? map.sheeps;
+        if (version == 3)
+        {
+            var crabs   = ReadJsonSection<List<Crab>>(r, jOpts);
+            var turtles = ReadJsonSection<List<Turtle>>(r, jOpts);
+            var cows    = ReadJsonSection<List<Cow>>(r, jOpts);
+            var sheeps  = ReadJsonSection<List<Sheep>>(r, jOpts);
+            if (crabs   != null) map._species.Species.AddRange(crabs);
+            if (turtles != null) map._species.Species.AddRange(turtles);
+            if (cows    != null) map._species.Species.AddRange(cows);
+            if (sheeps  != null) map._species.Species.AddRange(sheeps);
+        }
+        else
+        {
+            var all = ReadJsonSection<List<Species>>(r, jOpts);
+            if (all != null) map._species.Species.AddRange(all);
+        }
+        if (version >= 5)
+        {
+            var hm = ReadJsonSection<HerdManager>(r, jOpts);
+            if (hm != null) map._species.Herds = hm;
+        }
 
         // ── actualOutputBuffer ──
         int bufCount = r.ReadInt32();
@@ -711,6 +726,7 @@ partial class Program
         RegenerateNoise(map);
         map.ReinitializeTransientData();
         map.rng = new Random(map.seed);
+        map._species.PostLoad(map.width, map.height);
         map.topPadding    = GUIConfig.TopPadding;
         map.bottomPadding = GUIConfig.BottomPadding;
         map.leftPadding   = GUIConfig.LeftPadding;
@@ -951,7 +967,7 @@ partial class Program
                 conf.EnableTempatureBiomeChanges,
                 conf.EnableHumidityBiomeChanges,
                 conf.BiomeBlend,
-                conf.NoiseType,
+                conf.GenType,
                 conf.EnableWildfires,
                 conf.EnableSecrets,
                 conf.DoTimeCycle,
@@ -1030,7 +1046,7 @@ partial class Program
             TrySetBool("EnableTempatureBiomeChanges", v => target.EnableTempatureBiomeChanges = v);
             TrySetBool("EnableHumidityBiomeChanges", v => target.EnableHumidityBiomeChanges = v);
             TrySetInt("BiomeBlend", v => target.BiomeBlend = v);
-            TrySetInt("NoiseType", v => target.NoiseType = v);
+            TrySetInt("GenType", v => target.GenType = v);
             TrySetBool("EnableWildfires", v => target.EnableWildfires = v);
             TrySetBool("EnableSecrets", v => target.EnableSecrets = v);
             TrySetBool("DoTimeCycle", v => target.DoTimeCycle = v);

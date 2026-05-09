@@ -6,7 +6,13 @@
       "Bash(sed -n 344,350p /home/chedda/csharp/Chambers/MapGeneration/Map.cs)",
       "Bash(sed -n 6112,6127p /home/chedda/csharp/Chambers/MapGeneration/Map.cs)",
       "Bash(sed -n '235,247p' /home/chedda/csharp/Chambers/Program.cs)",
-      "Bash(sed -n '869,903p' /home/chedda/csharp/Chambers/Program.cs)"
+      "Bash(sed -n '869,903p' /home/chedda/csharp/Chambers/Program.cs)",
+      "Skill(gsd-add-phase)",
+      "Skill(gsd-plan-phase)",
+      "Skill(gsd-new-project)",
+      "Bash(git worktree *)",
+      "Bash(git branch *)",
+      "Skill(gsd-explore)"
     ]
   }
 }

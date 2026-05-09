@@ -7,6 +7,8 @@
 //   SeasonChangedEvent(int Season)                        — 0=spring 1=summer 2=autumn 3=winter
 //   WeatherChangedEvent(WeatherType Previous, WeatherType Current)
 //   MapGeneratedEvent(int Seed, int Width, int Height)    — after Generate() completes
+//   EntitySpawnedEvent(EntityId Id, int X, int Y)         — entity placed on map
+//   EntityDiedEvent(EntityId Id, int X, int Y, EntityId KilledBy) — entity removed from map
 
 public record DayStartedEvent(int DayCount, double Season);
 public record SunriseEvent(int DayCount);
@@ -14,6 +16,8 @@ public record SunsetEvent(int DayCount);
 public record SeasonChangedEvent(int Season);
 public record WeatherChangedEvent(WeatherType Previous, WeatherType Current);
 public record MapGeneratedEvent(int Seed, int Width, int Height);
+public record EntitySpawnedEvent(EntityId Id, int X, int Y);
+public record EntityDiedEvent(EntityId Id, int X, int Y, EntityId KilledBy);
 
 public static class EventBus
 {

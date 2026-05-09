@@ -9,8 +9,8 @@ public class Framebuffer
 {
     private ((int r, int g, int b) color, int cellId)[,]? _buf;
     private readonly StringBuilder _row = new(2048);
-    private int _lastCamX = 0;
-    private int _lastCamY = 0;
+    // private int _lastCamX = 0;
+    // private int _lastCamY = 0;
 
     public void Invalidate() => _buf = null;
 

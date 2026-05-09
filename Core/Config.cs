@@ -25,7 +25,7 @@ public class Config
     public bool EnableTempatureBiomeChanges { get; set; } = true;
     public bool EnableHumidityBiomeChanges { get; set; } = true;
     public int BiomeBlend { get; set; } = 5;
-    public int NoiseType { get; set; } = 1;
+    public int GenType { get; set; } = 2;
 
     // Gamerules
     public bool EnableWildfires { get; set; }
@@ -43,12 +43,12 @@ public class Config
     public bool GenerateAnimals { get; set; } = true;
     public bool EnablePredators { get; set; } = true;
     public bool EnableAnimalMovement { get; set; } = true;
-    public bool EnableAnimalBreeding { get; set; } 
-    public bool EnableAnimalDeath { get; set; }
+    public bool EnableAnimalBreeding { get; set; }  = true;
+    public bool EnableAnimalDeath { get; set; } = true;
     public bool EnableAnimalExtinction { get; set; }
     public bool EnableAnimalMigration { get; set; }
-    public bool EnableAnimalHunting { get; set; }
-    public bool EnableAnimalDomestication { get; set; }
+    public bool EnableAnimalHunting { get; set; } = true;
+    public bool EnableAnimalDomestication { get; set; } = true;
 
     // Disasters
     public bool EnableTornadoes { get; set; }

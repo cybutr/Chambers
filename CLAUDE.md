@@ -257,6 +257,13 @@ if (shiftX != 0 || shiftY != 0) ShiftCloudData(shiftX, shiftY);
 | `Map.GUI.cs` | `DisplayGUI()`, all GUI widgets, map config GUI |
 | `Map.Species.cs` | Species lists, `InitializeSpecies()`, `UpdateCrabs/Turtles/Cows/Sheeps()` |
 
+Species-related standalone files:
+
+| File | What goes here |
+|------|---------------|
+| `Species/Herd.cs` | Herd class — id, size cap, generation, founder IDs, gene dict |
+| `Species/HerdManager.cs` | Herd creation, merge/split, member tracking, initial assignment |
+
 `Program` is also split into partial class files:
 
 | File | What goes here |
@@ -289,6 +296,7 @@ Use `#region name` / `#endregion` to group methods, consistent with the rest of 
    ```csharp
    if (conf.GenerateAnimals) InitializeSpecies(2, 5, new YourAnimal(0, 0, mapData, overlayData, seed));
    ```
+8. If the species uses herds (`MinHerdSize > 0` in registry), `HerdManager.AssignInitialHerds` handles assignment automatically on `Initialize`.
 
 ### New command
 1. Add a `case "yourcommand":` block to `ProcessCommand()` in `Program.cs` (~line 1149)
@@ -299,6 +307,28 @@ Use `#region name` / `#endregion` to group methods, consistent with the rest of 
 1. Add to `Habitat` enum in `Other/Config.cs`
 2. Add a `public bool EnableFeature { get; set; } = false;` to `Config`
 3. Gate generation code with `if (conf.EnableFeature)`
+
+---
+
+## Herd System
+
+Every group-living species belongs to a `Herd` object tracked by `HerdManager` on `SpeciesManager.Herds`.
+
+- `s.HerdId == -1` → solitary species (bear, turtle, villager) — no herd
+- `s.HerdId >= 0` → member of `Herds[HerdId]`
+- Herd size cap is randomized per herd: `rng.Next(def.MinHerdSize, def.MaxHerdSize + 1)`
+- `EntityDefinition.MinHerdSize == 0` → species does not use herds
+
+Herds **merge** when animals of the same species from different herds come within BoidCohesionRadius (or BreedRadius*2 for non-boid species).
+Herds **split** when Count > SizeCap — farthest members break off into a new sub-herd (generation++).
+
+Breeding gate: `herd.Count < herd.SizeCap` (replaces old CountNearby proximity check).
+
+Each Herd carries `Dictionary<string, float> Genes` seeded at creation with keys:
+`Aggression`, `MigrationUrge`, `FeedingEfficiency`, `HerdLoyalty`.
+**No behavior reads genes yet** — structure is in place for the evolution phase.
+
+Herd for boid species (Fish, Bird): the Herd is the shoal/flock identity. BoidBehavior handles movement; HerdManager handles group lifecycle.
 
 ---
 

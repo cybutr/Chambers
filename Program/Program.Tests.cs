@@ -9,6 +9,217 @@ using Internal;
 partial class Program
 {
         #region test methods
+        public static void TestColorComparison()
+        {
+            GUI.Clear();
+            GUI.SetCursorPosition(0, 0);
+            GUI.WriteLine("Color DSL — Visual Reference");
+            GUI.WriteLine("============================\n");
+
+            void Row(string label, (int r, int g, int b) a, (int r, int g, int b) b, string dsl)
+            {
+                string ba = GUI.SetBackgroundColor(a.r, a.g, a.b) + "      " + GUI.ResetColor();
+                string bb = GUI.SetBackgroundColor(b.r, b.g, b.b) + "      " + GUI.ResetColor();
+                int dist = Math.Abs(a.r - b.r) + Math.Abs(a.g - b.g) + Math.Abs(a.b - b.b);
+                string m = dist <= 15 ? "≈" : dist <= 40 ? "~" : "≠";
+                GUI.WriteLine($"{label,-17} {ba} {m} {bb}  {dsl}");
+            }
+
+            void Show(string label, string dsl)
+            {
+                var c = ColorSpectrum.ParseDynamic(dsl);
+                string block = GUI.SetBackgroundColor(c.r, c.g, c.b) + "      " + GUI.ResetColor();
+                GUI.WriteLine($"  {label,-20} {block}  \"{dsl}\"");
+            }
+
+            GUI.WriteLine($"{"Name",-17} {"Static",-8}   {"DSL",-8}  Expression");
+            GUI.WriteLine(new string('─', 72));
+
+            (string name, (int r, int g, int b) s, string dsl)[] rows =
+            [
+                ("PLAINS_GREEN",   ColorSpectrum.PLAINS_GREEN,   "plains"),
+                ("FOREST_GREEN",   ColorSpectrum.FOREST_GREEN,   "forest"),
+                ("MOUNTAIN_GREY",  ColorSpectrum.MOUNTAIN_GREY,  "mountain"),
+                ("MOUNTAIN_DEEP",  ColorSpectrum.MOUNTAIN_DEEP,  "mountain : dark 30"),
+                ("SNOW_WHITE",     ColorSpectrum.SNOW_WHITE,     "snow"),
+                ("SAND_YELLOW",    ColorSpectrum.SAND_YELLOW,    "beach"),
+                ("SAND_DARK",      ColorSpectrum.SAND_DARK,      "beach : dark 15"),
+                ("WATER_BLUE",     ColorSpectrum.WATER_BLUE,     "ocean"),
+                ("WATER_DEEP",     ColorSpectrum.WATER_DEEP,     "ocean : dark 20"),
+                ("FOAMY_BLUE",     ColorSpectrum.FOAMY_BLUE,     "cyan : dark 50"),
+                ("CRAB_CRIMSON",   ColorSpectrum.CRAB_CRIMSON,   "crab"),
+                ("TURTLE_GREEN",   ColorSpectrum.TURTLE_GREEN,   "turtle"),
+                ("COW_BROWN",      ColorSpectrum.COW_BROWN,      "cow"),
+                ("SHEEP_SLATE",    ColorSpectrum.SHEEP_SLATE,    "sheep"),
+                ("WOLF_GREY",      ColorSpectrum.WOLF_GREY,      "wolf"),
+                ("BEAR_SIENNA",    ColorSpectrum.BEAR_SIENNA,    "bear"),
+                ("GOAT_WHEAT",     ColorSpectrum.GOAT_WHEAT,     "goat"),
+                ("BIRD_SKY",       ColorSpectrum.BIRD_SKY,       "bird"),
+                ("VILLAGER_PEACH", ColorSpectrum.VILLAGER_PEACH, "villager"),
+                ("NIGHT_TINT",     ColorSpectrum.NIGHT_TINT,     "blue : dark 80 : desaturate 60"),
+            ];
+
+            foreach (var (name, s, dsl) in rows)
+                Row(name, s, ColorSpectrum.ParseDynamic(dsl), dsl);
+
+            GUI.WriteLine($"\nNew modifiers:");
+            GUI.WriteLine(new string('─', 72));
+            Show("blend → white 30",    "ocean : blend white 30");
+            Show("blend → white 70",    "ocean : blend white 70");
+            Show("complement (red)",    "red : complement");
+            Show("complement (green)",  "green : complement");
+            Show("plains day",          "plains");
+            Show("plains night 40",     "plains : night 40");
+            Show("plains night 80",     "plains : night 80");
+            Show("hex #a3bf73",         "#a3bf73");
+            Show("rgb 82,106,64",       "82,106,64");
+
+            GUI.WriteLine($"\nGetName — nearest vocab key:");
+            GUI.WriteLine(new string('─', 72));
+            (int r, int g, int b)[] probes = [ColorSpectrum.PLAINS_GREEN, ColorSpectrum.CRAB_CRIMSON, ColorSpectrum.WATER_BLUE, (200, 100, 50), (50, 130, 200)];
+            foreach (var c in probes)
+            {
+                string block = GUI.SetBackgroundColor(c.r, c.g, c.b) + "      " + GUI.ResetColor();
+                GUI.WriteLine($"  {block}  ({c.r,3},{c.g,3},{c.b,3})  →  \"{ColorSpectrum.GetName(c)}\"");
+            }
+
+            GUI.WriteLine("\nPress any key to return...");
+            Console.ReadKey(true);
+            GUI.Clear();
+            if (chambers.Count > currentChamberIndex) chambers[currentChamberIndex].InvalidateFramebuffer();
+        }
+
+        public static void TestColorDSL()
+        {
+            GUI.Clear();
+            GUI.SetCursorPosition(0, 0);
+            GUI.WriteLine("Color DSL — Parser Test Suite");
+            GUI.WriteLine("=============================\n");
+
+            int passed = 0, failed = 0;
+
+            void Check(string label, bool ok)
+            {
+                string badge = ok
+                    ? GUI.SetBackgroundColor(30, 110, 30) + " PASS " + GUI.ResetColor()
+                    : GUI.SetBackgroundColor(150, 30, 30) + " FAIL " + GUI.ResetColor();
+                GUI.WriteLine($"{badge}  {label}");
+                if (ok) passed++; else failed++;
+            }
+
+            bool Near((int r, int g, int b) a, (int r, int g, int b) b, int tol = 15) =>
+                Math.Abs(a.r - b.r) + Math.Abs(a.g - b.g) + Math.Abs(a.b - b.b) <= tol;
+
+            GUI.WriteLine("— Hex / RGB passthrough —");
+            Check("#ffffff = (255,255,255)",    ColorSpectrum.ParseDynamic("#ffffff") == (255, 255, 255));
+            Check("#000000 = (0,0,0)",          ColorSpectrum.ParseDynamic("#000000") == (0, 0, 0));
+            Check("#a3bf73 round-trips",        ColorSpectrum.ParseDynamic("#a3bf73") == (163, 191, 115));
+            Check("148,191,115 exact",          ColorSpectrum.ParseDynamic("148,191,115") == (148, 191, 115));
+            Check("-10,300,128 clamps to range",ColorSpectrum.ParseDynamic("-10,300,128") == (0, 255, 128));
+
+            GUI.WriteLine("\n— TryParseDynamic —");
+            Check("known key → HasValue",        ColorSpectrum.TryParseDynamic("red").HasValue);
+            Check("unknown key → null",         !ColorSpectrum.TryParseDynamic("xyzzy").HasValue);
+            Check("hex → HasValue",              ColorSpectrum.TryParseDynamic("#ff0000").HasValue);
+            Check("rgb → HasValue",              ColorSpectrum.TryParseDynamic("100,100,100").HasValue);
+            Check("empty string → null",        !ColorSpectrum.TryParseDynamic("").HasValue);
+
+            GUI.WriteLine("\n— GetName reverse lookup —");
+            Check("plains exact match",    ColorSpectrum.GetName(ColorSpectrum.PLAINS_GREEN) == "plains");
+            Check("crab exact match",      ColorSpectrum.GetName(ColorSpectrum.CRAB_CRIMSON) == "crab");
+            Check("ocean exact match",     ColorSpectrum.GetName(ColorSpectrum.WATER_BLUE)   == "ocean");
+            Check("never returns null",    ColorSpectrum.GetName((200, 100, 50)) != null);
+            Check("near-black → black",    ColorSpectrum.GetName((25, 22, 18)) == "black");
+
+            GUI.WriteLine("\n— Complement modifier —");
+            var red     = ColorSpectrum.ParseDynamic("red");
+            var redComp = ColorSpectrum.ParseDynamic("red : complement");
+            var (rh, _, _) = ColorSpectrum.ToHsv(red);
+            var (ch, _, _) = ColorSpectrum.ToHsv(redComp);
+            double hueDiff = Math.Abs(((ch - rh + 540) % 360) - 180);
+            Check("complement shifts hue ≈180°",     hueDiff < 15);
+            Check("double complement ≈ original",    Near(red, ColorSpectrum.ParseDynamic("red : complement : complement"), 10));
+            Check("complement red ≠ red",            !Near(red, redComp, 30));
+
+            GUI.WriteLine("\n— Night modifier —");
+            var plains      = ColorSpectrum.ParseDynamic("plains");
+            var plainsN100  = ColorSpectrum.ParseDynamic("plains : night 100");
+            var plainsN0    = ColorSpectrum.ParseDynamic("plains : night 0");
+            var plainsN50   = ColorSpectrum.ParseDynamic("plains : night 50");
+            Check("night 100 ≈ NIGHT_TINT",    Near(plainsN100, ColorSpectrum.NIGHT_TINT, 20));
+            Check("night 0 ≈ base",            Near(plainsN0, plains, 5));
+            Check("night 50 darker than base", ColorSpectrum.ToHsv(plainsN50).v < ColorSpectrum.ToHsv(plains).v);
+            Check("night 50 lighter than 100", ColorSpectrum.ToHsv(plainsN50).v > ColorSpectrum.ToHsv(plainsN100).v);
+
+            GUI.WriteLine("\n— Blend modifier —");
+            Check("blend 0 ≈ base",      Near(ColorSpectrum.ParseDynamic("red : blend white 0"),   ColorSpectrum.ParseDynamic("red"),   5));
+            Check("blend 100 ≈ target",  Near(ColorSpectrum.ParseDynamic("red : blend white 100"), ColorSpectrum.ParseDynamic("white"), 10));
+            Check("blend hex target",    ColorSpectrum.TryParseDynamic("blue : blend #ffffff 50").HasValue);
+            var blendMid = ColorSpectrum.ParseDynamic("black : blend white 50");
+            Check("blend 50 is mid-grey (r 100–160)", blendMid.r > 100 && blendMid.r < 160);
+            Check("unknown blend target = base",  Near(ColorSpectrum.ParseDynamic("red : blend xyzzy 50"), ColorSpectrum.ParseDynamic("red"), 2));
+
+            GUI.WriteLine("\n— Ish suffix —");
+            Check("blueish resolves",    ColorSpectrum.TryParseDynamic("blueish").HasValue);
+            Check("reddish resolves",    ColorSpectrum.TryParseDynamic("reddish").HasValue);
+            Check("greenish resolves",   ColorSpectrum.TryParseDynamic("greenish").HasValue);
+            Check("orangeish resolves",  ColorSpectrum.TryParseDynamic("orangeish").HasValue);
+            if (ColorSpectrum.TryParseDynamic("blueish") is { } blueishColor)
+            {
+                var (bh, _, _) = ColorSpectrum.ToHsv(blueishColor);
+                Check("blueish hue 190–270°", bh >= 190 && bh <= 270);
+            }
+
+            GUI.WriteLine("\n— Semantic vocab names —");
+            Check("plains ≈ PLAINS_GREEN",    Near(ColorSpectrum.ParseDynamic("plains"),   ColorSpectrum.PLAINS_GREEN,   2));
+            Check("forest ≈ FOREST_GREEN",    Near(ColorSpectrum.ParseDynamic("forest"),   ColorSpectrum.FOREST_GREEN,   2));
+            Check("mountain ≈ MOUNTAIN_GREY", Near(ColorSpectrum.ParseDynamic("mountain"), ColorSpectrum.MOUNTAIN_GREY,  2));
+            Check("ocean ≈ WATER_BLUE",       Near(ColorSpectrum.ParseDynamic("ocean"),    ColorSpectrum.WATER_BLUE,     2));
+            Check("crab ≈ CRAB_CRIMSON",      Near(ColorSpectrum.ParseDynamic("crab"),     ColorSpectrum.CRAB_CRIMSON,   2));
+
+            GUI.WriteLine("\n— Material aliases —");
+            Check("grass ≈ plains:dark 10",  Near(ColorSpectrum.ParseDynamic("grass"),  ColorSpectrum.ParseDynamic("plains : dark 10"), 8));
+            Check("water ≈ ocean:dark 20",   Near(ColorSpectrum.ParseDynamic("water"),  ColorSpectrum.ParseDynamic("ocean : dark 20"),  8));
+            Check("$water token expands",    ColorSpectrum.TryParseDynamic("$water").HasValue);
+
+            GUI.WriteLine("\n— Base adjectives —");
+            var baseG  = ColorSpectrum.ToHsv(ColorSpectrum.ParseDynamic("green"));
+            var darkG  = ColorSpectrum.ToHsv(ColorSpectrum.ParseDynamic("dark green"));
+            var lightG = ColorSpectrum.ToHsv(ColorSpectrum.ParseDynamic("light green"));
+            var paleG  = ColorSpectrum.ToHsv(ColorSpectrum.ParseDynamic("pale green"));
+            var vibG   = ColorSpectrum.ToHsv(ColorSpectrum.ParseDynamic("vibrant green"));
+            Check("dark lowers value",           darkG.v  < baseG.v);
+            Check("light raises value",          lightG.v > baseG.v);
+            Check("pale lowers saturation",      paleG.s  < baseG.s);
+            Check("vibrant raises saturation",   vibG.s   > baseG.s);
+
+            GUI.WriteLine("\n— Chained modifiers —");
+            Check("chained dark ≈ single dark",
+                Near(ColorSpectrum.ParseDynamic("green : dark 30"), ColorSpectrum.ParseDynamic("green : dark 15 : dark 15"), 20));
+            Check("modifier order matters under clamping",
+                !Near(ColorSpectrum.ParseDynamic("white : dark 80 : bright 100"),
+                      ColorSpectrum.ParseDynamic("white : bright 100 : dark 80"), 5));
+
+            GUI.WriteLine("\n— Cache & normalisation —");
+            Check("repeated parse = identical",  ColorSpectrum.ParseDynamic("dark forest") == ColorSpectrum.ParseDynamic("dark forest"));
+            Check("case-insensitive",            ColorSpectrum.ParseDynamic("RED") == ColorSpectrum.ParseDynamic("red"));
+            Check("trim whitespace",             ColorSpectrum.ParseDynamic("  red  ") == ColorSpectrum.ParseDynamic("red"));
+
+            GUI.WriteLine($"\n{new string('─', 44)}");
+            bool allPassed = failed == 0;
+            string summary = $"  {passed} passed  |  {failed} failed  |  {passed + failed} total";
+            string bar = allPassed
+                ? GUI.SetBackgroundColor(30, 110, 30) + summary + GUI.ResetColor()
+                : GUI.SetBackgroundColor(150, 30, 30) + summary + GUI.ResetColor();
+            GUI.WriteLine(bar);
+            GUI.WriteLine(new string('─', 44));
+
+            GUI.WriteLine("\nPress any key to return...");
+            Console.ReadKey(true);
+            GUI.Clear();
+            if (chambers.Count > currentChamberIndex) chambers[currentChamberIndex].InvalidateFramebuffer();
+        }
+
         public static void TestSynchronization()
         {
             GUI.WriteLine("Testing Chamber Name Synchronization System");

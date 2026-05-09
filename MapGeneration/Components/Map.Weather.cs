@@ -29,6 +29,7 @@ public partial class Map
         weather.IntensityTarget = 0.0;
         weather.IntensityChangeSpeed = 0.1;
         dayNight = new DayNightCycle { TimeOfDay = 12.0, Season = rng.NextDouble() * 4.0 };
+        dayNight.InitSeason = dayNight.Season;
         weather.Temperature = GetTemperature(dayNight.Season, dayNight.TimeOfDay, weather.CurrentWeather, avarageTempature);
         weather.Humidity = GetHumidity(weather.CurrentWeather, weather.Temperature, dayNight.TimeOfDay, dayNight.Season, avarageHumidity);
         weather.Pressure = GetPressure();

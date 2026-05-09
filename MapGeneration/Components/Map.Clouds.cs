@@ -736,13 +736,13 @@ public partial class Map
         return type switch
         {
 
-            CloudType.Cirrus => ColorSpectrum.CIRRUS,
-            CloudType.Altocumulus => ColorSpectrum.ALTOCUMULUS,
-            CloudType.Cumulus => ColorSpectrum.CUMULUS,
-            CloudType.Cumulonimbus => ColorSpectrum.CUMULONIMBUS,
-            CloudType.Nimbostratus => ColorSpectrum.NIMBOSTRATUS,
-            CloudType.Stratus => ColorSpectrum.STRATUS,
-            _ => ColorSpectrum.CUMULUS
+            CloudType.Cirrus => ColorSpectrum.ParseDynamic("cirrus"),
+            CloudType.Altocumulus => ColorSpectrum.ParseDynamic("altocumulus"),
+            CloudType.Cumulus => ColorSpectrum.ParseDynamic("cumulus"),
+            CloudType.Cumulonimbus => ColorSpectrum.ParseDynamic("cumulonimbus"),
+            CloudType.Nimbostratus => ColorSpectrum.ParseDynamic("nimbostratus"),
+            CloudType.Stratus => ColorSpectrum.ParseDynamic("stratus"),
+            _ => ColorSpectrum.ParseDynamic("cumulus")
         };
     }
     #endregion
