@@ -97,7 +97,10 @@ Plans:
   2. The camera pans across the world — arrow keys or WASD scroll the viewport over the larger world
   3. The framebuffer dirty renderer correctly invalidates only the changed cells when scrolling — no full-screen flicker per scroll step
   4. Species and simulation logic operate on the full world size, not just the viewport region
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 06-01-PLAN.md — caminfo command + arrow-key secondary pan bindings (Wave 1)
 
 ---
 
@@ -110,4 +113,4 @@ Plans:
 | 3. Biome Assignment | 0/1 | Not started | - |
 | 4. Terrain Features | 0/0 | Not started | - |
 | 5. World Polish | 0/3 | Not started | - |
-| 6. Camera & World Size | 0/0 | Not started | - |
+| 6. Camera & World Size | 0/1 | Not started | - |
