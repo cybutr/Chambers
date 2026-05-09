@@ -408,13 +408,29 @@ partial class Program
             isUpdating = was;
         });
         keybinds.Bind(InputContext.World, ConsoleKey.G, "ToggleGUI");
-        keybinds.RegisterCommand("ChamberPrev", () =>  { if (chambers.Count > 1 && currentChamberIndex > 0) chamberSwitch(currentChamberIndex - 1); });
+        keybinds.RegisterCommand("ChamberPrev", () =>
+        {
+            if (!isCommandInputMode && (!IsTemperatureRendering || !IsHumidityRendering)) PanCamera(-5, 0);
+            if (chambers.Count > 1 && currentChamberIndex > 0) chamberSwitch(currentChamberIndex - 1);
+        });
         keybinds.Bind(InputContext.World, ConsoleKey.LeftArrow, "ChamberPrev");
-        keybinds.RegisterCommand("ChamberNext", () => { if (chambers.Count > 1 && currentChamberIndex < chambers.Count - 1) chamberSwitch(currentChamberIndex + 1); });
+        keybinds.RegisterCommand("ChamberNext", () =>
+        {
+            if (!isCommandInputMode && (!IsTemperatureRendering || !IsHumidityRendering)) PanCamera(5, 0);
+            if (chambers.Count > 1 && currentChamberIndex < chambers.Count - 1) chamberSwitch(currentChamberIndex + 1);
+        });
         keybinds.Bind(InputContext.World, ConsoleKey.RightArrow, "ChamberNext");
-        keybinds.RegisterCommand("ChamberFirst", () =>  { if (chambers.Count > 1 && currentChamberIndex != 0) chamberSwitch(0); });
+        keybinds.RegisterCommand("ChamberFirst", () =>
+        {
+            if (!isCommandInputMode && (!IsTemperatureRendering || !IsHumidityRendering)) PanCamera(0, 3);
+            if (chambers.Count > 1 && currentChamberIndex != 0) chamberSwitch(0);
+        });
         keybinds.Bind(InputContext.World, ConsoleKey.DownArrow, "ChamberFirst");
-        keybinds.RegisterCommand("ChamberLast", () =>    { if (chambers.Count > 1 && currentChamberIndex != chambers.Count - 1) chamberSwitch(chambers.Count - 1); });
+        keybinds.RegisterCommand("ChamberLast", () =>
+        {
+            if (!isCommandInputMode && (!IsTemperatureRendering || !IsHumidityRendering)) PanCamera(0, -3);
+            if (chambers.Count > 1 && currentChamberIndex != chambers.Count - 1) chamberSwitch(chambers.Count - 1);
+        });
         keybinds.Bind(InputContext.World, ConsoleKey.UpArrow, "ChamberLast");
         keybinds.RegisterCommand("Jump0", () => directJump(0));
         keybinds.Bind(InputContext.World, [ConsoleKey.D1, ConsoleKey.NumPad1], "Jump0");
