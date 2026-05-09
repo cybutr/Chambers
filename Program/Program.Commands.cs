@@ -29,6 +29,7 @@ public partial class Program
             IsTemperatureRendering = false;
             IsHumidityRendering = false;
             isUpdating = false;
+            foreach (var chamber in chambers) SaveMap(chamber);
             chambers.Clear();
             GUI.Clear();
             foreach (var slot in slots.Where(s => s.isSelected).ToList())
@@ -38,6 +39,7 @@ public partial class Program
                 slots[slots.IndexOf(slot)] = updatedSlot;
             }
             DrawSaveSelectionGUI();
+            GUI.Clear();
         });
 
         commandRegistry.Register("chamber", "Switch to chamber <n>", args =>
@@ -77,6 +79,7 @@ public partial class Program
             }
             else outputBuffer.Add("Usage: removechamber <n>");
         });
+
 
         commandRegistry.Register("regenerate", "Regenerate chamber <n>", args =>
         {
@@ -135,11 +138,9 @@ public partial class Program
         commandRegistry.Register("time", "Get/set world time in ticks (24000=1 day). Usage: time get | time set <ticks>", args =>
         {
             var map = chambers[currentChamberIndex];
-            const int ticksPerDay = 24000;
-            const int daysPerSeason = 10;
             if (args.Length == 0 || args[0] == "get")
             {
-                long ticks = (long)map.dayNight.DayCount * ticksPerDay + (long)(map.dayNight.TimeOfDay / 24.0 * ticksPerDay);
+                long ticks = (long)map.dayNight.DayCount * DayNightCycle.TicksPerDay + (long)(map.dayNight.TimeOfDay / 24.0 * DayNightCycle.TicksPerDay);
                 outputBuffer.Add($"Time: {ticks} ticks | Day {map.dayNight.DayCount} | {map.dayNight.TimeOfDay:F1}h");
                 return;
             }
@@ -147,41 +148,44 @@ public partial class Program
             { outputBuffer.Add("Usage: time get | time set <ticks>"); return; }
 
             int prevSeason = (int)map.dayNight.Season;
-            map.dayNight.DayCount = (int)(newTicks / ticksPerDay);
-            map.dayNight.TimeOfDay = (newTicks % ticksPerDay) / (double)ticksPerDay * 24.0;
-            map.dayNight.Season = (double)(newTicks % ((long)daysPerSeason * 4 * ticksPerDay)) / (daysPerSeason * ticksPerDay);
+            map.dayNight.DayCount = (int)(newTicks / DayNightCycle.TicksPerDay);
+            map.dayNight.TimeOfDay = (newTicks % DayNightCycle.TicksPerDay) / (double)DayNightCycle.TicksPerDay * 24.0;
+            map.dayNight.Season = map.dayNight.GetSeason(newTicks);
             map.dayNight.UpdateSunTimes();
             int newSeason = (int)map.dayNight.Season;
             if (prevSeason != newSeason) EventBus.Emit(new SeasonChangedEvent(newSeason));
-            map.SubscribeSpeciesEvents();
             outputBuffer.Add($"Time: {newTicks} ticks | Day {map.dayNight.DayCount} | {map.dayNight.TimeOfDay:F1}h");
         });
 
-        commandRegistry.Register("season", "Get/set season. Usage: season get | season set <0-3>", args =>
+        commandRegistry.Register("season", "Get/set season. Usage: season get | season set <0-4>", args =>
         {
             var map = chambers[currentChamberIndex];
-            string[] names = ["Spring", "Summer", "Autumn", "Winter"];
             if (args.Length == 0 || args[0] == "get")
             {
-                int s = Math.Clamp((int)map.dayNight.Season, 0, 3);
-                outputBuffer.Add($"Season: {names[s]} | Day {map.dayNight.DayCount}");
+                outputBuffer.Add($"Season: {map.dayNight.Season:F2} | {(int)map.dayNight.Season} ({map.dayNight.GetSeasonName()})");
                 return;
             }
-            if (args[0] != "set" || args.Length < 2 || !int.TryParse(args[1], out int season) || season < 0 || season > 3)
-            { outputBuffer.Add("Usage: season get | season set <0-3>"); return; }
-            int prev = (int)map.dayNight.Season;
-            map.dayNight.Season = season;
+            if (args[0] != "set" || args.Length < 2 || !double.TryParse(args[1], out double s) || s < 0 || s > 4)
+            { outputBuffer.Add("Usage: season get | season set <0-4>"); return; }
+            s += 0.03;
+            double offset = ((s - map.dayNight.InitSeason) % 4 + 4) % 4;
+            int newDayCount = (int)(offset * DayNightCycle.DaysPerSeason);
+            while (newDayCount < map.dayNight.DayCount) newDayCount += 4 * DayNightCycle.DaysPerSeason;
+            int prevSeason = (int)map.dayNight.Season;
+            map.dayNight.DayCount = newDayCount;
+            map.dayNight.Season = map.dayNight.GetSeason((long)newDayCount * DayNightCycle.TicksPerDay);
             map.dayNight.UpdateSunTimes();
-            if (prev != season) EventBus.Emit(new SeasonChangedEvent(season));
-            outputBuffer.Add($"Season: {names[season]}");
+            int newSeason = (int)map.dayNight.Season;
+            if (prevSeason != newSeason) EventBus.Emit(new SeasonChangedEvent(newSeason));
+            outputBuffer.Add($"Season: {map.dayNight.Season:F2} | {(int)map.dayNight.Season} ({map.dayNight.GetSeasonName()})");
         });
 
-        commandRegistry.Register("speed", "Get/set simulation speed. Usage: speed get | speed set <0.5-20>", args =>
+        commandRegistry.Register("speed", "Get/set simulation speed. Usage: speed get | speed set <0.5-50>", args =>
         {
             if (args.Length == 0 || args[0] == "get") { outputBuffer.Add($"Speed: {SimulationSpeed}x"); return; }
             if (args[0] != "set" || args.Length < 2 || !double.TryParse(args[1], out double s))
             { outputBuffer.Add("Usage: speed get | speed set <n>"); return; }
-            SimulationSpeed = Math.Clamp(s, 0.5, 20.0);
+            SimulationSpeed = Math.Clamp(s, 0.5, 50.0);
             outputBuffer.Add($"Speed: {SimulationSpeed}x");
         });
 
@@ -211,14 +215,14 @@ public partial class Program
             var map = chambers[currentChamberIndex];
             if (args.Length == 0 || args[0] == "get")
             {
-                outputBuffer.Add($"Wind: {map.weather.WindDirection:F0}° at {map.weather.WindSpeed:F1} km/h");
+                outputBuffer.Add($"Wind: {map.weather.WindDirection:F0}° at {map.weather.WindSpeed:F1} m/s");
                 return;
             }
             if (args[0] != "set" || args.Length < 3 || !double.TryParse(args[1], out double dir) || !double.TryParse(args[2], out double spd))
             { outputBuffer.Add("Usage: wind get | wind set <deg> <speed>"); return; }
             map.weather.WindDirection = Math.Clamp(dir, 0, 360);
             map.weather.WindSpeed = Math.Clamp(spd, 0, 100);
-            outputBuffer.Add($"Wind: {map.weather.WindDirection:F0}° at {map.weather.WindSpeed:F1} km/h");
+            outputBuffer.Add($"Wind: {map.weather.WindDirection:F0}° at {map.weather.WindSpeed:F1} m/s");
         });
 
         #endregion
@@ -251,35 +255,39 @@ public partial class Program
             outputBuffer.Add($"Camera → [{map.camera.X},{map.camera.Y}]");
         });
 
+        commandRegistry.Register("caminfo", "Show world size, viewport size, and camera position", _ =>
+        {
+            var map = chambers[currentChamberIndex];
+            if (map.camera == null) { outputBuffer.Add("No camera"); return; }
+            outputBuffer.Add($"World: {map.width}×{map.height} | Viewport: {map.camera.Width}×{map.camera.Height} | Camera: [{map.camera.X},{map.camera.Y}]");
+        });
+
         #endregion
         #region species commands
 
         commandRegistry.Register("species", "List species counts", _ =>
         {
             var map = chambers[currentChamberIndex];
-            outputBuffer.Add($"Crabs: {map.crabs.Count} | Turtles: {map.turtles.Count} | Cows: {map.cows.Count} | Sheeps: {map.sheeps.Count}");
+            outputBuffer.Add(map._species.GetSummary());
         });
 
-        commandRegistry.Register("spawn", "Spawn a species. Usage: spawn <type> [x y] | crab turtle cow sheep", args =>
+        commandRegistry.Register("spawn", "Spawn a species. Usage: spawn <type> [x y]", args =>
         {
             var map = chambers[currentChamberIndex];
             if (args.Length == 0) { outputBuffer.Add("Usage: spawn <type> [x y]"); return; }
             string type = args[0].ToLower();
-            HashSet<TileId>? allowed = type switch
-            {
-                "crab"   => [TileId.Beach, TileId.BeachDark],
-                "turtle" => [TileId.Beach, TileId.BeachDark],
-                "cow"    => [TileId.Plains],
-                "sheep"  => [TileId.Plains],
-                _        => null
-            };
-            if (allowed is null) { outputBuffer.Add("Types: crab turtle cow sheep"); return; }
+            if (!Enum.TryParse(type, ignoreCase: true, out EntityId entityId) || entityId == EntityId.None)
+            { outputBuffer.Add($"Unknown type '{type}'. Try: crab turtle cow sheep wolf bear goat fish bird"); return; }
+            var def = EntityRegistry.Get(entityId);
+            if (def?.Factory == null) { outputBuffer.Add($"{type} not spawnable"); return; }
+            var allowed = def.AllowedTiles;
+            bool anyTile = allowed.Count == 0;
 
             int x, y;
             if (args.Length >= 3 && int.TryParse(args[1], out int sx) && int.TryParse(args[2], out int sy))
             {
                 if (sx < 0 || sx >= map.width || sy < 0 || sy >= map.height) { outputBuffer.Add("Out of bounds"); return; }
-                if (!allowed.Contains(map.mapData[sx, sy])) { outputBuffer.Add($"Invalid tile for {type}"); return; }
+                if (!anyTile && !allowed.Contains(map.mapData[sx, sy])) { outputBuffer.Add($"Invalid tile for {type}"); return; }
                 if (map.overlayData[sx, sy] != EntityId.None) { outputBuffer.Add($"[{sx},{sy}] occupied"); return; }
                 (x, y) = (sx, sy);
             }
@@ -290,19 +298,15 @@ public partial class Program
                 {
                     int rx = map.rng.Next(0, map.width);
                     int ry = map.rng.Next(0, map.height);
-                    if (allowed.Contains(map.mapData[rx, ry]) && map.overlayData[rx, ry] == EntityId.None)
+                    var tile = map.mapData[rx, ry];
+                    if (tile == TileId.Border) continue;
+                    if ((anyTile || allowed.Contains(tile)) && map.overlayData[rx, ry] == EntityId.None)
                         (x, y) = (rx, ry);
                 }
                 if (x == -1) { outputBuffer.Add($"No valid tile for {type}"); return; }
             }
 
-            switch (type)
-            {
-                case "crab":   map.crabs.Add(new Crab(x, y, map.rng.Next()));     map.overlayData[x, y] = EntityId.Crab;   break;
-                case "turtle": map.turtles.Add(new Turtle(x, y, map.rng.Next())); map.overlayData[x, y] = EntityId.Turtle; break;
-                case "cow":    map.cows.Add(new Cow(x, y, map.rng.Next()));       map.overlayData[x, y] = EntityId.Cow;    break;
-                case "sheep":  map.sheeps.Add(new Sheep(x, y, map.rng.Next()));   map.overlayData[x, y] = EntityId.Sheep;  break;
-            }
+            map._species.Spawn(entityId, x, y, map.rng.Next(), map.overlayData);
             outputBuffer.Add($"Spawned {type} at [{x},{y}]");
         });
 
@@ -310,23 +314,11 @@ public partial class Program
         {
             var map = chambers[currentChamberIndex];
             if (args.Length == 0) { outputBuffer.Add("Usage: clear <type>"); return; }
-
-            void ClearList<T>(List<T> list, string name) where T : Species
-            {
-                foreach (var e in list) map.overlayData[e.X, e.Y] = EntityId.None;
-                int n = list.Count;
-                list.Clear();
-                outputBuffer.Add($"Removed {n} {name}");
-            }
-
-            switch (args[0].ToLower())
-            {
-                case "crab":   ClearList(map.crabs,   "crabs");   break;
-                case "turtle": ClearList(map.turtles, "turtles"); break;
-                case "cow":    ClearList(map.cows,    "cows");    break;
-                case "sheep":  ClearList(map.sheeps,  "sheeps");  break;
-                default: outputBuffer.Add("Types: crab turtle cow sheep"); break;
-            }
+            string type = args[0].ToLower();
+            if (!Enum.TryParse(type, ignoreCase: true, out EntityId entityId) || entityId == EntityId.None)
+            { outputBuffer.Add($"Unknown type. Try: crab turtle cow sheep wolf bear goat fish bird"); return; }
+            int removed = map._species.ClearType(entityId, map.overlayData);
+            outputBuffer.Add($"Removed {removed} {type}");
         });
 
         #endregion
